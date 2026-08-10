@@ -77,9 +77,15 @@ test('manifest carries the required process-tier shape', () => {
   assert.ok(routes.length >= 2);
   for (const route of routes) assert.ok(route.policy && route.policy.length > 0);
 
-  // routes point at the plugin's own declared permissions, not a core CASL subject
+  // permissions[] are raw, unnamespaced names — legal under core's plugin-permission
+  // name pattern (lowercase token, no "." or ":") — and routes[].policy is
+  // "<action>:plugin:<id>:<name>", which is the CASL subject core builds from one of them.
   const permissions = manifest.permissions as string[];
   assert.equal(permissions.length, 2);
-  for (const route of routes) assert.ok(permissions.includes(route.policy));
-  for (const permission of permissions) assert.match(permission, /^fliks\.notify:/);
+  for (const permission of permissions) assert.match(permission, /^[a-z][a-z0-9_-]{0,63}$/);
+  for (const route of routes) {
+    const m = /^[a-z]+:plugin:fliks\.notify:([a-z0-9_-]+)$/.exec(route.policy);
+    assert.ok(m, `route policy "${route.policy}" must be "<action>:plugin:fliks.notify:<permission>"`);
+    assert.ok(permissions.includes(m![1]!), `route policy must reference a declared permission`);
+  }
 });

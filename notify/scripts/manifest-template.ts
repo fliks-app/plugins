@@ -11,16 +11,29 @@
 export const PLUGIN_ID = 'fliks.notify';
 
 /**
- * Single source of truth for this plugin's own policy strings — not core
- * CASL subjects. Core's plugin-declared permission registry/namespacing is
- * still being designed in a concurrent change; keeping every reference here
- * means reconciling it later is a one-line edit, not a hunt through routes.
- * Two rights, deliberately not one: reading the log is inert, sending a
- * test delivery makes an outbound network call and is the privileged one.
+ * Single source of truth for this plugin's own permissions and route
+ * policies — not core CASL subjects. Mirrors the shape of core's
+ * plugin-declared permission registry as of this writing (still landing in
+ * a concurrent change): a manifest declares raw, unnamespaced names in
+ * `permissions[]`; core prepends `plugin:<id>:` itself to get the CASL
+ * subject, so `routes[].policy` here builds the same string core will.
+ * Kept behind one constant so reconciling a namespacing change is a
+ * one-line edit, not a hunt through routes. Two rights, deliberately not
+ * one: reading the log is inert, sending a test delivery makes an outbound
+ * network call and is the privileged one.
  */
+export const PERMISSIONS = {
+  deliveryLog: 'delivery-log',
+  testDelivery: 'test-delivery',
+} as const;
+
+function subjectFor(name: string): string {
+  return `plugin:${PLUGIN_ID}:${name}`;
+}
+
 export const POLICY = {
-  deliveriesRead: `${PLUGIN_ID}:deliveries.read`,
-  deliveriesTest: `${PLUGIN_ID}:deliveries.test`,
+  deliveriesRead: `read:${subjectFor(PERMISSIONS.deliveryLog)}`,
+  deliveriesTest: `create:${subjectFor(PERMISSIONS.testDelivery)}`,
 } as const;
 
 export const MANIFEST_TEMPLATE = {
@@ -40,7 +53,7 @@ export const MANIFEST_TEMPLATE = {
     { method: 'GET', path: '/delivery-log', policy: POLICY.deliveriesRead },
     { method: 'POST', path: '/test-delivery', policy: POLICY.deliveriesTest },
   ],
-  permissions: [POLICY.deliveriesRead, POLICY.deliveriesTest] as string[],
+  permissions: [PERMISSIONS.deliveryLog, PERMISSIONS.testDelivery] as string[],
   scopes: ['config:rw'] as const,
   ingestRoots: [] as string[],
 };

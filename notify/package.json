@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit",
     "build": "tsx scripts/build.ts",
     "package": "tsx scripts/package-archive.ts",
-    "test": "tsx --test test/*.test.ts",
+    "test": "tsx --test --test-concurrency=1 test/*.test.ts",
     "verify-with-core": "tsx scripts/verify-with-core.ts"
   },
   "devDependencies": {

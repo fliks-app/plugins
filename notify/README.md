@@ -43,15 +43,24 @@ See `src/delivery-queue.ts`.
 
 ## Permissions and routes (reconciliation needed)
 
-Core's plugin-declared permission registry has not landed yet, so the exact
-namespacing below is provisional — every reference lives behind one constant
-(`POLICY` in `scripts/manifest-template.ts`) so reconciling it is a one-line edit:
+Core's plugin-declared permission registry has not landed on `main` yet, so the
+exact namespacing below is provisional — every reference lives behind one
+constant (`PERMISSIONS`/`POLICY` in `scripts/manifest-template.ts`) so
+reconciling it is a one-line edit. It mirrors the shape of the in-flight core
+change as closely as could be read at authoring time: `permissions[]` is raw,
+unnamespaced names; core prepends `plugin:<id>:` itself to build the CASL
+subject a route's policy references.
 
 ```
 permissions:
-  fliks.notify:deliveries.read   (routes[].policy for GET /delivery-log)
-  fliks.notify:deliveries.test   (routes[].policy for POST /test-delivery — the
-                                   privileged one: it triggers an outbound request)
+  delivery-log     (raw name; core's subject: plugin:fliks.notify:delivery-log)
+  test-delivery    (raw name; core's subject: plugin:fliks.notify:test-delivery)
+
+routes[].policy:
+  read:plugin:fliks.notify:delivery-log      (GET /delivery-log)
+  create:plugin:fliks.notify:test-delivery   (POST /test-delivery — the
+                                               privileged one: it triggers an
+                                               outbound request)
 ```
 
 ## Build
