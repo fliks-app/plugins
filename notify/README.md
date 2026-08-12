@@ -1,121 +1,48 @@
-# fliks.notify
+# Notify
 
-A `process`-tier Fliks plugin: forwards Fliks domain events to an admin-configured
-HTTPS webhook, with bounded retry. It owns no database schema and makes no calls
-into core — it is a notification target, nothing more, chosen as the supervisor's
-first tenant because its failure costs nothing.
+Sends a message to a service of yours every time something happens in Fliks — a film finishes
+importing, a request is approved. You give it one HTTPS address; it posts the event there as JSON.
 
-## What it does
+Use it to drive whatever you already have: a chat channel through a webhook relay, a home
+automation flow, a script that keeps its own log.
 
-- On every domain event core forwards (`event` note), enqueues a delivery and POSTs
-  `{ id, event, payload, attempt }` as JSON to the configured target.
-- Retries a failing target with bounded backoff, bounded queue depth, bounded
-  delivery log — see "Bounds" below.
-- Refuses to deliver to anything that is not `https:`, or that resolves to an
-  internal/loopback/link-local/CGNAT/reserved address, checked again on every
-  attempt (not just once at configuration time).
-- Exposes two HTTP routes through core's plugin proxy:
-  - `GET /delivery-log` — recent delivery attempts and running stats.
-  - `POST /test-delivery` — enqueues a synthetic `test.delivery` (or `{"event": "..."}`
-    from the request body) event for manual verification.
-- Logs single JSON-timestamped lines to stdout/stderr only.
+## What you get over the built-in webhook plugin
 
-## Configuration
+Fliks also ships a simpler webhook plugin that posts events directly. Pick this one when delivery
+matters more than simplicity:
 
-Read once at boot from `FLIKS_CFG_TARGET_URL` (an admin setting keyed
-`plugin.fliks.notify.target`, re-keyed to that env var by the spawn plan). There is
-currently no way to change the target on a running process: the `config` note core
-sends only carries the *names* of changed keys, not their values, so the effective
-target only changes on the next respawn. See `src/config.ts`.
+- **It retries.** A target that is down or slow gets six attempts over about four minutes instead
+  of one shot.
+- **It absorbs a burst.** A library scan that fires hundreds of events queues them instead of
+  hammering your endpoint, and drops the oldest rather than growing without limit.
+- **It shows you what happened.** Recent attempts and their outcomes are readable, so a delivery
+  that failed is not a mystery.
+- **It can be tested.** A button sends a synthetic event, so you can confirm your endpoint works
+  before waiting for something real.
 
-## Bounds
+If none of that matters to you, the built-in plugin is less to run.
 
-| Bound | Value | Why |
-|---|---|---|
-| Queue capacity | 200 pending deliveries | absorbs one burst (e.g. a library scan) without growing without limit; oldest dropped first |
-| Delivery log capacity | 200 entries | same rationale, independent ring buffer |
-| Max attempts per delivery | 6 | bounded retry, not indefinite |
-| Backoff ladder | 1s, 5s, 15s, 30s, 60s, 120s | ~4 minutes of total retrying before a delivery is dropped and logged |
-| In-flight deliveries | 1 at a time | a slow/failing target must not pile up sockets or memory |
-| Per-request timeout | 5s | matches the backoff floor; never blocks the health reply, which is answered from memory regardless of queue state |
+## Setting it up
 
-See `src/delivery-queue.ts`.
+Install it, set **the target URL** in its settings page, and use the test delivery to confirm your
+endpoint answers.
 
-## Permissions and routes (reconciliation needed)
+Two rules the plugin will not bend on:
 
-Core's plugin-declared permission registry has not landed on `main` yet, so the
-exact namespacing below is provisional — every reference lives behind one
-constant (`PERMISSIONS`/`POLICY` in `scripts/manifest-template.ts`) so
-reconciling it is a one-line edit. It mirrors the shape of the in-flight core
-change as closely as could be read at authoring time: `permissions[]` is raw,
-unnamespaced names; core prepends `plugin:<id>:` itself to build the CASL
-subject a route's policy references.
+- **HTTPS only.** A plain-http target is refused.
+- **Public addresses only.** A target on your own machine or your private network is refused —
+  and re-checked on every single attempt, not just when you save it, because a name can be
+  repointed after the fact.
 
-```
-permissions:
-  delivery-log     (raw name; core's subject: plugin:fliks.notify:delivery-log)
-  test-delivery    (raw name; core's subject: plugin:fliks.notify:test-delivery)
+Changing the target takes effect the next time the plugin restarts.
 
-routes[].policy:
-  read:plugin:fliks.notify:delivery-log      (GET /delivery-log)
-  create:plugin:fliks.notify:test-delivery   (POST /test-delivery — the
-                                               privileged one: it triggers an
-                                               outbound request)
-```
+## What it does not do
 
-## Build
+- **No filtering.** Every event Fliks forwards is delivered; there is no per-event switch.
+- **No delivery guarantee.** After six failed attempts a delivery is dropped and recorded. Nothing
+  is stored to disk, so a restart loses whatever was still queued.
 
-```sh
-npm install
-npm run typecheck
-npm test
-npm run build        # -> dist/plugin.js, dist/plugin.json, dist/logo.svg
-node --check dist/plugin.js
-```
+## Contributing
 
-`dist/plugin.json` is generated by the build (`scripts/build.ts` + `scripts/manifest-template.ts`)
-— it is never hand-edited. `fliks` is a semver range with a mandatory upper bound,
-derived from the Fliks `backend/package.json` version at authoring time (`2.0.1`):
-`>=2.0.0 <3.0.0`.
-
-## Package
-
-```sh
-npm run package      # -> dist/fliks-notify.fkplugin (unsigned)
-```
-
-Deterministic: rebuilding from the same source produces byte-identical output.
-To sign, set `FK_NOTIFY_SIGNING_KEY` to a PEM-encoded Ed25519 private key
-(`openssl genpkey -algorithm ed25519`) before packaging — the script works
-unsigned too, which is what a local install needs (see below).
-
-## Install locally
-
-A `process`-tier plugin must be signed unless its id is on the core's
-`FLIKS_UNSIGNED_PLUGINS` allowlist. For a local install of the unsigned package:
-
-```sh
-FLIKS_UNSIGNED_PLUGINS=fliks.notify   # set in the Fliks server's environment
-```
-
-Then install `dist/fliks-notify.fkplugin` through the admin plugin-sources UI (or
-the equivalent API), and set `plugin.fliks.notify.target` to an `https://` URL.
-
-## Publish (maintainer-only, not done here)
-
-1. Sign with the production key: `FK_NOTIFY_SIGNING_KEY=<prod key> npm run package`.
-2. Publish the archive and its entry to `fliks-app/fliks-plugin-catalog`, per that
-   repo's process. This repository does not push anywhere and has no remote
-   configured — publishing is an explicit, separate, outward-facing step.
-
-## Verification performed
-
-- `node --check dist/plugin.js` passes.
-- `test/harness.test.ts` spawns `dist/plugin.js` under the exact env allowlist and
-  `node --permission`/`--allow-fs-*` flags the Fliks supervisor uses, then drives
-  the full protocol (`hello` → `health` → `event`/`config` notes → `http` → `job` →
-  `shutdown`) with no core process involved.
-- `dist/fliks-notify.fkplugin` was checked against the real core validator
-  (`inspect()` from the Fliks repo's `backend/src/modules/plugins/archive`, loaded
-  from source via `tsx` since no compiled `dist` was available) — see
-  `scripts/verify-with-core.ts`. Result: `ok: true, kind: 'process'`.
+Bounds, the delivery queue, the build and the test suite are in
+[docs/development.md](docs/development.md).
