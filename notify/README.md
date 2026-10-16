@@ -11,7 +11,7 @@ automation flow, a script that keeps its own log.
 Fliks also ships a simpler webhook plugin that posts events directly. Pick this one when delivery
 matters more than simplicity:
 
-- **It retries.** A target that is down or slow gets six attempts over about four minutes instead
+- **It retries.** A target that is down or slow gets six attempts over about two minutes instead
   of one shot.
 - **It absorbs a burst.** A library scan that fires hundreds of events queues them instead of
   hammering your endpoint, and drops the oldest rather than growing without limit.
