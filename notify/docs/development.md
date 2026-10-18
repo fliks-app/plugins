@@ -39,15 +39,23 @@ FLIKS_HARNESS_PG_URL=postgres://user:pass@host/postgres cargo test --test harnes
 The URL is a superuser one; the harness creates and drops its own databases
 (`FLIKS_HARNESS_DB_PREFIX`, default `fliks_harness_`). Without it the tests skip locally and fail in CI.
 
+## Package
+
+```sh
+cargo xtask package --max-mib 12 --out dist   # -> dist/fliks.notify-<version>.fkplugin
+```
+
+Builds the component and writes the unsigned archive (`plugin.json` from the template plus
+`version` and `files`, `plugin.wasm`, `logo.svg`), then checks the component's world, the host's
+archive rules and the size budget.
+
 ## Install it on a dev instance
 
-Build the component, then add `version` and `files` (sha256 of `plugin.wasm` and `logo.svg`) to
-`plugin.template.json` to make a `plugin.json`, and zip the three files with a `plugin.json.sig`
-or allow unsigned plugins on the dev server (`plugins.allow_unsigned`).
+Install `dist/fliks.notify-<version>.fkplugin` with `plugins.allow_unsigned` on, or pass
+`--key <hex seed file>` to `cargo xtask package` to sign it with a dev key.
 
 ## Publish
 
-Pushing a tag `v<version>` (equal to the crate version) runs `.github/workflows/ci.yml`, which
-builds the component, fails above 12 MiB and creates a release with `plugin.json`, `plugin.wasm`
-and `logo.svg`. The catalog's `Package plugin` workflow signs those into the `.fkplugin`; see
-"WASM plugins" in the catalog README.
+Pushing a tag `v<version>` (equal to the crate version) runs `.github/workflows/ci.yml`, whose
+`verify` job runs `cargo xtask package` and whose `release` job creates a release with that one
+archive. The catalog's `Package plugin` workflow signs it; see "WASM plugins" in the catalog README.

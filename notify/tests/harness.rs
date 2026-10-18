@@ -124,9 +124,13 @@ async fn failed_attempts_follow_the_ladder_then_fail() {
     };
     let id = test_delivery(&h, "a").await;
     for (n, delay_ms) in [1000, 5000, 15000, 30000, 60000].into_iter().enumerate() {
-        until("the attempt", MAX, async || {
+        // The claimed call keeps its lease until the plugin replaces it with the retry.
+        until("the attempt and its retry", MAX, async || {
             let l = log(&h).await;
+            let calls = h.scheduled_calls().await;
             l["entries"][0]["attempt"] == n as i64 + 1
+                && calls.len() == 1
+                && calls[0].due_in_ms <= delay_ms
         })
         .await;
         assert!(status_of(&h, id).await.starts_with("retrying:"));

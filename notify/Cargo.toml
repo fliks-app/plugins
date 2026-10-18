@@ -1,3 +1,8 @@
+[workspace]
+resolver = "3"
+members = [".", "xtask"]
+default-members = ["."]
+
 [package]
 name = "fk-plugin-notify"
 version = "1.0.0"

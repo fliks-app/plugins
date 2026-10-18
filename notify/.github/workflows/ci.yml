@@ -8,7 +8,9 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  MAX_WASM_BYTES: 12582912 # 12 MiB
+
+permissions:
+  contents: read
 
 jobs:
   verify:
@@ -29,28 +31,23 @@ jobs:
           targets: wasm32-wasip2
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
-      - run: cargo fmt --check
+      - run: cargo fmt --all --check
       # The wasm exports do not link natively, so native runs cover the lib and its tests only.
       - run: cargo clippy --lib --tests -- -D warnings
+      - run: cargo clippy -p xtask -- -D warnings
       - run: cargo clippy --target wasm32-wasip2 --all-targets -- -D warnings
       - run: cargo test --lib
       - run: cargo build --release --target wasm32-wasip2
-      - name: Check the component size
-        run: |
-          size=$(stat -c %s target/wasm32-wasip2/release/fk_plugin_notify.wasm)
-          echo "plugin.wasm is $size bytes"
-          if [ "$size" -gt "$MAX_WASM_BYTES" ]; then
-            echo "::error::plugin.wasm is $size bytes, above the $MAX_WASM_BYTES limit"
-            exit 1
-          fi
       - name: Run the component tests against Postgres
         env:
           FLIKS_HARNESS_PG_URL: postgres://postgres:postgres@localhost:5432/postgres
         run: cargo test --test harness
+      - name: Verify the component and its archive (world, archive guard, 12 MiB budget)
+        run: cargo xtask package --max-mib 12 --out dist
       - uses: actions/upload-artifact@v4
         with:
-          name: plugin.wasm
-          path: target/wasm32-wasip2/release/fk_plugin_notify.wasm
+          name: dist
+          path: dist/
 
   release:
     needs: verify
@@ -59,22 +56,15 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v6
       - uses: actions/download-artifact@v4
         with:
-          name: plugin.wasm
-      - name: Build plugin.json and publish the release assets
+          name: dist
+          path: dist
+      - name: Publish the archive that verify checked
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
         run: |
-          version=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
-          [ "$TAG" = "v$version" ] || { echo "::error::tag $TAG is not v$version"; exit 1; }
-          mv fk_plugin_notify.wasm plugin.wasm
-          jq --arg v "$version" \
-             --arg wasm "$(sha256sum plugin.wasm | cut -d' ' -f1)" \
-             --arg logo "$(sha256sum logo.svg | cut -d' ' -f1)" \
-             '. + {version: $v, files: {"plugin.wasm": $wasm, "logo.svg": $logo}}' \
-             plugin.template.json > plugin.json
-          gh release create "$TAG" --verify-tag --title "$TAG" --generate-notes \
-            plugin.json plugin.wasm logo.svg
+          archive=$(ls dist/*.fkplugin)
+          [ "$archive" = "dist/fliks.notify-${TAG#v}.fkplugin" ] || { echo "::error::$archive does not match tag $TAG"; exit 1; }
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --title "$TAG" --generate-notes "$archive"
