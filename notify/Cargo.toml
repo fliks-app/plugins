@@ -1,0 +1,25 @@
+[package]
+name = "fk-plugin-notify"
+version = "1.0.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+fliks-plugin-sdk = { git = "https://github.com/fliks-app/fliks", rev = "8cb55fee135d7842d816f33625919cd3fb33c58f" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+url = "2"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+fliks-plugin-sdk = { git = "https://github.com/fliks-app/fliks", rev = "8cb55fee135d7842d816f33625919cd3fb33c58f", features = ["harness"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true

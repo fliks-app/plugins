@@ -1,0 +1,62 @@
+{
+  "id": "fliks.notify",
+  "pluginApi": 2,
+  "name": "Notify",
+  "fliks": ">=5.0.0 <6.0.0",
+  "author": "Fliks",
+  "description": "Forwards Fliks domain events to an admin-configured HTTPS webhook, with bounded retry.",
+  "license": "MIT",
+  "logo": "logo.svg",
+  "kind": "process",
+  "runtime": "wasm",
+  "memoryMb": 64,
+  "database": { "schema": true, "coreRefs": [] },
+  "scopes": ["config:rw"],
+  "ingestRoots": [],
+  "permissions": ["delivery-log", "test-delivery"],
+  "routes": [
+    { "method": "GET", "path": "/delivery-log", "policy": "read:plugin:fliks.notify:delivery-log" },
+    { "method": "POST", "path": "/test-delivery", "policy": "create:plugin:fliks.notify:test-delivery" }
+  ],
+  "ui": {
+    "contributions": [
+      {
+        "id": "fliks-notify.settings.general",
+        "slot": "settings.page",
+        "weight": 100,
+        "labelKey": "notify.config.title",
+        "action": { "kind": "route", "path": "/admin/settings/plugins/fliks.notify/general" }
+      }
+    ],
+    "configPages": [
+      {
+        "id": "general",
+        "labelKey": "notify.config.title",
+        "subtitleKey": "notify.config.subtitle",
+        "fields": [
+          {
+            "key": "target_url",
+            "type": "url",
+            "labelKey": "notify.config.target_url",
+            "hint": "notify.config.target_url_hint",
+            "secret": true
+          }
+        ]
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "notify.config.title": "Notify",
+      "notify.config.subtitle": "Forward every event to a webhook.",
+      "notify.config.target_url": "Target URL",
+      "notify.config.target_url_hint": "HTTPS address that receives each event as JSON. It often embeds a token, so it is stored as a secret."
+    },
+    "fr": {
+      "notify.config.title": "Notify",
+      "notify.config.subtitle": "Transmet chaque événement à un webhook.",
+      "notify.config.target_url": "URL cible",
+      "notify.config.target_url_hint": "Adresse HTTPS qui reçoit chaque événement en JSON. Elle contient souvent un jeton, elle est donc stockée comme secret."
+    }
+  }
+}

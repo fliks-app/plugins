@@ -159,7 +159,7 @@ No instance holds anything a later call needs.
    drop or count one row twice. The bound is soft by at most the number of concurrent `http` instances
    (the route and the event lane can enqueue at the same time).
 5. `schedule-call("delivery:<id>", 0, {"event": ..., "payload": ..., "n": 0})`. A payload over
-   64 KiB (`ERR_VALIDATION`) marks the row `dropped:payload too large` [new, NT7].
+   64 KiB (`ERR_VALIDATION`) marks the row `dropped:<the host's message>` [new, NT7].
 6. Housekeeping on the same call: prune terminal rows beyond the newest 200
    (`DELETE FROM deliveries WHERE state NOT IN ('pending','retrying','lost') AND id <= (SELECT id FROM
    deliveries ORDER BY id DESC OFFSET 200 LIMIT 1)`).
@@ -386,7 +386,7 @@ exists, so tag the last Node commit before the port lands [assumed]).
 | NT4 | one delivery at a time, FIFO | up to 2 at once (`task` lane), best-effort order | lane model |
 | NT5 | plugin resolves the host and refuses internal addresses itself, then the HTTP client resolves again | the host guard vets one resolution and connects to it (no rebinding window); `target-guard.ts` and `internal-address.ts` deleted; the guest sees only `HTTP-request-denied` (no address in it), so the log text is fixed | one implementation (plan §0 rule 2), F65-style |
 | NT6 | no settings page, no field (finding 2) | form page with `target_url`; `en`, `fr` strings | the README already promises it |
-| NT7 | payload size unbounded | a payload over 64 KiB is dropped (`dropped:payload too large`) | scheduled call limit |
+| NT7 | payload size unbounded | a payload over 64 KiB is dropped (`dropped:<the host's message>`) | scheduled call limit |
 | NT8 | `User-Agent: fliks.notify/0.1.0` constant | `fliks.notify/<crate version>` | single version source |
 | NT9 | log ring holds 200 entries including pending ones | prunes terminal rows beyond the newest 200; pending rows are bounded by the 200 cap | persistence |
 | NT10 | n/a | rows pending over 3 hours show `failed:lost` (a late call still delivers them) | host may drop a poison call |
