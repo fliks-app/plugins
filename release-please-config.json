@@ -11,7 +11,7 @@
         {
           "type": "toml",
           "path": "/Cargo.lock",
-          "jsonpath": "$.package[?(@.name=='fk-plugin-download')].version"
+          "jsonpath": "$.package[?(@.name.value=='fk-plugin-download')].version"
         }
       ]
     },
@@ -22,7 +22,7 @@
         {
           "type": "toml",
           "path": "/Cargo.lock",
-          "jsonpath": "$.package[?(@.name=='fk-plugin-notify')].version"
+          "jsonpath": "$.package[?(@.name.value=='fk-plugin-notify')].version"
         }
       ]
     }
