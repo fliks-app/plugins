@@ -1,0 +1,75 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  # Full debuginfo of the optimised deps fills the runner disk and the cache; file:line is enough.
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip2
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          # PR caches would evict main's from the repository's 10 GB.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - run: cargo fmt --all --check
+      # The wasm exports do not link natively, so native runs cover the lib and its tests only.
+      - run: cargo clippy --lib --tests -- -D warnings
+      - run: cargo clippy -p xtask -- -D warnings
+      - run: cargo clippy --target wasm32-wasip2 --all-targets -- -D warnings
+      - run: cargo test --lib
+      - run: cargo build --release --target wasm32-wasip2
+      - name: Run the component tests against Postgres
+        env:
+          FLIKS_HARNESS_PG_URL: postgres://postgres:postgres@localhost:5432/postgres
+        run: cargo test --test harness
+      - name: Verify the component and its archive (world, archive guard, 12 MiB budget)
+        run: cargo xtask package --max-mib 12 --out dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  release:
+    needs: verify
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      - name: Publish the archive that verify checked
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          archive=$(ls dist/*.fkplugin)
+          [ "$archive" = "dist/fliks.notify-${TAG#v}.fkplugin" ] || { echo "::error::$archive does not match tag $TAG"; exit 1; }
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --title "$TAG" --generate-notes "$archive"
