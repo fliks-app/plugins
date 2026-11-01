@@ -1,8 +1,8 @@
 {
   "id": "fliks.notify",
-  "pluginApi": 2,
+  "pluginApi": 3,
   "name": "Notify",
-  "fliks": ">=5.0.0 <6.0.0",
+  "fliks": ">=6.0.0 <7.0.0",
   "author": "Fliks",
   "description": "Forwards Fliks domain events to an admin-configured HTTPS webhook, with bounded retry.",
   "license": "MIT",

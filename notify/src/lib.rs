@@ -78,13 +78,13 @@ mod manifest_tests {
     fn template_matches_what_the_crate_ships() {
         let t = template();
         assert_eq!(t["id"], "fliks.notify");
-        assert_eq!(t["pluginApi"], 2);
+        assert_eq!(t["pluginApi"], 3);
         assert_eq!(t["runtime"], "wasm");
-        assert_eq!(t["fliks"], ">=5.0.0 <6.0.0");
-        assert_eq!(env!("CARGO_PKG_VERSION"), "1.0.0");
-        let m = fliks_plugin_sdk::manifest_check(include_str!("../plugin.template.json"), "1.0.0")
+        assert_eq!(t["fliks"], ">=6.0.0 <7.0.0");
+        assert_eq!(env!("CARGO_PKG_VERSION"), "2.0.0");
+        let m = fliks_plugin_sdk::manifest_check(include_str!("../plugin.template.json"), "2.0.0")
             .unwrap();
-        assert_eq!((m.id.as_str(), m.plugin_api), ("fliks.notify", 2));
+        assert_eq!((m.id.as_str(), m.plugin_api), ("fliks.notify", 3));
     }
 
     #[test]

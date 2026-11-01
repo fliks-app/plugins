@@ -24,7 +24,7 @@ If none of that matters to you, the built-in plugin is less to run.
 
 ## Setting it up
 
-Install it on Fliks 5, set **the target URL** in its settings page, and use the test delivery to
+Install it on Fliks 6, set **the target URL** in its settings page, and use the test delivery to
 confirm your endpoint answers. The URL often carries a token, so it is stored as a secret and never
 written to the logs.
 
@@ -36,6 +36,12 @@ Two rules the plugin will not bend on:
   repointed after the fact. The Fliks server does the check when it connects.
 
 Changing the target takes effect on the next attempt, queued deliveries included.
+
+## Event payloads
+
+- `media.imported`, `media.removed`, `request.created` and `request.approved` carry
+  `externalIds: [{provider, value}]` instead of `tmdbId`.
+- `media.files.imported` and `acquisition.grabbed` carry `family`.
 
 ## What it does not do
 
