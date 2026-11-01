@@ -1,0 +1,55 @@
+# One release PR per plugin folder; merging it tags `<folder>-v<version>`. The archive built from
+# that tag is attached unsigned to the release, and the catalog's `Package plugin` signs it.
+name: Release please
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      paths: ${{ steps.rp.outputs.paths_released }}
+    steps:
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5
+        id: rp
+        with:
+          # A personal token, so the release PR triggers ci.yml (the default token's pushes do not).
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  package:
+    needs: release-please
+    if: needs.release-please.outputs.paths != '' && needs.release-please.outputs.paths != '[]'
+    name: package (${{ matrix.path }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        path: ${{ fromJSON(needs.release-please.outputs.paths) }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip2
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.path }}
+          save-if: false
+      - name: Attach the verified archive to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_PATH: ${{ matrix.path }}
+        run: |
+          version=$(cargo metadata --no-deps --format-version 1 --manifest-path "$RELEASE_PATH/Cargo.toml" \
+            | jq -r --arg m "$PWD/$RELEASE_PATH/Cargo.toml" '.packages[] | select(.manifest_path == $m) | .version')
+          tag="${RELEASE_PATH##*/}-v$version"
+          cargo xtask package "$RELEASE_PATH" --max-mib 12 --out dist
+          archive=$(ls dist/*.fkplugin)
+          case "$archive" in dist/*-"$version".fkplugin) ;; *) echo "::error::$archive does not match $tag"; exit 1 ;; esac
+          gh release upload "$tag" "$archive" --repo "$GITHUB_REPOSITORY" --clobber
