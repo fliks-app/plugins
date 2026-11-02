@@ -154,9 +154,15 @@ async fn failed_attempts_follow_the_ladder_then_fail() {
     assert_eq!(l["entries"][0]["attempt"], 6);
     assert_eq!(l["stats"]["failedPermanently"], 1);
     assert_eq!(l["stats"]["queued"], 0);
-    assert!(h.scheduled_calls().await.is_empty());
+    // The final status lands before the host drops the call and flushes the plugin's log.
+    until("the last call and the failure log", MAX, async || {
+        h.scheduled_calls().await.is_empty()
+            && h.logs()
+                .iter()
+                .any(|l| l.contains("failed after 6 attempts"))
+    })
+    .await;
     let logs = h.logs();
-    assert!(logs.iter().any(|l| l.contains("failed after 6 attempts")));
     assert!(
         logs.iter().all(|l| !l.contains("s3cret")),
         "the URL is never logged"
