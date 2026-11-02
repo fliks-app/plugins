@@ -4,7 +4,7 @@
   "tag-separator": "-",
   "separate-pull-requests": true,
   "packages": {
-    "download": {
+    "plugins/download": {
       "release-type": "rust",
       "component": "download",
       "extra-files": [
@@ -15,7 +15,7 @@
         }
       ]
     },
-    "notify": {
+    "plugins/notify": {
       "release-type": "rust",
       "component": "notify",
       "extra-files": [
@@ -26,7 +26,7 @@
         }
       ]
     },
-    "providers/openlibrary": {
+    "plugins/openlibrary": {
       "release-type": "rust",
       "component": "openlibrary",
       "extra-files": [
@@ -37,7 +37,7 @@
         }
       ]
     },
-    "providers/tmdb": {
+    "plugins/tmdb": {
       "release-type": "rust",
       "component": "tmdb",
       "extra-files": [

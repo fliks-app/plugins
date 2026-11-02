@@ -42,7 +42,7 @@ The URL is a superuser one; the harness creates and drops its own databases
 ## Package
 
 ```sh
-cargo xtask package notify --max-mib 12 --out dist   # -> dist/fliks.notify-<version>.fkplugin
+cargo xtask package plugins/notify --max-mib 12 --out dist   # -> dist/fliks.notify-<version>.fkplugin
 ```
 
 Builds the component and writes the unsigned archive (`plugin.json` from the template plus
@@ -52,7 +52,7 @@ archive rules and the size budget.
 ## Install it on a dev instance
 
 Install `dist/fliks.notify-<version>.fkplugin` with `plugins.allow_unsigned` on, or pass
-`--key <hex seed file>` to `cargo xtask package notify` to sign it with a dev key.
+`--key <hex seed file>` to `cargo xtask package plugins/notify` to sign it with a dev key.
 
 ## Publish
 

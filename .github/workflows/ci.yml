@@ -36,19 +36,19 @@ jobs:
               - '.cargo/**'
               - 'xtask/**'
               - '.github/workflows/ci.yml'
-            download:
+            plugins/download:
               - *shared
-              - 'download/**'
-            notify:
+              - 'plugins/download/**'
+            plugins/notify:
               - *shared
-              - 'notify/**'
-            providers/openlibrary:
+              - 'plugins/notify/**'
+            plugins/openlibrary:
               - *shared
               - 'crates/**'
-              - 'providers/openlibrary/**'
-            providers/tmdb:
+              - 'plugins/openlibrary/**'
+            plugins/tmdb:
               - *shared
-              - 'providers/tmdb/**'
+              - 'plugins/tmdb/**'
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4
         id: crates
         with:

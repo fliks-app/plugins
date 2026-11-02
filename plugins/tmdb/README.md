@@ -14,5 +14,5 @@ rustup target add wasm32-wasip2
 cargo test -p fk-plugin-tmdb --lib                                  # mappers on recorded bodies
 cargo build -p fk-plugin-tmdb --release --target wasm32-wasip2
 cargo test -p fk-plugin-tmdb --test package                         # needs the release component
-cargo xtask package providers/tmdb --out dist
+cargo xtask package plugins/tmdb --out dist
 ```
