@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["plugins/download", "plugins/notify", "plugins/openlibrary", "plugins/tmdb", "plugins/bnf", "plugins/googlebooks", "plugins/tvdb", "xtask", "crates/provider-common"]
+members = ["plugins/download", "plugins/notify", "plugins/openlibrary", "plugins/tmdb", "plugins/bnf", "plugins/googlebooks", "plugins/tvdb", "plugins/audible", "plugins/audnexus", "xtask", "crates/provider-common"]
 
 # One rev of fliks-app/fliks for every plugin; raising it rebuilds them all.
 [workspace.dependencies]

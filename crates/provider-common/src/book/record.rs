@@ -8,7 +8,7 @@ fn people(list: &[Person]) -> Vec<Value> {
         .collect()
 }
 
-/// A field the provider lacks is `null` or `[]`; `externalId` is the record's own OLID or id.
+/// A field the provider lacks is `null` or `[]`; `externalId` is the record's own id, the ASIN for audio.
 pub fn to_record(r: &BookRecord) -> Value {
     let year = r
         .published
@@ -17,7 +17,9 @@ pub fn to_record(r: &BookRecord) -> Value {
     let external_id = match r.level {
         Level::Work => &r.ids.work,
         Level::Edition => &r.ids.edition,
-    };
+    }
+    .as_ref()
+    .or(r.ids.asin.as_ref());
     json!({
         "title": r.title,
         "subtitle": r.subtitle,

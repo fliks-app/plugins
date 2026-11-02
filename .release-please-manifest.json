@@ -5,5 +5,7 @@
   "plugins/tmdb": "0.1.0",
   "plugins/bnf": "0.1.0",
   "plugins/googlebooks": "0.1.0",
-  "plugins/tvdb": "0.1.0"
+  "plugins/tvdb": "0.1.0",
+  "plugins/audible": "0.1.0",
+  "plugins/audnexus": "0.1.0"
 }

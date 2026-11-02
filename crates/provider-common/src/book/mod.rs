@@ -1,7 +1,7 @@
 //! The common book model, ISBN handling and the record map the core reads.
 pub mod isbn;
-pub mod pending;
 mod record;
+pub mod region;
 pub mod util;
 
 pub use record::to_record;

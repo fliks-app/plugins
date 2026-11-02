@@ -1,76 +1,12 @@
 //! Audible catalog (unofficial `api.audible.<tld>/1.0/catalog/products`): URL builders and parsers.
-use crate::book::util::*;
-use crate::book::{BookRecord, Format, Level, ParseError, Person, Provider, SearchPage, Series};
+use provider_common::book::region::Region;
+use provider_common::book::util::*;
+use provider_common::book::{
+    BookRecord, Format, Level, ParseError, Person, Provider, SearchPage, Series,
+};
 use serde_json::Value;
 
 const RESPONSE_GROUPS: &str = "contributors,media,product_attrs,product_desc,product_details,product_extended_attrs,rating,series,category_ladders";
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Region {
-    Us,
-    Uk,
-    Fr,
-    De,
-    It,
-    Es,
-    Ca,
-    Au,
-    Jp,
-    In,
-}
-
-impl Region {
-    pub const ALL: [Region; 10] = [
-        Self::Us,
-        Self::Uk,
-        Self::Fr,
-        Self::De,
-        Self::It,
-        Self::Es,
-        Self::Ca,
-        Self::Au,
-        Self::Jp,
-        Self::In,
-    ];
-
-    /// Domain suffix of `api.audible.<tld>`.
-    pub fn tld(self) -> &'static str {
-        match self {
-            Self::Us => "com",
-            Self::Uk => "co.uk",
-            Self::Fr => "fr",
-            Self::De => "de",
-            Self::It => "it",
-            Self::Es => "es",
-            Self::Ca => "ca",
-            Self::Au => "com.au",
-            Self::Jp => "co.jp",
-            Self::In => "in",
-        }
-    }
-
-    /// Two-letter code, also the Audnexus `region` value.
-    pub fn code(self) -> &'static str {
-        match self {
-            Self::Us => "us",
-            Self::Uk => "uk",
-            Self::Fr => "fr",
-            Self::De => "de",
-            Self::It => "it",
-            Self::Es => "es",
-            Self::Ca => "ca",
-            Self::Au => "au",
-            Self::Jp => "jp",
-            Self::In => "in",
-        }
-    }
-
-    pub fn from_code(code: &str) -> Option<Self> {
-        Self::ALL
-            .into_iter()
-            .find(|r| r.code() == code.to_lowercase())
-    }
-}
 
 #[derive(Debug, Default, Clone)]
 pub struct Search<'a> {

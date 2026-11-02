@@ -57,6 +57,14 @@ jobs:
               - *shared
               - 'crates/**'
               - 'plugins/googlebooks/**'
+            plugins/audible:
+              - *shared
+              - 'crates/**'
+              - 'plugins/audible/**'
+            plugins/audnexus:
+              - *shared
+              - 'crates/**'
+              - 'plugins/audnexus/**'
             plugins/tvdb:
               - *shared
               - 'plugins/tvdb/**'
