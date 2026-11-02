@@ -99,13 +99,19 @@ async fn add_movie_in(h: &Harness, title: &str, library: Option<&std::path::Path
 
 /// A monitored work of `kind` with its video want, edition and, for a movie, its own item.
 async fn add_work(h: &Harness, title: &str, kind: &str, library: Option<&std::path::Path>) -> i64 {
-    let lib: i32 =
-        sqlx::query_scalar("INSERT INTO libraries (name, path) VALUES ($1, $2) RETURNING id")
-            .bind(title)
-            .bind(library.map(|p| p.to_string_lossy().into_owned()))
-            .fetch_one(&h.pool)
+    let lib: i32 = sqlx::query_scalar("INSERT INTO libraries (name) VALUES ($1) RETURNING id")
+        .bind(title)
+        .fetch_one(&h.pool)
+        .await
+        .unwrap();
+    if let Some(root) = library {
+        sqlx::query(r#"INSERT INTO library_folders ("libraryId", path) VALUES ($1, $2)"#)
+            .bind(lib)
+            .bind(root.to_string_lossy().into_owned())
+            .execute(&h.pool)
             .await
             .unwrap();
+    }
     let qp: i32 = sqlx::query_scalar(
         "INSERT INTO quality_profiles (name, cutoff, items) VALUES ('Any', 0, '[]') RETURNING id",
     )
