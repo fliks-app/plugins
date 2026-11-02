@@ -369,7 +369,7 @@ async fn start_migrates_and_routes_answer() {
         return;
     };
     let mut db = plugin_db(&h).await;
-    assert_eq!(ledger(&mut db).await.len(), 12);
+    assert_eq!(ledger(&mut db).await.len(), 13);
     assert!(h.health().await.unwrap().ok);
     for p in ["/indexers", "/indexer-sources", "/download-clients"] {
         let r = h.proxy("GET", &format!("{p}/implementations"), None).await;
@@ -511,12 +511,12 @@ async fn an_adopted_ledger_runs_only_the_new_migrations() {
     let ix = add_indexer(&mut db, "old", json!({})).await;
     h.restart().await;
     until("the re-run migrations", MAX, async || {
-        ledger(&mut plugin_db(&h).await).await.len() == 12
+        ledger(&mut plugin_db(&h).await).await.len() == 13
     })
     .await;
     assert!(logged(
         &h,
-        "migrations applied: 0009_indexer_throttle, 0010_poller_state, 0011_download_history_import_lease, 0012_item_history"
+        "migrations applied: 0009_indexer_throttle, 0010_poller_state, 0011_download_history_import_lease, 0012_item_history, 0013_indexer_caps_books"
     ));
     let backfilled = scalar_i64(
         &mut db,

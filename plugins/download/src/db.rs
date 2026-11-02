@@ -8,7 +8,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value as Json};
 
-pub const MIGRATIONS: [(&str, &str); 12] = [
+pub const MIGRATIONS: [(&str, &str); 13] = [
     (
         "0001_initial_schema",
         include_str!("../migrations/0001_initial_schema.sql"),
@@ -56,6 +56,10 @@ pub const MIGRATIONS: [(&str, &str); 12] = [
     (
         "0012_item_history",
         include_str!("../migrations/0012_item_history.sql"),
+    ),
+    (
+        "0013_indexer_caps_books",
+        include_str!("../migrations/0013_indexer_caps_books.sql"),
     ),
 ];
 
@@ -143,6 +147,10 @@ pub struct IndexerRow {
     pub caps_tv_search: bool,
     pub caps_movie_search_params: Option<String>,
     pub caps_tv_search_params: Option<String>,
+    pub caps_book_search: bool,
+    pub caps_book_search_params: Option<String>,
+    /// Comma-separated ids of the advertised category tree; none when the caps carried no tree.
+    pub caps_categories: Option<String>,
     pub caps_probed_at: Option<String>,
     pub request_delay: i64,
     pub created_at: String,
@@ -248,7 +256,8 @@ pub mod indexers {
 
     const COLUMNS: &str = r#""id", "name", "implementation", "settings", "enableRss", "enableSearch",
   "enableInteractiveSearch", "priority", "enabled", "capsSearchFallback", "capsMovieSearch",
-  "capsTvSearch", "capsMovieSearchParams", "capsTvSearchParams", "capsProbedAt",
+  "capsTvSearch", "capsMovieSearchParams", "capsTvSearchParams", "capsBookSearch",
+  "capsBookSearchParams", "capsCategories", "capsProbedAt",
   "requestDelay", "createdAt", "updatedAt""#;
 
     pub struct Fields {
@@ -362,12 +371,16 @@ pub mod indexers {
         pub tv: bool,
         pub movie_params: Option<String>,
         pub tv_params: Option<String>,
+        pub book: bool,
+        pub book_params: Option<String>,
+        pub categories: Option<String>,
     }
 
     pub fn refresh_caps(id: i64, c: &Caps) -> R<()> {
         exec(
             r#"UPDATE "indexers" SET "capsMovieSearch" = $2, "capsTvSearch" = $3, "capsSearchFallback" = $4,
               "capsMovieSearchParams" = $5, "capsTvSearchParams" = $6,
+              "capsBookSearch" = $7, "capsBookSearchParams" = $8, "capsCategories" = $9,
               "capsProbedAt" = NOW() WHERE "id" = $1"#,
             &[
                 int(id),
@@ -376,6 +389,9 @@ pub mod indexers {
                 false.into(),
                 opt_text(c.movie_params.as_deref()),
                 opt_text(c.tv_params.as_deref()),
+                c.book.into(),
+                opt_text(c.book_params.as_deref()),
+                opt_text(c.categories.as_deref()),
             ],
         )
         .map(drop)

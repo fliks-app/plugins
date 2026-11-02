@@ -7,7 +7,7 @@ use crate::throttle::{self, Lapsed};
 use crate::util::{
     decode_html_entities, encode_uri_component, parse_float, parse_int, setting_or_empty,
 };
-use fliks_plugin_sdk::bindings::fliks::plugin::types::ExternalId;
+use fliks_plugin_sdk::bindings::fliks::plugin::types::{ExternalId, Family};
 use fliks_plugin_sdk::rt::Budget;
 use regex::Regex;
 use serde::Serialize;
@@ -43,6 +43,8 @@ pub struct Query<'a> {
     pub tvdb_id: Option<u32>,
     pub imdb_id: Option<&'a str>,
     pub tmdb_id: Option<u32>,
+    pub author: Option<&'a str>,
+    pub title: Option<&'a str>,
     pub supported_params: Option<&'a str>,
 }
 
@@ -72,6 +74,12 @@ pub fn build_query(o: &Query) -> String {
     }
     parts.push(format!("cat={}", o.cat));
     parts.push(format!("apikey={}", encode_uri_component(o.api_key)));
+    if let Some(a) = o.author.filter(|a| !a.is_empty() && allows("author")) {
+        parts.push(format!("author={}", encode_uri_component(a)));
+    }
+    if let Some(t) = o.title.filter(|t| !t.is_empty() && allows("title")) {
+        parts.push(format!("title={}", encode_uri_component(t)));
+    }
     if let Some(id) = o.tvdb_id.filter(|id| *id != 0 && allows("tvdbid")) {
         parts.push(format!("tvdbid={id}"));
     }
@@ -105,7 +113,9 @@ pub fn describe_query(url: &str) -> String {
     if let Some(q) = get("q").filter(|q| !q.is_empty()) {
         parts.push(format!("q=\"{q}\""));
     }
-    for k in ["season", "ep", "cat", "tvdbid", "imdbid", "tmdbid"] {
+    for k in [
+        "season", "ep", "cat", "tvdbid", "imdbid", "tmdbid", "author", "title",
+    ] {
         if let Some(v) = get(k).filter(|v| !v.is_empty()) {
             parts.push(format!("{k}={v}"));
         }
@@ -188,11 +198,14 @@ fn ensure_api_key(raw: &str, api_key: &str) -> String {
     u.to_string()
 }
 
+/// A feed past this is cut: an indexer answers a page, never thousands.
+const MAX_ITEMS: usize = 2000;
+
 /// Every `<item>`; one missing a title or a usable URL is skipped, never an error.
 pub fn parse_items(xml: &str, ix: &IndexerRow) -> Vec<Release> {
     let api_key = setting_or_empty(&ix.settings, "apiKey");
     let mut out = vec![];
-    for m in ITEM.captures_iter(xml) {
+    for m in ITEM.captures_iter(xml).take(MAX_ITEMS) {
         let block = m.get(1).map_or("", |b| b.as_str());
         let title = inner(block, "title");
         let link = inner(block, "link");
@@ -289,9 +302,51 @@ pub struct CapsFound {
     pub tv: bool,
     pub movie_params: Option<String>,
     pub tv_params: Option<String>,
+    pub book: bool,
+    pub book_params: Option<String>,
+    pub categories: Option<String>,
+}
+
+/// Caps are a few KiB; an answer past this is read no further.
+const MAX_CAPS_BYTES: usize = 1 << 20;
+const MAX_CATEGORIES: usize = 4096;
+
+/// The ids of every `<category>` and `<subcat>`, sorted and comma-separated; none when the
+/// caps carry no tree.
+fn parse_categories(body: &str) -> Option<String> {
+    static TREE: LazyLock<Regex> = LazyLock::new(|| re(r"(?i)<categories>([\s\S]*?)</categories>"));
+    static ID: LazyLock<Regex> =
+        LazyLock::new(|| re(r#"(?i)<(?:category|subcat)\s(?:[^>]*\s)?id="([0-9]{1,6})""#));
+    let mut ids: Vec<u32> = ID
+        .captures_iter(TREE.captures(body)?.get(1)?.as_str())
+        .take(MAX_CATEGORIES)
+        .filter_map(|c| c[1].parse().ok())
+        .collect();
+    ids.sort_unstable();
+    ids.dedup();
+    (!ids.is_empty()).then(|| ids.iter().map(u32::to_string).collect::<Vec<_>>().join(","))
+}
+
+/// The category a family is searched under: the first of its candidates the tree advertises.
+/// No tree means the indexer did not say, so the first candidate is tried; a tree without any
+/// of them means it has none of that family.
+pub fn pick_category(tree: Option<&str>, family: Family) -> Option<u32> {
+    let candidates: &[u32] = match family {
+        Family::Text => &[7020, 7000],
+        Family::Audio => &[3030],
+        _ => return None,
+    };
+    let Some(tree) = tree else {
+        return candidates.first().copied();
+    };
+    candidates
+        .iter()
+        .copied()
+        .find(|c| tree.split(',').any(|id| id.parse() == Ok(*c)))
 }
 
 pub fn parse_caps(body: &str) -> CapsFound {
+    let body = &body[..body.floor_char_boundary(MAX_CAPS_BYTES)];
     static MOVIE: LazyLock<Regex> =
         LazyLock::new(|| re(r#"(?i)<movie-search\s[^>]*available="yes""#));
     static TV: LazyLock<Regex> = LazyLock::new(|| re(r#"(?i)<tv-search\s[^>]*available="yes""#));
@@ -299,6 +354,10 @@ pub fn parse_caps(body: &str) -> CapsFound {
         LazyLock::new(|| re(r#"(?i)<movie-search\s[^>]*supportedParams="([^"]*)""#));
     static TV_P: LazyLock<Regex> =
         LazyLock::new(|| re(r#"(?i)<tv-search\s[^>]*supportedParams="([^"]*)""#));
+    static BOOK: LazyLock<Regex> =
+        LazyLock::new(|| re(r#"(?i)<book-search\s[^>]*available="yes""#));
+    static BOOK_P: LazyLock<Regex> =
+        LazyLock::new(|| re(r#"(?i)<book-search\s[^>]*supportedParams="([^"]*)""#));
     let params = |r: &Regex| {
         r.captures(body)
             .map(|c| c[1].trim().to_owned())
@@ -309,6 +368,9 @@ pub fn parse_caps(body: &str) -> CapsFound {
         tv: TV.is_match(body),
         movie_params: params(&MOVIE_P),
         tv_params: params(&TV_P),
+        book: BOOK.is_match(body),
+        book_params: params(&BOOK_P),
+        categories: parse_categories(body),
     }
 }
 
@@ -419,18 +481,23 @@ pub async fn refresh_caps(ix: &mut IndexerRow, round: Round) -> Result<(), Lapse
     let c = parse_caps(&body);
     let show = |p: &Option<String>| p.clone().unwrap_or_else(|| "null".into());
     info!(
-        "[{}] caps refreshed — movieSearch={} ({}), tvSearch={} ({})",
+        "[{}] caps refreshed — movieSearch={} ({}), tvSearch={} ({}), bookSearch={} ({})",
         ix.name,
         c.movie,
         show(&c.movie_params),
         c.tv,
-        show(&c.tv_params)
+        show(&c.tv_params),
+        c.book,
+        show(&c.book_params)
     );
     let caps = indexers::Caps {
         movie: c.movie,
         tv: c.tv,
         movie_params: c.movie_params,
         tv_params: c.tv_params,
+        book: c.book,
+        book_params: c.book_params,
+        categories: c.categories,
     };
     if let Err(e) = indexers::refresh_caps(ix.id, &caps) {
         warn!("[{}] caps not saved: {e}", ix.name);
@@ -440,6 +507,9 @@ pub async fn refresh_caps(ix: &mut IndexerRow, round: Round) -> Result<(), Lapse
     ix.caps_tv_search = caps.tv;
     ix.caps_movie_search_params = caps.movie_params;
     ix.caps_tv_search_params = caps.tv_params;
+    ix.caps_book_search = caps.book;
+    ix.caps_book_search_params = caps.book_params;
+    ix.caps_categories = caps.categories;
     ix.caps_search_fallback = false;
     ix.caps_probed_at = Some(crate::util::now_iso());
     Ok(())
@@ -781,5 +851,125 @@ pub async fn search_movie(
             warn!("[{}] search failed: {err}", ix.name);
             Ok(vec![])
         }
+    }
+}
+
+/// `t=book` with the author and title the tracker advertises, else `t=search`; the category
+/// is the family's own (ebook or audiobook). An indexer without that category is skipped.
+pub async fn search_book(
+    ix: &mut IndexerRow,
+    kind: Kind,
+    family: Family,
+    author: Option<&str>,
+    title: &str,
+    round: Round,
+) -> Result<Vec<Release>, Lapsed> {
+    let Some((base, key)) = search_target(ix, kind) else {
+        return Ok(vec![]);
+    };
+    if !ensure_caps(ix, round).await? {
+        return Ok(vec![]);
+    }
+    let Some(cat) = pick_category(ix.caps_categories.as_deref(), family) else {
+        info!("[{}] skipped — no category for this kind of book", ix.name);
+        return Ok(vec![]);
+    };
+    let cat = cat.to_string();
+    let text = match author {
+        Some(a) => format!("{a} {title}"),
+        None => title.to_owned(),
+    };
+    let book = ix.caps_book_search && !ix.caps_search_fallback;
+    let params = ix.caps_book_search_params.as_deref();
+    let advertises =
+        |p: &str| params.is_some_and(|ps| ps.split(',').any(|a| a.trim().eq_ignore_ascii_case(p)));
+    // The title param carries the title alone; without it the text query stands in.
+    let typed_title = book && advertises("title");
+    let url = format!(
+        "{base}?{}",
+        build_query(&Query {
+            t: if book { "book" } else { "search" },
+            q: Some(if typed_title { "" } else { &text }),
+            cat: &cat,
+            api_key: &key,
+            author: author.filter(|_| book),
+            title: typed_title.then_some(title),
+            supported_params: params,
+            ..Default::default()
+        })
+    );
+    match exec_search(&url, "book", ix, round).await? {
+        Ok(r) => Ok(r),
+        Err(err) if book => {
+            warn!(
+                "[{}] t=book failed ({err}), falling back to t=search",
+                ix.name
+            );
+            let fb = format!(
+                "{base}?{}",
+                build_query(&Query {
+                    t: "search",
+                    q: Some(&text),
+                    cat: &cat,
+                    api_key: &key,
+                    ..Default::default()
+                })
+            );
+            Ok(exec_search(&fb, "book", ix, round)
+                .await?
+                .unwrap_or_default())
+        }
+        Err(_) => Ok(vec![]),
+    }
+}
+
+#[cfg(test)]
+mod book_tests {
+    use super::*;
+
+    const CAPS: &str = r#"<caps><searching><book-search available="yes" supportedParams="q,author,title"/></searching>
+      <categories><category id="3000" name="Audio"><subcat id="3030" name="Audio/Audiobook"/></category>
+      <category id="7000" name="Books"><subcat id="7020" name="Books/EBook"/><subcat id="7020" name="dup"/></category></categories></caps>"#;
+
+    #[test]
+    fn caps_carry_the_book_search_and_the_tree() {
+        let c = parse_caps(CAPS);
+        assert!(c.book);
+        assert_eq!(c.book_params.as_deref(), Some("q,author,title"));
+        assert_eq!(c.categories.as_deref(), Some("3000,3030,7000,7020"));
+        assert_eq!(parse_caps("<caps/>").categories, None);
+    }
+
+    #[test]
+    fn a_tree_without_the_category_means_none() {
+        let tree = Some("2000,5000,7000");
+        assert_eq!(pick_category(tree, Family::Text), Some(7000));
+        assert_eq!(pick_category(tree, Family::Audio), None);
+        assert_eq!(
+            pick_category(Some("3030,7020,7000"), Family::Text),
+            Some(7020)
+        );
+        assert_eq!(pick_category(None, Family::Audio), Some(3030));
+        assert_eq!(pick_category(None, Family::Video), None);
+    }
+
+    #[test]
+    fn author_and_title_only_when_advertised() {
+        let q = |p| {
+            build_query(&Query {
+                t: "book",
+                cat: "7020",
+                api_key: "k",
+                author: Some("A B"),
+                title: Some("T"),
+                supported_params: Some(p),
+                ..Default::default()
+            })
+        };
+        assert_eq!(
+            q("q,author,title"),
+            "t=book&cat=7020&apikey=k&author=A%20B&title=T"
+        );
+        assert_eq!(q("q"), "t=book&cat=7020&apikey=k");
     }
 }
