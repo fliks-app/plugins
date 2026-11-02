@@ -2,5 +2,5 @@
   "download": "1.2.0",
   "notify": "1.0.0",
   "providers/openlibrary": "0.1.0",
-  "providers/tmdb": "0.1.0"
+  "providers/tmdb": "0.2.0"
 }
