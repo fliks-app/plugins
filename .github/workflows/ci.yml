@@ -78,10 +78,8 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
         with:
-          # One cache for every plugin: they share the host and its dependencies. PR caches would
-          # evict main's from the repository's 10 GB.
           shared-key: plugins
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          save-if: false
       - run: cargo fmt --all --check
       - run: cargo clippy --manifest-path "$MANIFEST" --all-targets -- -D warnings
       - run: cargo clippy --manifest-path "$MANIFEST" --target wasm32-wasip2 --all-targets -- -D warnings
@@ -90,6 +88,28 @@ jobs:
       - run: cargo test --manifest-path "$MANIFEST"
       - name: Verify the component and its archive (world, archive guard, 12 MiB budget)
         run: cargo xtask package "${{ matrix.plugin }}" --max-mib 12 --out dist
+
+  # Saves the one cache every job reads, built for every plugin; a verify job saving it would hold
+  # only its own plugin's dependencies.
+  warm-cache:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip2
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: plugins
+      - run: cargo clippy --workspace --all-targets
+      - run: |
+          for m in plugins/*/Cargo.toml; do
+            cargo clippy --manifest-path "$m" --target wasm32-wasip2 --all-targets
+            cargo build --manifest-path "$m" --release --target wasm32-wasip2
+          done
+      - run: cargo test --workspace --no-run
 
   # The one check to require on main: green when every plugin job that ran is green.
   ci:
