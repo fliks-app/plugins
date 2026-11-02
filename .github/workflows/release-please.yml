@@ -5,6 +5,11 @@ name: Release please
 on:
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      paths:
+        description: JSON list of plugin folders to package again, e.g. ["plugins/tmdb"]
+        required: true
 
 permissions:
   contents: write
@@ -12,6 +17,7 @@ permissions:
 
 jobs:
   release-please:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     outputs:
       paths: ${{ steps.rp.outputs.paths_released }}
@@ -26,14 +32,22 @@ jobs:
 
   package:
     needs: release-please
-    if: needs.release-please.outputs.paths != '' && needs.release-please.outputs.paths != '[]'
+    if: always() && (inputs.paths || (needs.release-please.outputs.paths != '' && needs.release-please.outputs.paths != '[]'))
     name: package (${{ matrix.path }})
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
-        path: ${{ fromJSON(needs.release-please.outputs.paths) }}
+        path: ${{ fromJSON(inputs.paths || needs.release-please.outputs.paths) }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      # Several release PRs merged in a row are released by one run: build each from its own tag.
+      - name: Check out the release tag
+        env:
+          RELEASE_PATH: ${{ matrix.path }}
+        run: git checkout "$(git tag -l "${RELEASE_PATH##*/}-v*" --sort=-v:refname | head -1)"
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-wasip2
