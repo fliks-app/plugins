@@ -121,8 +121,9 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
         with:
-          key: ${{ matrix.plugin }}
-          # PR caches would evict main's from the repository's 10 GB.
+          # One cache for every plugin: they share the host and its dependencies. PR caches would
+          # evict main's from the repository's 10 GB.
+          shared-key: plugins
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo fmt --all --check
       - run: cargo clippy -p xtask -- -D warnings

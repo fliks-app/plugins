@@ -39,7 +39,7 @@ jobs:
           targets: wasm32-wasip2
       - uses: Swatinem/rust-cache@v2
         with:
-          key: ${{ matrix.path }}
+          shared-key: plugins
           save-if: false
       - name: Attach the verified archive to the release
         env:
