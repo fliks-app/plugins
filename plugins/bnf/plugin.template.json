@@ -1,0 +1,24 @@
+{
+  "id": "fliks.bnf",
+  "pluginApi": 3,
+  "name": "BnF",
+  "fliks": ">=6.0.0 <7.0.0",
+  "author": "Fliks",
+  "description": "Book metadata from the BnF general catalogue: search and editions by ISBN or notice id.",
+  "license": "AGPL-3.0-or-later",
+  "logo": "logo.svg",
+  "kind": "process",
+  "runtime": "wasm",
+  "memoryMb": 64,
+  "database": { "schema": false, "coreRefs": [] },
+  "scopes": [],
+  "ingestRoots": [],
+  "routes": [],
+  "provider": {
+    "namespaces": [{ "name": "bnf" }],
+    "kinds": { "book": ["search", "edition"] },
+    "editionNamespaces": ["isbn", "bnf"],
+    "limits": { "ratePerSec": 1, "burst": 1 },
+    "snapshotTtlSecs": { "edition": 2592000 }
+  }
+}

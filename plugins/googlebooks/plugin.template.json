@@ -1,0 +1,25 @@
+{
+  "id": "fliks.googlebooks",
+  "pluginApi": 3,
+  "name": "Google Books",
+  "fliks": ">=6.0.0 <7.0.0",
+  "author": "Fliks",
+  "description": "Book metadata from Google Books: search and editions by ISBN or volume id.",
+  "license": "AGPL-3.0-or-later",
+  "logo": "logo.svg",
+  "kind": "process",
+  "runtime": "wasm",
+  "memoryMb": 64,
+  "database": { "schema": false, "coreRefs": [] },
+  "scopes": [],
+  "ingestRoots": [],
+  "routes": [],
+  "provider": {
+    "namespaces": [{ "name": "googlebooks" }],
+    "kinds": { "book": ["search", "edition"] },
+    "editionNamespaces": ["isbn", "googlebooks"],
+    "limits": { "ratePerSec": 1, "burst": 1 },
+    "snapshotTtlSecs": { "edition": 2592000 },
+    "imageHosts": ["books.google.com"]
+  }
+}
