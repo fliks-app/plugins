@@ -893,7 +893,7 @@ pub async fn search_book(
             cat: &cat,
             api_key: &key,
             author: author.filter(|_| book),
-            title: Some(title).filter(|_| typed_title),
+            title: typed_title.then_some(title),
             supported_params: params,
             ..Default::default()
         })
