@@ -1,0 +1,72 @@
+{
+  "id": "fliks.tvdb",
+  "pluginApi": 3,
+  "name": "TheTVDB",
+  "fliks": ">=6.0.0 <7.0.0",
+  "author": "Fliks",
+  "description": "Movie and series metadata, images, people and credits from TheTVDB.",
+  "license": "AGPL-3.0-or-later",
+  "logo": "logo.svg",
+  "kind": "process",
+  "runtime": "wasm",
+  "memoryMb": 64,
+  "database": { "schema": false, "coreRefs": [] },
+  "scopes": [],
+  "ingestRoots": [],
+  "routes": [],
+  "provider": {
+    "namespaces": [{ "name": "tvdb" }],
+    "kinds": {
+      "movie": ["search", "work", "person", "credits", "findBy"],
+      "series": ["search", "work", "children", "childStubs", "person", "credits", "findBy"]
+    },
+    "findBy": ["imdb"],
+    "limits": { "ratePerSec": 10, "burst": 10 },
+    "requestTimeoutMs": 10000,
+    "snapshotTtlSecs": { "work": 0, "children": 0 },
+    "imageHosts": ["artworks.thetvdb.com"],
+    "requires": ["apiKey"]
+  },
+  "ui": {
+    "contributions": [
+      {
+        "id": "fliks-tvdb.settings.general",
+        "slot": "settings.page",
+        "weight": 100,
+        "labelKey": "tvdb.config.title",
+        "action": { "kind": "route", "path": "/admin/settings/plugins/fliks.tvdb/general" }
+      }
+    ],
+    "configPages": [
+      {
+        "id": "general",
+        "labelKey": "tvdb.config.title",
+        "subtitleKey": "tvdb.config.subtitle",
+        "fields": [
+          {
+            "key": "apiKey",
+            "type": "text",
+            "labelKey": "tvdb.config.apiKey",
+            "hint": "tvdb.config.apiKey_hint",
+            "secret": true,
+            "default": "fliks:apiKey"
+          }
+        ]
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "tvdb.config.title": "TheTVDB",
+      "tvdb.config.subtitle": "Movie and series metadata from TheTVDB.",
+      "tvdb.config.apiKey": "API key",
+      "tvdb.config.apiKey_hint": "Your own TheTVDB API key. Leave it empty to use the key Fliks ships with."
+    },
+    "fr": {
+      "tvdb.config.title": "TheTVDB",
+      "tvdb.config.subtitle": "Métadonnées de films et de séries de TheTVDB.",
+      "tvdb.config.apiKey": "Clé d'API",
+      "tvdb.config.apiKey_hint": "Votre propre clé d'API TheTVDB. Laissez vide pour utiliser la clé fournie avec Fliks."
+    }
+  }
+}
