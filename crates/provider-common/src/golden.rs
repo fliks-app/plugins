@@ -1,8 +1,8 @@
 //! Fixture replay helpers: JSON comparison and the `BLESS=1` rewrite of `expected` (same as the engine's).
-#![allow(dead_code)] // each suite uses a subset
+use crate::book::ParseError;
 use serde::Serialize;
-use serde_json::Value;
 use serde_json::ser::{PrettyFormatter, Serializer};
+use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
 
 /// `BLESS=1 cargo test` rewrites `expected` from the current output instead of failing.
@@ -117,21 +117,21 @@ pub fn norm(v: Value) -> Value {
     }
 }
 
-/// Replays every case of `fixtures/<set>/cases.json` through `run(input)` (blessing under `BLESS=1`).
-pub fn replay(set: &str, count: usize, run: impl Fn(&Value) -> Value) {
-    replay_where(set, count, |_| true, run);
+/// Replays every case of `<dir>/cases.json` (`dir` relative to the crate under test) through `run(input)` (blessing under `BLESS=1`).
+pub fn replay(dir: &str, count: usize, run: impl Fn(&Value) -> Value) {
+    replay_where(dir, count, |_| true, run);
 }
 
 /// `replay` over the cases whose input satisfies `keep`; `count` is the number kept.
 pub fn replay_where(
-    set: &str,
+    dir: &str,
     count: usize,
     keep: impl Fn(&Value) -> bool,
     run: impl Fn(&Value) -> Value,
 ) {
     // Read at run time: a target dir shared across worktrees reuses binaries built in another one.
-    let dir = std::env::var("CARGO_MANIFEST_DIR").expect("run through cargo test");
-    let path = PathBuf::from(dir).join(format!("fixtures/{set}/cases.json"));
+    let root = std::env::var("CARGO_MANIFEST_DIR").expect("run through cargo test");
+    let path = PathBuf::from(root).join(format!("{dir}/cases.json"));
     let mut fx = Fixture::load(&path);
     let cases = fx.root["cases"].as_array().unwrap().clone();
     assert_eq!(cases.iter().filter(|c| keep(&c["input"])).count(), count);
@@ -155,7 +155,45 @@ pub fn replay_where(
     }
     assert!(
         failed.is_empty(),
-        "{set}: {} of {count} cases fail",
+        "{dir}: {} of {count} cases fail",
         failed.len()
     );
+}
+
+/// The inline `body` of a case input, or its fixture `file` of `dir`.
+pub fn body(dir: &str, i: &Value) -> String {
+    if let Some(b) = i["body"].as_str() {
+        return b.into();
+    }
+    let root = std::env::var("CARGO_MANIFEST_DIR").expect("run through cargo test");
+    let path = PathBuf::from(root)
+        .join(dir)
+        .join(i["file"].as_str().unwrap());
+    std::fs::read_to_string(path).unwrap()
+}
+
+/// The fixture of a `books-record` case (`../<provider>/<name>`), read from the provider's own `dir`.
+pub fn record_body(dir: &str, i: &Value) -> String {
+    let name = Path::new(i["file"].as_str().unwrap()).file_name().unwrap();
+    let root = std::env::var("CARGO_MANIFEST_DIR").expect("run through cargo test");
+    std::fs::read_to_string(PathBuf::from(root).join(dir).join(name)).unwrap()
+}
+
+pub fn res<T: Serialize>(r: Result<T, ParseError>) -> Value {
+    match r {
+        Ok(v) => json!(v),
+        Err(e) => json!({ "error": e.to_string() }),
+    }
+}
+
+/// The `args` object of a case input.
+pub struct Args<'a>(pub &'a Value);
+
+impl<'a> Args<'a> {
+    pub fn s(&self, k: &str) -> Option<&'a str> {
+        self.0["args"][k].as_str()
+    }
+    pub fn n(&self, k: &str) -> Option<u32> {
+        self.0["args"][k].as_u64().map(|n| n as u32)
+    }
 }

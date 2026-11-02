@@ -1,6 +1,8 @@
 //! OpenLibrary: URL builders and parsers (works, editions, search, authors).
-use super::util::*;
-use super::{BookRecord, Format, Level, ParseError, Person, PersonRecord, Provider, SearchPage};
+use provider_common::book::util::*;
+use provider_common::book::{
+    BookRecord, Format, Level, ParseError, Person, PersonRecord, Provider, SearchPage,
+};
 use regex::Regex;
 use serde_json::Value;
 use std::sync::LazyLock;
@@ -337,8 +339,11 @@ pub fn parse_isbn_batch(body: &str) -> Result<Vec<BookRecord>, ParseError> {
             .cloned()
             .unwrap_or_default()
     };
-    Ok(map
-        .iter()
+    // Sorted by key: the order must not depend on serde_json's `preserve_order`, a workspace-wide feature.
+    let mut entries: Vec<_> = map.iter().collect();
+    entries.sort_by_key(|(k, _)| *k);
+    Ok(entries
+        .into_iter()
         .filter_map(|(key, b)| {
             let mut r = BookRecord::new(Provider::OpenLibrary, Level::Edition, text(b, "title")?);
             r.ids.edition = key_id(b);

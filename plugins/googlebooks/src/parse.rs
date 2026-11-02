@@ -1,6 +1,6 @@
 //! Google Books (keyless): URL builders and parsers.
-use super::util::*;
-use super::{BookRecord, Format, Level, ParseError, Person, Provider, SearchPage};
+use provider_common::book::util::*;
+use provider_common::book::{BookRecord, Format, Level, ParseError, Person, Provider, SearchPage};
 use serde_json::Value;
 
 const BASE: &str = "https://www.googleapis.com/books/v1";

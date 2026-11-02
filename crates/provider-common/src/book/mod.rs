@@ -1,13 +1,8 @@
-//! Book metadata providers: pure request builders and response parsers.
-pub mod audible;
-pub mod audnexus;
-pub mod bnf;
-pub mod googlebooks;
+//! The common book model, ISBN handling and the record map the core reads.
 pub mod isbn;
-pub mod language;
-pub mod openlibrary;
+pub mod pending;
 mod record;
-mod util;
+pub mod util;
 
 pub use record::to_record;
 
@@ -105,7 +100,7 @@ pub struct BookRecord {
 }
 
 impl BookRecord {
-    pub(crate) fn new(provider: Provider, level: Level, title: String) -> Self {
+    pub fn new(provider: Provider, level: Level, title: String) -> Self {
         Self {
             provider,
             level,

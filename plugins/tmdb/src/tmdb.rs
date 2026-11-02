@@ -4,7 +4,7 @@ use crate::map::{
     str_lower_or, text, text_or_null, year_of,
 };
 use fliks_plugin_sdk::rt::join_all;
-use fliks_plugin_sdk_provider::{Lang, ProviderError, UpstreamError};
+use fliks_plugin_sdk_provider::{Lang, ProviderError};
 use serde_json::{Map, Value, json};
 
 pub const IMAGE_URL: &str = "https://image.tmdb.org/t/p";
@@ -20,38 +20,7 @@ pub trait Http {
     fn warn(&self, _message: &str) {}
 }
 
-pub fn upstream(status: Option<u16>, message: impl Into<String>) -> ProviderError {
-    ProviderError::Upstream(UpstreamError {
-        status,
-        message: message.into(),
-    })
-}
-
-/// An answer of the API as the provider reports it; a message never carries the request URL.
-pub fn reply(status: u16, retry_after: Option<&str>, body: &[u8]) -> Result<Value> {
-    let parsed = serde_json::from_slice::<Value>(body);
-    if (200..300).contains(&status) {
-        return parsed.map_err(|_| upstream(Some(status), "invalid JSON response"));
-    }
-    match status {
-        401 => Err(ProviderError::Unauthorized),
-        404 => Err(ProviderError::NotFound),
-        429 => Err(ProviderError::RateLimited(
-            retry_after.and_then(|r| r.trim().parse().ok()),
-        )),
-        _ => {
-            let body = parsed.unwrap_or(Value::Null);
-            let said = ["status_message", "message"]
-                .iter()
-                .find_map(|k| body.get(k).and_then(Value::as_str))
-                .map_or_else(
-                    || format!("Request failed with status code {status}"),
-                    str::to_owned,
-                );
-            Err(upstream(Some(status), format!("HTTP {status}: {said}")))
-        }
-    }
-}
+pub use provider_common::http::{json_reply as reply, upstream};
 
 /// The provider asks for fewer calls: 429 or 503.
 fn throttled(e: &ProviderError) -> bool {

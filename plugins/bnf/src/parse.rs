@@ -1,6 +1,8 @@
 //! BnF catalogue SRU, `unimarcxchange` records: URL builders and parser.
-use super::util::*;
-use super::{BookRecord, Format, Level, ParseError, Person, Provider, SearchPage, Series};
+use provider_common::book::util::*;
+use provider_common::book::{
+    BookRecord, Format, Level, ParseError, Person, Provider, SearchPage, Series,
+};
 use quick_xml::{
     Reader,
     escape::resolve_predefined_entity,

@@ -1,9 +1,10 @@
 //! The Google Books lookups over an injected transport, so recorded bodies can stand in for the network.
-use book_providers::googlebooks::{self as gb, Search};
-use book_providers::language::normalize_language_code;
-use book_providers::{BookRecord, ParseError, to_record};
+use crate::parse::{self as gb, Search};
 use fliks_plugin_sdk::ExternalId;
-use fliks_plugin_sdk_provider::{ProviderError, SearchQuery, UpstreamError};
+use fliks_plugin_sdk_provider::{ProviderError, SearchQuery};
+use provider_common::book::{BookRecord, ParseError, to_record};
+use provider_common::http::{status_error, upstream};
+use provider_common::lang::normalize_language_code;
 use serde_json::Value;
 
 type R<T> = Result<T, ProviderError>;
@@ -24,13 +25,6 @@ pub trait Http {
     fn get(&self, url: &str) -> Result<Reply, String>;
 }
 
-fn upstream(status: Option<u16>, message: impl Into<String>) -> ProviderError {
-    ProviderError::Upstream(UpstreamError {
-        status,
-        message: message.into(),
-    })
-}
-
 fn parse_err(e: ParseError) -> ProviderError {
     match e {
         ParseError::NotFound | ParseError::Moved(_) => ProviderError::NotFound,
@@ -42,14 +36,18 @@ fn parse_err(e: ParseError) -> ProviderError {
 /// Google also reports an exhausted quota as a 403 whose body names the reason.
 fn get(h: &impl Http, url: &str) -> R<String> {
     let r = h.get(url).map_err(|m| upstream(None, m))?;
-    match r.status {
-        200..=299 => Ok(r.body),
-        404 => Err(ProviderError::NotFound),
-        s if s == 429 || gb::parse_volumes(&r.body) == Err(ParseError::RateLimited) => {
-            Err(ProviderError::RateLimited(r.retry_after))
-        }
-        s => Err(upstream(Some(s), format!("Google Books answered {s}"))),
+    let s = r.status;
+    if (200..300).contains(&s) {
+        return Ok(r.body);
     }
+    if s != 404 && gb::parse_volumes(&r.body) == Err(ParseError::RateLimited) {
+        return Err(ProviderError::RateLimited(r.retry_after));
+    }
+    Err(status_error(
+        s,
+        r.retry_after,
+        format!("Google Books answered {s}"),
+    ))
 }
 
 fn filled(s: &Option<String>) -> Option<&str> {
@@ -66,7 +64,7 @@ pub fn search(h: &impl Http, q: &SearchQuery) -> R<String> {
         .map(|l| normalize_language_code(Some(l)))
         .filter(|l| l != "und");
     // An ISBN alone: the other terms would only narrow it.
-    let by_isbn = isbn.is_some_and(|i| book_providers::isbn::parse(i).is_some());
+    let by_isbn = isbn.is_some_and(|i| provider_common::book::isbn::parse(i).is_some());
     let page = q.page.max(1);
     let search = Search {
         isbn: isbn.filter(|_| by_isbn),
@@ -132,10 +130,7 @@ mod tests {
 
     macro_rules! fixture {
         ($f:literal) => {
-            include_str!(concat!(
-                "../../../crates/book-providers/fixtures/googlebooks/",
-                $f
-            ))
+            include_str!(concat!("../tests/fixtures/", $f))
         };
     }
 

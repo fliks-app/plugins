@@ -1,9 +1,10 @@
 //! The OpenLibrary lookups over an injected transport, so recorded bodies can stand in for the network.
-use book_providers::language::normalize_language_code;
-use book_providers::openlibrary::{self as ol, Search};
-use book_providers::{BookRecord, ParseError, to_record};
+use crate::parse::{self as ol, Search};
 use fliks_plugin_sdk::ExternalId;
-use fliks_plugin_sdk_provider::{ProviderError, SearchQuery, UpstreamError};
+use fliks_plugin_sdk_provider::{ProviderError, SearchQuery};
+use provider_common::book::{BookRecord, ParseError, to_record};
+use provider_common::http::{status_error, upstream};
+use provider_common::lang::normalize_language_code;
 use serde_json::Value;
 
 type R<T> = Result<T, ProviderError>;
@@ -27,13 +28,6 @@ pub struct Reply {
 pub trait Http {
     /// A transport failure is its message, which must carry no URL.
     fn get(&self, url: &str) -> Result<Reply, String>;
-}
-
-fn upstream(status: Option<u16>, message: impl Into<String>) -> ProviderError {
-    ProviderError::Upstream(UpstreamError {
-        status,
-        message: message.into(),
-    })
 }
 
 fn parse_err(e: ParseError) -> ProviderError {
@@ -60,9 +54,13 @@ fn get(h: &impl Http, url: &str) -> R<String> {
         match r.status {
             200..=299 => return Ok(r.body),
             301 | 302 | 303 | 307 | 308 => url = redirect(&url, r.location.as_deref())?,
-            404 => return Err(ProviderError::NotFound),
-            429 => return Err(ProviderError::RateLimited(r.retry_after)),
-            s => return Err(upstream(Some(s), format!("OpenLibrary answered {s}"))),
+            s => {
+                return Err(status_error(
+                    s,
+                    r.retry_after,
+                    format!("OpenLibrary answered {s}"),
+                ));
+            }
         }
     }
     Err(upstream(None, "too many redirects"))
@@ -201,10 +199,7 @@ mod tests {
 
     macro_rules! fixture {
         ($f:literal) => {
-            include_str!(concat!(
-                "../../../crates/book-providers/fixtures/openlibrary/",
-                $f
-            ))
+            include_str!(concat!("../tests/fixtures/", $f))
         };
     }
 

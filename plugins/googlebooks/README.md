@@ -17,5 +17,5 @@ cargo build -p fk-plugin-googlebooks --release --target wasm32-wasip2
 cargo test -p fk-plugin-googlebooks --test package   # needs the release component
 ```
 
-`--lib` runs the lookups against the recorded bodies in `crates/book-providers/fixtures/googlebooks`
+`--lib` runs the lookups against the recorded bodies in `plugins/googlebooks/tests/fixtures`
 through a fake transport. The host harness is not used: a provider holds no database.

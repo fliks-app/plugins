@@ -1,6 +1,9 @@
 //! `fliks.bnf`: book metadata from BnF (search, editions).
 
 mod api;
+#[cfg(test)]
+mod golden;
+mod parse;
 
 use api::{Http, Reply};
 use fliks_plugin_sdk::bindings::wasi::http::types::Method;

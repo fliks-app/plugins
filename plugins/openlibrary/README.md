@@ -15,6 +15,6 @@ cargo build -p fk-plugin-openlibrary --release --target wasm32-wasip2
 cargo test -p fk-plugin-openlibrary --test package   # needs the release component
 ```
 
-`--lib` runs the lookups against the recorded bodies in `crates/book-providers/fixtures/openlibrary`
+`--lib` runs the lookups against the recorded bodies in `plugins/openlibrary/tests/fixtures`
 through a fake transport. The host harness is not used: it needs a scratch Postgres, and a provider
 holds no database.

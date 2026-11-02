@@ -261,18 +261,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "book-providers"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "quick-xml",
- "regex",
- "serde",
- "serde_json",
- "url",
-]
-
-[[package]]
 name = "brotli"
 version = "9.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1142,10 +1130,13 @@ checksum = "1c66915cc5391097de7a2b0b972e8505aa33c0df401fd3a6811dbdb32881ba48"
 name = "fk-plugin-bnf"
 version = "0.1.0"
 dependencies = [
- "book-providers",
  "fliks-plugin-sdk",
  "fliks-plugin-sdk-provider",
+ "provider-common",
+ "quick-xml",
+ "regex",
  "serde_json",
+ "url",
 ]
 
 [[package]]
@@ -1168,10 +1159,11 @@ dependencies = [
 name = "fk-plugin-googlebooks"
 version = "0.1.0"
 dependencies = [
- "book-providers",
  "fliks-plugin-sdk",
  "fliks-plugin-sdk-provider",
+ "provider-common",
  "serde_json",
+ "url",
 ]
 
 [[package]]
@@ -1189,9 +1181,10 @@ dependencies = [
 name = "fk-plugin-openlibrary"
 version = "0.1.0"
 dependencies = [
- "book-providers",
  "fliks-plugin-sdk",
  "fliks-plugin-sdk-provider",
+ "provider-common",
+ "regex",
  "serde_json",
  "url",
 ]
@@ -1202,6 +1195,7 @@ version = "0.1.0"
 dependencies = [
  "fliks-plugin-sdk",
  "fliks-plugin-sdk-provider",
+ "provider-common",
  "serde_json",
  "url",
 ]
@@ -1212,6 +1206,7 @@ version = "0.1.0"
 dependencies = [
  "fliks-plugin-sdk",
  "fliks-plugin-sdk-provider",
+ "provider-common",
  "serde_json",
  "url",
 ]
@@ -2642,6 +2637,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "985e7ec9bb745e6ce6535b544d84d6cd6f7ad8bd711c398938ae983b91a766d9"
 dependencies = [
  "unicode-ident",
+]
+
+[[package]]
+name = "provider-common"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "fliks-plugin-sdk-provider",
+ "provider-common",
+ "regex",
+ "serde",
+ "serde_json",
+ "url",
 ]
 
 [[package]]
