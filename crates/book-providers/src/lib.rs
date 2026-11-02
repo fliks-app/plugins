@@ -6,7 +6,10 @@ pub mod googlebooks;
 pub mod isbn;
 pub mod language;
 pub mod openlibrary;
+mod record;
 mod util;
+
+pub use record::to_record;
 
 use serde::Serialize;
 use std::collections::BTreeMap;

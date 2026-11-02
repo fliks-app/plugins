@@ -7,6 +7,7 @@ from the plugin catalogue in **Settings → Advanced → Plugins**.
 |---|---|---|
 | [`download`](download/README.md) | `fliks.download`: indexer search, download clients and the grab pipeline | AGPL-3.0-or-later |
 | [`notify`](notify/README.md) | `fliks.notify`: notification delivery | MIT |
+| [`providers/openlibrary`](providers/openlibrary/README.md) | `fliks.openlibrary`: book metadata from OpenLibrary | AGPL-3.0-or-later |
 
 [`crates/book-providers`](crates/book-providers) holds the book provider request builders and
 response parsers shared by the book provider plugins; it is a library, not a plugin.
@@ -28,7 +29,7 @@ Per-plugin details are in `<folder>/docs/development.md`.
 ## Releases
 
 Every folder has its own version, release PR and tag `<folder>-v<version>` (for example
-`download-v1.2.0`), managed by release-please from conventional commits; commits touching only
+`download-v1.2.0`; `providers/openlibrary` tags `openlibrary-v<version>`), managed by release-please from conventional commits; commits touching only
 another folder do not bump it. Merging a release PR attaches the unsigned `.fkplugin` to the
 release; the catalog's `Package plugin` workflow then signs it.
 

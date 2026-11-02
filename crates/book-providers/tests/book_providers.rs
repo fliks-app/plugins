@@ -2,7 +2,9 @@
 mod common;
 
 use book_providers::audible::{self, Region};
-use book_providers::{ParseError, audnexus, bnf, googlebooks, openlibrary};
+use book_providers::{
+    BookRecord, ParseError, SearchPage, audnexus, bnf, googlebooks, openlibrary, to_record,
+};
 use common::replay;
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -170,4 +172,31 @@ fn audnexus_reproduces_expected() {
             f => panic!("unknown fn {f}"),
         }
     });
+}
+
+#[test]
+fn books_record_reproduces_expected() {
+    let one = |r: Result<BookRecord, ParseError>| res(r.map(|r| to_record(&r)));
+    let page = |r: Result<SearchPage, ParseError>| res(r.map(|p| many(&p.records)));
+    let many = |r: Result<Vec<BookRecord>, ParseError>| res(r.map(|v| many(&v)));
+    replay("books-record", 11, |i| {
+        let b = body("books-record", i);
+        let f = i["fn"].as_str().unwrap();
+        match (i["provider"].as_str().unwrap(), f) {
+            ("openlibrary", "parse_search") => page(openlibrary::parse_search(&b)),
+            ("openlibrary", "parse_editions") => page(openlibrary::parse_editions(&b)),
+            ("openlibrary", "parse_work") => one(openlibrary::parse_work(&b)),
+            ("openlibrary", "parse_edition") => one(openlibrary::parse_edition(&b)),
+            ("openlibrary", "parse_isbn_batch") => many(openlibrary::parse_isbn_batch(&b)),
+            ("googlebooks", "parse_volume") => one(googlebooks::parse_volume(&b)),
+            ("bnf", "parse_record") => one(bnf::parse_record(&b)),
+            ("audible", "parse_product") => one(audible::parse_product(&b)),
+            ("audnexus", "parse_book") => one(audnexus::parse_book(&b)),
+            (p, f) => panic!("unknown fn {p}/{f}"),
+        }
+    });
+}
+
+fn many(records: &[BookRecord]) -> Value {
+    records.iter().map(to_record).collect()
 }
