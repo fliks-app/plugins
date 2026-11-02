@@ -1,10 +1,11 @@
 [workspace]
 resolver = "3"
-members = ["download", "notify", "xtask", "crates/book-providers"]
+members = ["download", "notify", "providers/openlibrary", "xtask", "crates/book-providers"]
 
 # One rev of fliks-app/fliks for every plugin; raising it rebuilds them all.
 [workspace.dependencies]
 fliks-plugin-sdk = { git = "https://github.com/fliks-app/fliks", rev = "506d300edfabf10e0604e49fd30517d7cd08a27a" }
+fliks-plugin-sdk-provider = { git = "https://github.com/fliks-app/fliks", rev = "506d300edfabf10e0604e49fd30517d7cd08a27a" }
 fliks-plugin-route = { git = "https://github.com/fliks-app/fliks", rev = "506d300edfabf10e0604e49fd30517d7cd08a27a" }
 
 [profile.release]
