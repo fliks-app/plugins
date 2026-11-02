@@ -13,8 +13,9 @@ from the plugin catalogue in **Settings → Advanced → Plugins**.
 | [`plugins/googlebooks`](plugins/googlebooks/README.md) | `fliks.googlebooks`: book metadata from Google Books | AGPL-3.0-or-later |
 | [`plugins/tvdb`](plugins/tvdb/README.md) | `fliks.tvdb`: movie and series metadata from TheTVDB | AGPL-3.0-or-later |
 
-[`crates/book-providers`](crates/book-providers) holds the book provider request builders and
-response parsers shared by the book provider plugins; it is a library, not a plugin.
+[`crates/provider-common`](crates/provider-common) holds what several provider plugins share (language
+codes, the HTTP status mapping, the book model and ISBN); it is a library, not a plugin. Each provider
+keeps its own parser and golden fixtures (`src/parse.rs`, `tests/fixtures`).
 
 Each folder holds its own `LICENSE`, `plugin.template.json`, `migrations/`, `tests/` and `docs/`.
 `xtask/` is the shared packaging CLI over the SDK build tooling, and the root `Cargo.toml` pins one

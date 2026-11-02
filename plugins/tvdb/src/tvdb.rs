@@ -1,7 +1,8 @@
 //! TheTVDB v4 requests and response mapping, over an `Http` that answers parsed JSON.
 use crate::map::{arr, get, js_parse_int, nn, or, pluck, put, score, str_lower_or, text, year_of};
 use fliks_plugin_sdk::rt::join_all;
-use fliks_plugin_sdk_provider::{ProviderError, UpstreamError};
+use fliks_plugin_sdk_provider::ProviderError;
+use provider_common::lang::normalize_language_code;
 use serde_json::{Map, Value, json};
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -27,43 +28,11 @@ pub trait Http {
     async fn get(&self, token: &str, path: &str, query: Query) -> Result<Value>;
 }
 
-pub fn upstream(status: Option<u16>, message: impl Into<String>) -> ProviderError {
-    ProviderError::Upstream(UpstreamError {
-        status,
-        message: message.into(),
-    })
-}
-
-/// An answer of the API as the provider reports it; a message never carries the request URL.
-pub fn reply(status: u16, retry_after: Option<&str>, body: &[u8]) -> Result<Value> {
-    let parsed = serde_json::from_slice::<Value>(body);
-    if (200..300).contains(&status) {
-        return parsed.map_err(|_| upstream(Some(status), "invalid JSON response"));
-    }
-    match status {
-        401 => Err(ProviderError::Unauthorized),
-        404 => Err(ProviderError::NotFound),
-        429 => Err(ProviderError::RateLimited(
-            retry_after.and_then(|r| r.trim().parse().ok()),
-        )),
-        _ => {
-            let body = parsed.unwrap_or(Value::Null);
-            let said = ["status_message", "message"]
-                .iter()
-                .find_map(|k| body.get(k).and_then(Value::as_str))
-                .map_or_else(
-                    || format!("Request failed with status code {status}"),
-                    str::to_owned,
-                );
-            Err(upstream(Some(status), format!("HTTP {status}: {said}")))
-        }
-    }
-}
+pub use provider_common::http::{json_reply as reply, upstream};
 
 /// The metadata language in TheTVDB's three-letter code; an unknown one is English.
 pub fn code(language: &str) -> &'static str {
-    let iso1 = language.split(['-', '_']).next().unwrap_or_default();
-    match iso1.to_lowercase().as_str() {
+    match normalize_language_code(Some(language)).as_str() {
         "fr" => "fra",
         "es" => "spa",
         "de" => "deu",

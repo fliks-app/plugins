@@ -1,7 +1,7 @@
 //! Audnexus (`api.audnex.us`) by ASIN: books, chapters, authors.
 use super::audible::Region;
-use super::util::*;
-use super::{BookRecord, Format, Level, ParseError, Person, PersonRecord, Provider, Series};
+use crate::book::util::*;
+use crate::book::{BookRecord, Format, Level, ParseError, Person, PersonRecord, Provider, Series};
 use serde::Serialize;
 use serde_json::Value;
 

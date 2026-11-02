@@ -1,8 +1,9 @@
 //! The BnF SRU lookups over an injected transport, so recorded bodies can stand in for the network.
-use book_providers::bnf;
-use book_providers::{ParseError, to_record};
+use crate::parse as bnf;
 use fliks_plugin_sdk::ExternalId;
-use fliks_plugin_sdk_provider::{ProviderError, SearchQuery, UpstreamError};
+use fliks_plugin_sdk_provider::{ProviderError, SearchQuery};
+use provider_common::book::{ParseError, to_record};
+use provider_common::http::{status_error, upstream};
 use serde_json::Value;
 
 type R<T> = Result<T, ProviderError>;
@@ -23,13 +24,6 @@ pub trait Http {
     fn get(&self, url: &str) -> Result<Reply, String>;
 }
 
-fn upstream(status: Option<u16>, message: impl Into<String>) -> ProviderError {
-    ProviderError::Upstream(UpstreamError {
-        status,
-        message: message.into(),
-    })
-}
-
 fn parse_err(e: ParseError) -> ProviderError {
     match e {
         ParseError::NotFound | ParseError::Moved(_) => ProviderError::NotFound,
@@ -42,9 +36,7 @@ fn get(h: &impl Http, url: &str) -> R<String> {
     let r = h.get(url).map_err(|m| upstream(None, m))?;
     match r.status {
         200..=299 => Ok(r.body),
-        404 => Err(ProviderError::NotFound),
-        429 => Err(ProviderError::RateLimited(r.retry_after)),
-        s => Err(upstream(Some(s), format!("BnF answered {s}"))),
+        s => Err(status_error(s, r.retry_after, format!("BnF answered {s}"))),
     }
 }
 
@@ -92,7 +84,7 @@ mod tests {
 
     macro_rules! fixture {
         ($f:literal) => {
-            include_str!(concat!("../../../crates/book-providers/fixtures/bnf/", $f))
+            include_str!(concat!("../tests/fixtures/", $f))
         };
     }
 

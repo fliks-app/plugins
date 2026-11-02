@@ -1,6 +1,9 @@
 //! `fliks.openlibrary`: book metadata from OpenLibrary (search, works, editions).
 
 mod api;
+#[cfg(test)]
+mod golden;
+pub mod parse;
 
 use api::{Http, Reply};
 use fliks_plugin_sdk::bindings::wasi::http::types::Method;

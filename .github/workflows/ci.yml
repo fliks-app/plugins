@@ -85,8 +85,8 @@ jobs:
           key: crates
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo fmt --all --check
-      - run: cargo clippy -p book-providers --all-targets -- -D warnings
-      - run: cargo test -p book-providers
+      - run: cargo clippy -p provider-common --all-targets -- -D warnings
+      - run: cargo test -p provider-common
 
   verify:
     needs: changes

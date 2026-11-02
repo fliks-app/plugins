@@ -1,6 +1,6 @@
 //! Audible catalog (unofficial `api.audible.<tld>/1.0/catalog/products`): URL builders and parsers.
-use super::util::*;
-use super::{BookRecord, Format, Level, ParseError, Person, Provider, SearchPage, Series};
+use crate::book::util::*;
+use crate::book::{BookRecord, Format, Level, ParseError, Person, Provider, SearchPage, Series};
 use serde_json::Value;
 
 const RESPONSE_GROUPS: &str = "contributors,media,product_attrs,product_desc,product_details,product_extended_attrs,rating,series,category_ladders";

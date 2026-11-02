@@ -1,6 +1,6 @@
 //! Helpers shared by the provider parsers.
 use super::{ParseError, Series};
-use crate::language::normalize_language_code;
+use crate::lang::normalize_language_code;
 use regex::Regex;
 use serde_json::Value;
 use std::sync::LazyLock;
@@ -50,7 +50,7 @@ pub fn round2(x: f64) -> f64 {
 
 /// ISBN-13 of an ISBN-10 or ISBN-13; `None` when the check digit fails.
 pub fn isbn13(raw: &str) -> Option<String> {
-    crate::isbn::parse(raw).map(|i| i.isbn13)
+    super::isbn::parse(raw).map(|i| i.isbn13)
 }
 
 /// Out-of-range or non-finite values are dropped; the rest is clamped to 0..=5 and rounded.

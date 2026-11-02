@@ -1,6 +1,9 @@
 //! `fliks.googlebooks`: book metadata from Google Books (search, editions).
 
 mod api;
+#[cfg(test)]
+mod golden;
+mod parse;
 
 use api::{Http, Reply};
 use fliks_plugin_sdk::bindings::wasi::http::types::Method;
