@@ -4,5 +4,5 @@
   "plugins/openlibrary": "0.1.0",
   "plugins/tmdb": "0.1.0",
   "plugins/bnf": "0.1.0",
-  "plugins/googlebooks": "0.1.0"
+  "plugins/googlebooks": "0.2.0"
 }
