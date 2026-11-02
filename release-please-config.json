@@ -47,6 +47,28 @@
           "jsonpath": "$.package[?(@.name.value=='fk-plugin-tmdb')].version"
         }
       ]
+    },
+    "plugins/bnf": {
+      "release-type": "rust",
+      "component": "bnf",
+      "extra-files": [
+        {
+          "type": "toml",
+          "path": "/Cargo.lock",
+          "jsonpath": "$.package[?(@.name.value=='fk-plugin-bnf')].version"
+        }
+      ]
+    },
+    "plugins/googlebooks": {
+      "release-type": "rust",
+      "component": "googlebooks",
+      "extra-files": [
+        {
+          "type": "toml",
+          "path": "/Cargo.lock",
+          "jsonpath": "$.package[?(@.name.value=='fk-plugin-googlebooks')].version"
+        }
+      ]
     }
   }
 }
