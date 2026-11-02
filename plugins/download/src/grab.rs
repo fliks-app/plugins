@@ -280,6 +280,7 @@ pub fn search_query(t: &Target, custom: Option<&str>) -> String {
         return c.to_owned();
     }
     if piece(t) == Piece::Work
+        && t.kind == "movie"
         && let Some(y) = t.year.filter(|y| *y != 0)
     {
         return format!("{} {y}", t.search_title);
@@ -355,6 +356,8 @@ pub fn search_scored(
     let round = round();
     let ids = Ids::of(&target.external_ids);
     let query = search_query(target, custom);
+    let book = target.kind == "book";
+    let author = author_of(target).filter(|_| custom.is_none_or(|c| c.trim().is_empty()));
 
     if is_special(target) && special_title(target).is_none() {
         let what = match piece(target) {
@@ -399,14 +402,18 @@ pub fn search_scored(
         let mut pending: FuturesUnordered<_> = ready
             .iter_mut()
             .map(|ix| async move {
-                let out = match piece {
-                    Piece::Episode(s, e) => {
-                        torznab::search_series(ix, kind, query, s, e, ids, round).await
+                let out = if book {
+                    torznab::search_book(ix, kind, target.family, author, query, round).await
+                } else {
+                    match piece {
+                        Piece::Episode(s, e) => {
+                            torznab::search_series(ix, kind, query, s, e, ids, round).await
+                        }
+                        Piece::Season(s) => {
+                            torznab::search_season_pack(ix, kind, query, s, ids, round).await
+                        }
+                        Piece::Work => torznab::search_movie(ix, kind, query, ids, round).await,
                     }
-                    Piece::Season(s) => {
-                        torznab::search_season_pack(ix, kind, query, s, ids, round).await
-                    }
-                    Piece::Work => torznab::search_movie(ix, kind, query, ids, round).await,
                 };
                 (ix, out)
             })
@@ -447,12 +454,24 @@ pub fn search_scored(
     rank(target, &all, &raw)
 }
 
+/// The first credited author of a book.
+fn author_of(t: &Target) -> Option<&str> {
+    t.creators
+        .iter()
+        .find(|c| c.role == "author")
+        .map(|c| c.name.trim())
+        .filter(|n| !n.is_empty())
+}
+
+fn fetch_target(media_id: u32, group_id: Option<u32>, item_id: Option<u32>) -> R<Target> {
+    host::media_acquisition_context(media_id, None, group_id, item_id)?.ok_or_else(|| {
+        Error::grab_with("download.grab.errors.media_not_found", media_id.to_string())
+    })
+}
+
 /// A target of a kind this plugin does not acquire is refused, not searched.
 fn load_target(media_id: u32, group_id: Option<u32>, item_id: Option<u32>) -> R<(Target, Video)> {
-    let target =
-        host::media_acquisition_context(media_id, None, group_id, item_id)?.ok_or_else(|| {
-            Error::grab_with("download.grab.errors.media_not_found", media_id.to_string())
-        })?;
+    let target = fetch_target(media_id, group_id, item_id)?;
     let Some(video) = Video::of(&target.kind) else {
         info!(
             "Media #{media_id} \"{}\" is a {}: this plugin acquires movies and series only",
@@ -470,7 +489,11 @@ pub fn search_releases(
     custom: Option<&str>,
     stream: Option<&Stream>,
 ) -> R<Vec<Ranked>> {
-    let (target, _) = load_target(media_id, group_id, item_id)?;
+    // A book is searched here; grabbing and importing one wait for the host to serve its family.
+    let target = fetch_target(media_id, group_id, item_id)?;
+    if target.kind != "book" && Video::of(&target.kind).is_none() {
+        return Err(Error::grab("download.grab.errors.unsupported_kind"));
+    }
     let Some(want) = &target.want else {
         return Err(Error::grab("download.grab.errors.unprofiled"));
     };

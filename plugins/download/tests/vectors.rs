@@ -33,7 +33,7 @@ fn migrations_are_byte_identical() {
             MIGRATIONS[i].0
         );
     }
-    let names: Vec<&str> = MIGRATIONS[8..].iter().map(|m| m.0).collect();
+    let names: Vec<&str> = MIGRATIONS[8..12].iter().map(|m| m.0).collect();
     assert_eq!(
         names,
         [
@@ -43,6 +43,7 @@ fn migrations_are_byte_identical() {
             "0012_item_history"
         ]
     );
+    assert_eq!(MIGRATIONS[12].0, "0013_indexer_caps_books");
 }
 
 #[test]
@@ -83,6 +84,7 @@ fn torznab_query() {
             imdb_id: s("imdbId"),
             tmdb_id: n("tmdbId"),
             supported_params: s("supportedParams"),
+            ..Default::default()
         };
         assert_eq!(
             torznab::build_query(&q),
@@ -103,7 +105,8 @@ fn indexer(id: i64, settings: &Value) -> IndexerRow {
         "id": id, "name": "test-indexer", "implementation": "torznab", "settings": settings,
         "enableRss": true, "enableSearch": true, "enableInteractiveSearch": true, "priority": 25,
         "enabled": true, "capsSearchFallback": false, "capsMovieSearch": false, "capsTvSearch": false,
-        "capsMovieSearchParams": null, "capsTvSearchParams": null, "capsProbedAt": null,
+        "capsMovieSearchParams": null, "capsTvSearchParams": null, "capsBookSearch": false,
+        "capsBookSearchParams": null, "capsCategories": null, "capsProbedAt": null,
         "requestDelay": 2, "createdAt": "", "updatedAt": "",
     }))
     .unwrap()
