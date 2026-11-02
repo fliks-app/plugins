@@ -9,7 +9,10 @@ use std::path::Path;
 fn the_provider_packages_and_verifies() {
     let c = Crate::at(Path::new(env!("CARGO_MANIFEST_DIR"))).unwrap();
     let (name, archive) = c.package(None).unwrap();
-    assert_eq!(name, "fliks.audnexus-0.1.0.fkplugin");
+    assert_eq!(
+        name,
+        format!("fliks.audnexus-{}.fkplugin", env!("CARGO_PKG_VERSION"))
+    );
     let i = build::verify(&archive, vec![], build::MAX_WASM).unwrap();
     assert_eq!(i.manifest["provider"]["namespaces"][0]["name"], "audnexus");
 }
