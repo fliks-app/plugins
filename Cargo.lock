@@ -261,6 +261,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "book-providers"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "quick-xml",
+ "regex",
+ "serde",
+ "serde_json",
+ "url",
+]
+
+[[package]]
 name = "brotli"
 version = "9.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

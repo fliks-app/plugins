@@ -22,6 +22,7 @@ jobs:
       pull-requests: read
     outputs:
       plugins: ${{ steps.filter.outputs.changes }}
+      crates: ${{ steps.crates.outputs.crates }}
     steps:
       - uses: actions/checkout@v6
       # The shared files rebuild every plugin; `shared` itself is dropped from the matrix below.
@@ -41,6 +42,33 @@ jobs:
             notify:
               - *shared
               - 'notify/**'
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4
+        id: crates
+        with:
+          filters: |
+            crates:
+              - 'crates/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - '.github/workflows/ci.yml'
+
+  # The shared library crates are native-only: no component to package.
+  crates:
+    needs: changes
+    if: needs.changes.outputs.crates == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: crates
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - run: cargo fmt --all --check
+      - run: cargo clippy -p book-providers --all-targets -- -D warnings
+      - run: cargo test -p book-providers
 
   verify:
     needs: changes
@@ -90,7 +118,7 @@ jobs:
 
   # The one check to require on main: green when every plugin job that ran is green.
   ci:
-    needs: [changes, verify]
+    needs: [changes, crates, verify]
     if: always()
     runs-on: ubuntu-latest
     env:
