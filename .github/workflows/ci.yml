@@ -74,11 +74,12 @@ jobs:
           filters: |
             crates:
               - 'crates/**'
+              - 'xtask/**'
               - 'Cargo.toml'
               - 'Cargo.lock'
               - '.github/workflows/ci.yml'
 
-  # The shared library crates are native-only: no component to package.
+  # The shared library crates and xtask are native-only: no component to package.
   crates:
     needs: changes
     if: needs.changes.outputs.crates == 'true'
@@ -90,10 +91,10 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
         with:
-          key: crates
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          shared-key: plugins
+          save-if: false
       - run: cargo fmt --all --check
-      - run: cargo clippy -p provider-common --all-targets -- -D warnings
+      - run: cargo clippy -p provider-common -p xtask --all-targets -- -D warnings
       - run: cargo test -p provider-common
 
   verify:
@@ -134,7 +135,6 @@ jobs:
           shared-key: plugins
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo fmt --all --check
-      - run: cargo clippy -p xtask -- -D warnings
       - run: cargo clippy --manifest-path "$MANIFEST" --all-targets -- -D warnings
       - run: cargo clippy --manifest-path "$MANIFEST" --target wasm32-wasip2 --all-targets -- -D warnings
       # The component tests load the release component.
