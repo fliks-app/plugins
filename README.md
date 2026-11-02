@@ -12,6 +12,8 @@ from the plugin catalogue in **Settings → Advanced → Plugins**.
 | [`plugins/bnf`](plugins/bnf/README.md) | `fliks.bnf`: book metadata from the BnF catalogue | AGPL-3.0-or-later |
 | [`plugins/googlebooks`](plugins/googlebooks/README.md) | `fliks.googlebooks`: book metadata from Google Books | AGPL-3.0-or-later |
 | [`plugins/tvdb`](plugins/tvdb/README.md) | `fliks.tvdb`: movie and series metadata from TheTVDB | AGPL-3.0-or-later |
+| [`plugins/audible`](plugins/audible/README.md) | `fliks.audible`: audiobook metadata from the unofficial Audible catalog | AGPL-3.0-or-later |
+| [`plugins/audnexus`](plugins/audnexus/README.md) | `fliks.audnexus`: audiobook metadata and chapters from Audnexus | AGPL-3.0-or-later |
 
 [`crates/provider-common`](crates/provider-common) holds what several provider plugins share (language
 codes, the HTTP status mapping, the book model and ISBN); it is a library, not a plugin. Each provider

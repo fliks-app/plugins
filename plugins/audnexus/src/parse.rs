@@ -1,7 +1,7 @@
-//! Audnexus (`api.audnex.us`) by ASIN: books, chapters, authors.
-use super::audible::Region;
-use crate::book::util::*;
-use crate::book::{BookRecord, Format, Level, ParseError, Person, PersonRecord, Provider, Series};
+//! Audnexus (`api.audnex.us`) by ASIN: books and chapters.
+use provider_common::book::region::Region;
+use provider_common::book::util::*;
+use provider_common::book::{BookRecord, Format, Level, ParseError, Person, Provider, Series};
 use serde::Serialize;
 use serde_json::Value;
 
@@ -26,11 +26,6 @@ pub fn book_url(asin: &str, region: Option<Region>) -> Option<String> {
 
 pub fn chapters_url(asin: &str, region: Option<Region>) -> Option<String> {
     asin_url("books", "/chapters", asin, region)
-}
-
-/// `asin` is the author ASIN (`B0...`) from a book's `authors`.
-pub fn author_url(asin: &str, region: Option<Region>) -> Option<String> {
-    asin_url("authors", "", asin, region)
 }
 
 fn check_error(v: &Value) -> Result<(), ParseError> {
@@ -157,21 +152,5 @@ pub fn parse_chapters(body: &str) -> Result<Chapters, ParseError> {
         brand_intro_ms: ms(&v, "brandIntroDurationMs"),
         brand_outro_ms: ms(&v, "brandOutroDurationMs"),
         chapters,
-    })
-}
-
-pub fn parse_author(body: &str) -> Result<PersonRecord, ParseError> {
-    let v = json(body)?;
-    check_error(&v)?;
-    Ok(PersonRecord {
-        provider: Provider::Audnexus,
-        id: text(&v, "asin").ok_or(ParseError::NotFound)?,
-        name: text(&v, "name").ok_or(ParseError::NotFound)?,
-        alternate_names: vec![],
-        bio: text(&v, "description"),
-        birth_date: None,
-        death_date: None,
-        photos: text(&v, "image").into_iter().collect(),
-        remote_ids: Default::default(),
     })
 }

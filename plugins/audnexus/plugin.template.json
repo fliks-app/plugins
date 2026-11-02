@@ -1,0 +1,26 @@
+{
+  "id": "fliks.audnexus",
+  "pluginApi": 3,
+  "name": "Audnexus",
+  "fliks": ">=6.0.0 <7.0.0",
+  "author": "Fliks",
+  "description": "Audiobook metadata and chapters from Audnexus, by ASIN.",
+  "license": "AGPL-3.0-or-later",
+  "logo": "logo.svg",
+  "kind": "process",
+  "runtime": "wasm",
+  "memoryMb": 64,
+  "database": { "schema": false, "coreRefs": [] },
+  "scopes": [],
+  "ingestRoots": [],
+  "routes": [],
+  "provider": {
+    "namespaces": [{ "name": "audnexus" }],
+    "kinds": { "book": ["edition", "chapters"] },
+    "editionNamespaces": ["asin"],
+    "chapterNamespaces": ["asin"],
+    "limits": { "ratePerSec": 1, "burst": 1 },
+    "snapshotTtlSecs": { "edition": 2592000, "chapters": null },
+    "imageHosts": ["m.media-amazon.com", "images-na.ssl-images-amazon.com"]
+  }
+}
