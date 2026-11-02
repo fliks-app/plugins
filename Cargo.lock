@@ -1163,7 +1163,7 @@ dependencies = [
 
 [[package]]
 name = "fk-plugin-download"
-version = "1.2.0"
+version = "2.0.0"
 dependencies = [
  "fliks-plugin-route",
  "fliks-plugin-sdk",
