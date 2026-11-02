@@ -11,8 +11,8 @@ The plugin is a Rust WebAssembly component (`pluginApi` 3, target `wasm32-wasip2
 
 ```sh
 rustup target add wasm32-wasip2
-cargo build --release --target wasm32-wasip2   # -> target/wasm32-wasip2/release/fk_plugin_download.wasm
-cargo xtask package --out dist                 # verifies the component, writes dist/fliks.download-<version>.fkplugin
+cargo build -p fk-plugin-download --release --target wasm32-wasip2   # -> target/wasm32-wasip2/release/fk_plugin_download.wasm
+cargo xtask package download --out dist   # verifies the component, writes dist/fliks.download-<version>.fkplugin
 ```
 
 `plugin.template.json` is the manifest without `version` and `files`; packaging adds both. A
@@ -41,8 +41,8 @@ through `fliks_plugin_sdk::log::redact_url`.
 ## Test
 
 ```sh
-cargo build --release --target wasm32-wasip2
-FLIKS_HARNESS_PG_URL=postgresql://user:pass@host:5432/postgres cargo test --workspace
+cargo build -p fk-plugin-download --release --target wasm32-wasip2
+FLIKS_HARNESS_PG_URL=postgresql://user:pass@host:5432/postgres cargo test -p fk-plugin-download
 ```
 
 `tests/vectors.rs` replays golden vectors recorded from the TypeScript plugin at `v0.12.1`
@@ -54,11 +54,11 @@ qBittorrent and Transmission servers. Without the URL those tests skip with a wa
 ## Install it on a dev instance
 
 Upload `dist/fliks.download-<version>.fkplugin` from **Settings → Advanced → Plugins** on a server
-with `plugins.allow_unsigned`, or sign it with `cargo xtask package --key <dev-key-file>`.
+with `plugins.allow_unsigned`, or sign it with `cargo xtask package download --key <dev-key-file>`.
 
 ## Publish
 
-Pushing a tag `v<version>` (equal to the crate version) runs `.github/workflows/ci.yml`, which
-verifies the component (fails above 12 MiB) and creates a release with that one unsigned
-`fliks.download-<version>.fkplugin`. The catalog's `Package plugin` workflow signs it and replaces
-the asset; see "WASM plugins" in the catalog README.
+Release-please opens a `download` release PR from the conventional commits that touch this folder.
+Merging it tags `download-v<version>` and attaches the verified, unsigned
+`fliks.download-<version>.fkplugin` (12 MiB budget) to the release. The catalog's `Package plugin`
+workflow signs it and replaces the asset; see "WASM plugins" in the catalog README.

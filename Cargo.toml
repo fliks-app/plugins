@@ -1,0 +1,19 @@
+[workspace]
+resolver = "3"
+members = ["download", "notify", "xtask"]
+
+# One rev of fliks-app/fliks for every plugin; raising it rebuilds them all.
+[workspace.dependencies]
+fliks-plugin-sdk = { git = "https://github.com/fliks-app/fliks", rev = "866c6107ec411450a5dfaf0319f5c7b34ccf3fb5" }
+fliks-plugin-route = { git = "https://github.com/fliks-app/fliks", rev = "866c6107ec411450a5dfaf0319f5c7b34ccf3fb5" }
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"
+
+# Optimised deps: an unoptimised Cranelift makes every wasm compile in the harness tests minutes long.
+[profile.dev.package."*"]
+opt-level = 1

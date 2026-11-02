@@ -1,0 +1,100 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  # Full debuginfo of the optimised deps fills the runner disk and the cache; file:line is enough.
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
+  SQLX_OFFLINE: 'true'
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      plugins: ${{ steps.filter.outputs.changes }}
+    steps:
+      - uses: actions/checkout@v6
+      # The shared files rebuild every plugin; `shared` itself is dropped from the matrix below.
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4
+        id: filter
+        with:
+          filters: |
+            shared: &shared
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - '.cargo/**'
+              - 'xtask/**'
+              - '.github/workflows/ci.yml'
+            download:
+              - *shared
+              - 'download/**'
+            notify:
+              - *shared
+              - 'notify/**'
+
+  verify:
+    needs: changes
+    if: needs.changes.outputs.plugins != '[]'
+    name: verify (${{ matrix.plugin }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        plugin: ${{ fromJSON(needs.changes.outputs.plugins) }}
+        exclude:
+          - plugin: shared
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: fliks
+          POSTGRES_PASSWORD: fliks
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    env:
+      MANIFEST: ${{ matrix.plugin }}/Cargo.toml
+      # Under CI the harness fails instead of skipping when this is missing.
+      FLIKS_HARNESS_PG_URL: postgresql://fliks:fliks@127.0.0.1:5432/postgres
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip2
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.plugin }}
+          # PR caches would evict main's from the repository's 10 GB.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - run: cargo fmt --all --check
+      - run: cargo clippy -p xtask -- -D warnings
+      - run: cargo clippy --manifest-path "$MANIFEST" --all-targets -- -D warnings
+      - run: cargo clippy --manifest-path "$MANIFEST" --target wasm32-wasip2 --all-targets -- -D warnings
+      # The component tests load the release component.
+      - run: cargo build --manifest-path "$MANIFEST" --release --target wasm32-wasip2
+      - run: cargo test --manifest-path "$MANIFEST"
+      - name: Verify the component and its archive (world, archive guard, 12 MiB budget)
+        run: cargo xtask package "${{ matrix.plugin }}" --max-mib 12 --out dist
+
+  # The one check to require on main: green when every plugin job that ran is green.
+  ci:
+    needs: [changes, verify]
+    if: always()
+    runs-on: ubuntu-latest
+    env:
+      RESULTS: ${{ join(needs.*.result, ' ') }}
+    steps:
+      - run: |
+          case " $RESULTS " in *" failure "*|*" cancelled "*) exit 1 ;; esac
