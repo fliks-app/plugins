@@ -107,10 +107,11 @@ async fn guard_and_dns_refusals_are_final() {
         status_of(&h, plain).await == "refused:target must be https:"
     })
     .await;
-    assert!(
-        h.scheduled_calls().await.is_empty(),
-        "no retry after a refusal"
-    );
+    // The host deletes the running call only after the handler returns; a retry never drains.
+    until("no retry after a refusal", MAX, async || {
+        h.scheduled_calls().await.is_empty()
+    })
+    .await;
     h.finish().await;
 }
 
