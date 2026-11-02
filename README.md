@@ -11,6 +11,7 @@ from the plugin catalogue in **Settings → Advanced → Plugins**.
 | [`plugins/tmdb`](plugins/tmdb/README.md) | `fliks.tmdb`: movie and series metadata from TMDB | AGPL-3.0-or-later |
 | [`plugins/bnf`](plugins/bnf/README.md) | `fliks.bnf`: book metadata from the BnF catalogue | AGPL-3.0-or-later |
 | [`plugins/googlebooks`](plugins/googlebooks/README.md) | `fliks.googlebooks`: book metadata from Google Books | AGPL-3.0-or-later |
+| [`plugins/tvdb`](plugins/tvdb/README.md) | `fliks.tvdb`: movie and series metadata from TheTVDB | AGPL-3.0-or-later |
 
 [`crates/book-providers`](crates/book-providers) holds the book provider request builders and
 response parsers shared by the book provider plugins; it is a library, not a plugin.

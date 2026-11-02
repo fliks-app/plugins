@@ -69,6 +69,17 @@
           "jsonpath": "$.package[?(@.name.value=='fk-plugin-googlebooks')].version"
         }
       ]
+    },
+    "plugins/tvdb": {
+      "release-type": "rust",
+      "component": "tvdb",
+      "extra-files": [
+        {
+          "type": "toml",
+          "path": "/Cargo.lock",
+          "jsonpath": "$.package[?(@.name.value=='fk-plugin-tvdb')].version"
+        }
+      ]
     }
   }
 }

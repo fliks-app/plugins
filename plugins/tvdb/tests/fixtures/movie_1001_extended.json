@@ -1,0 +1,64 @@
+{
+  "status": "success",
+  "data": {
+    "id": 1001,
+    "name": "Sample Film",
+    "image": "https://artworks.thetvdb.com/mp.jpg",
+    "status": {
+      "name": "Released"
+    },
+    "runtime": 136,
+    "budget": "63000000",
+    "boxOffice": "0",
+    "first_release": {
+      "date": "1999-03-31"
+    },
+    "releases": [
+      {
+        "country": "usa",
+        "date": "1999-03-31",
+        "detail": "Theatrical"
+      },
+      {
+        "country": "usa",
+        "date": "1999-09-21",
+        "detail": "Digital"
+      }
+    ],
+    "originalLanguage": "eng",
+    "originalCountry": "usa",
+    "genres": [
+      {
+        "name": "Action"
+      }
+    ],
+    "translations": {
+      "nameTranslations": [],
+      "overviewTranslations": []
+    },
+    "remoteIds": [
+      {
+        "id": "5001",
+        "sourceName": "TheMovieDB.com"
+      }
+    ],
+    "artworks": [],
+    "trailers": [],
+    "tagOptions": [],
+    "aliases": [],
+    "companies": {
+      "production": [
+        {
+          "name": "Company B"
+        }
+      ],
+      "studio": [
+        {
+          "name": "Studio B"
+        }
+      ]
+    },
+    "characters": [],
+    "year": "1999"
+  }
+}

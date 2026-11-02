@@ -1,0 +1,32 @@
+{
+  "status": "success",
+  "data": {
+    "id": 5555,
+    "name": "Person Five",
+    "image": null,
+    "birth": null,
+    "death": null,
+    "birthPlace": null,
+    "biographies": [
+      {
+        "language": "fra",
+        "biography": "Bio fr."
+      },
+      {
+        "language": "eng",
+        "biography": "Bio en."
+      }
+    ],
+    "characters": [
+      {
+        "peopleType": "Writer",
+        "name": "",
+        "seriesId": 2000,
+        "series": {
+          "name": "Sample Show",
+          "year": "2008"
+        }
+      }
+    ]
+  }
+}

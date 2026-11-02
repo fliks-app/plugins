@@ -1,0 +1,39 @@
+{
+  "status": "success",
+  "data": [
+    {
+      "tvdb_id": "2000",
+      "name": "Sample Show",
+      "overview": "TVDB overview",
+      "year": "2008",
+      "image_url": "https://artworks.thetvdb.com/p.jpg",
+      "genres": [
+        "Drama"
+      ],
+      "translations": {
+        "fra": "Sample Show FR"
+      },
+      "overviews": {
+        "fra": "Resume fr"
+      },
+      "remote_ids": [
+        {
+          "id": "3000",
+          "sourceName": "TheMovieDB.com"
+        },
+        {
+          "id": "tt0000001",
+          "sourceName": "IMDB"
+        }
+      ]
+    },
+    {
+      "id": "series-999",
+      "tvdb_id": "999",
+      "name": "Other Show",
+      "year": "",
+      "poster": "https://artworks.thetvdb.com/o.jpg",
+      "remote_ids": []
+    }
+  ]
+}
