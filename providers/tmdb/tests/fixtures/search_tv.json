@@ -1,0 +1,33 @@
+{
+ "page": 1,
+ "results": [
+  {
+   "id": 2000,
+   "name": "Sample Show",
+   "original_name": "Sample Show (orig)",
+   "overview": "Overview of Sample Show",
+   "first_air_date": "2008-01-20",
+   "poster_path": "/poster2000.jpg",
+   "backdrop_path": null,
+   "vote_average": 8.1,
+   "genre_ids": [
+    18
+   ]
+  },
+  {
+   "id": 1396,
+   "name": "Sample Other",
+   "original_name": "Sample Other (orig)",
+   "overview": "Overview of Sample Other",
+   "first_air_date": "2015-02-08",
+   "poster_path": "/poster1396.jpg",
+   "backdrop_path": null,
+   "vote_average": 8.1,
+   "genre_ids": [
+    18
+   ]
+  }
+ ],
+ "total_pages": 1,
+ "total_results": 2
+}

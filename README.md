@@ -8,6 +8,7 @@ from the plugin catalogue in **Settings → Advanced → Plugins**.
 | [`download`](download/README.md) | `fliks.download`: indexer search, download clients and the grab pipeline | AGPL-3.0-or-later |
 | [`notify`](notify/README.md) | `fliks.notify`: notification delivery | MIT |
 | [`providers/openlibrary`](providers/openlibrary/README.md) | `fliks.openlibrary`: book metadata from OpenLibrary | AGPL-3.0-or-later |
+| [`providers/tmdb`](providers/tmdb/README.md) | `fliks.tmdb`: movie and series metadata from TMDB | AGPL-3.0-or-later |
 
 [`crates/book-providers`](crates/book-providers) holds the book provider request builders and
 response parsers shared by the book provider plugins; it is a library, not a plugin.

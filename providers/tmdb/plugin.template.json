@@ -1,0 +1,72 @@
+{
+  "id": "fliks.tmdb",
+  "pluginApi": 3,
+  "name": "TMDB",
+  "fliks": ">=6.0.0 <7.0.0",
+  "author": "Fliks",
+  "description": "Movie and series metadata, images, people and lists from The Movie Database.",
+  "license": "AGPL-3.0-or-later",
+  "logo": "logo.svg",
+  "kind": "process",
+  "runtime": "wasm",
+  "memoryMb": 64,
+  "database": { "schema": false, "coreRefs": [] },
+  "scopes": [],
+  "ingestRoots": [],
+  "routes": [],
+  "provider": {
+    "namespaces": [{ "name": "tmdb" }],
+    "kinds": {
+      "movie": ["search", "work", "person", "credits", "findBy", "lists"],
+      "series": ["search", "work", "children", "childStubs", "person", "credits", "findBy", "lists"]
+    },
+    "findBy": ["imdb", "tvdb"],
+    "limits": { "ratePerSec": 40, "burst": 40 },
+    "requestTimeoutMs": 10000,
+    "snapshotTtlSecs": { "work": 0, "children": 0 },
+    "imageHosts": ["image.tmdb.org"],
+    "requires": ["apiKey"]
+  },
+  "ui": {
+    "contributions": [
+      {
+        "id": "fliks-tmdb.settings.general",
+        "slot": "settings.page",
+        "weight": 100,
+        "labelKey": "tmdb.config.title",
+        "action": { "kind": "route", "path": "/admin/settings/plugins/fliks.tmdb/general" }
+      }
+    ],
+    "configPages": [
+      {
+        "id": "general",
+        "labelKey": "tmdb.config.title",
+        "subtitleKey": "tmdb.config.subtitle",
+        "fields": [
+          {
+            "key": "apiKey",
+            "type": "text",
+            "labelKey": "tmdb.config.apiKey",
+            "hint": "tmdb.config.apiKey_hint",
+            "secret": true,
+            "default": "fliks:apiKey"
+          }
+        ]
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "tmdb.config.title": "TMDB",
+      "tmdb.config.subtitle": "Movie and series metadata from The Movie Database.",
+      "tmdb.config.apiKey": "API key",
+      "tmdb.config.apiKey_hint": "Your own TMDB API key. Leave it empty to use the key Fliks ships with."
+    },
+    "fr": {
+      "tmdb.config.title": "TMDB",
+      "tmdb.config.subtitle": "Métadonnées de films et de séries de The Movie Database.",
+      "tmdb.config.apiKey": "Clé d'API",
+      "tmdb.config.apiKey_hint": "Votre propre clé d'API TMDB. Laissez vide pour utiliser la clé fournie avec Fliks."
+    }
+  }
+}
