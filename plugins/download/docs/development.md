@@ -12,7 +12,7 @@ The plugin is a Rust WebAssembly component (`pluginApi` 3, target `wasm32-wasip2
 ```sh
 rustup target add wasm32-wasip2
 cargo build -p fk-plugin-download --release --target wasm32-wasip2   # -> target/wasm32-wasip2/release/fk_plugin_download.wasm
-cargo xtask package download --out dist   # verifies the component, writes dist/fliks.download-<version>.fkplugin
+cargo xtask package plugins/download --out dist   # verifies the component, writes dist/fliks.download-<version>.fkplugin
 ```
 
 `plugin.template.json` is the manifest without `version` and `files`; packaging adds both. A
@@ -54,7 +54,7 @@ qBittorrent and Transmission servers. Without the URL those tests skip with a wa
 ## Install it on a dev instance
 
 Upload `dist/fliks.download-<version>.fkplugin` from **Settings → Advanced → Plugins** on a server
-with `plugins.allow_unsigned`, or sign it with `cargo xtask package download --key <dev-key-file>`.
+with `plugins.allow_unsigned`, or sign it with `cargo xtask package plugins/download --key <dev-key-file>`.
 
 ## Publish
 
