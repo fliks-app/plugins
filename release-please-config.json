@@ -36,6 +36,17 @@
           "jsonpath": "$.package[?(@.name.value=='fk-plugin-openlibrary')].version"
         }
       ]
+    },
+    "providers/tmdb": {
+      "release-type": "rust",
+      "component": "tmdb",
+      "extra-files": [
+        {
+          "type": "toml",
+          "path": "/Cargo.lock",
+          "jsonpath": "$.package[?(@.name.value=='fk-plugin-tmdb')].version"
+        }
+      ]
     }
   }
 }

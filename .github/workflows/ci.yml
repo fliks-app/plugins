@@ -46,6 +46,9 @@ jobs:
               - *shared
               - 'crates/**'
               - 'providers/openlibrary/**'
+            providers/tmdb:
+              - *shared
+              - 'providers/tmdb/**'
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4
         id: crates
         with:

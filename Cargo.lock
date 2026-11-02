@@ -1177,6 +1177,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "fk-plugin-tmdb"
+version = "0.1.0"
+dependencies = [
+ "fliks-plugin-sdk",
+ "fliks-plugin-sdk-provider",
+ "serde_json",
+ "url",
+]
+
+[[package]]
 name = "flate2"
 version = "1.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"

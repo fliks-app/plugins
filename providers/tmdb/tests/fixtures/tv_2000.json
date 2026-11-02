@@ -1,0 +1,98 @@
+{
+ "id": 2000,
+ "name": "Sample Show",
+ "original_name": "Sample Show (orig)",
+ "overview": "Overview of Sample Show",
+ "first_air_date": "2008-01-20",
+ "poster_path": "/poster2000.jpg",
+ "backdrop_path": null,
+ "vote_average": 8.1,
+ "genre_ids": [
+  18
+ ],
+ "genres": [
+  {
+   "id": 18,
+   "name": "Drama"
+  }
+ ],
+ "episode_run_time": [
+  47
+ ],
+ "status": "Ended",
+ "number_of_seasons": 3,
+ "number_of_episodes": 5,
+ "original_language": "en",
+ "origin_country": [
+  "US"
+ ],
+ "networks": [
+  {
+   "name": "Network One"
+  }
+ ],
+ "production_companies": [
+  {
+   "name": "Studio Two"
+  }
+ ],
+ "vote_count": 12000,
+ "popularity": 90.1,
+ "tagline": "",
+ "external_ids": {
+  "tvdb_id": 1000,
+  "imdb_id": "tt0000001"
+ },
+ "images": {
+  "logos": [],
+  "backdrops": [
+   {
+    "file_path": "/bb2.jpg",
+    "vote_average": 4
+   }
+  ]
+ },
+ "credits": {
+  "cast": [
+   {
+    "id": 17419,
+    "name": "Actor Three",
+    "character": "Role Three",
+    "profile_path": "/bc.jpg",
+    "order": 0
+   }
+  ],
+  "crew": []
+ },
+ "videos": {
+  "results": []
+ },
+ "keywords": {
+  "results": [
+   {
+    "id": 3,
+    "name": "keyword two"
+   }
+  ]
+ },
+ "alternative_titles": {
+  "results": [
+   {
+    "name": "Sample Show (US)"
+   }
+  ]
+ },
+ "seasons": [
+  {
+   "season_number": 0,
+   "episode_count": 1
+  },
+  {
+   "season_number": 1,
+   "episode_count": 2
+  },
+  {
+   "season_number": 2
+  }
+ ]
+}
