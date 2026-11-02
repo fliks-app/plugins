@@ -17,68 +17,19 @@ env:
 jobs:
   changes:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: read
     outputs:
-      plugins: ${{ steps.filter.outputs.changes }}
-      crates: ${{ steps.crates.outputs.crates }}
+      plugins: ${{ steps.affected.outputs.plugins }}
+      crates: ${{ steps.affected.outputs.crates }}
     steps:
       - uses: actions/checkout@v6
-      # The shared files rebuild every plugin; `shared` itself is dropped from the matrix below.
-      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4
-        id: filter
         with:
-          filters: |
-            shared: &shared
-              - 'Cargo.toml'
-              - 'Cargo.lock'
-              - '.cargo/**'
-              - 'xtask/**'
-              - '.github/workflows/ci.yml'
-            plugins/download:
-              - *shared
-              - 'plugins/download/**'
-            plugins/notify:
-              - *shared
-              - 'plugins/notify/**'
-            plugins/openlibrary:
-              - *shared
-              - 'crates/**'
-              - 'plugins/openlibrary/**'
-            plugins/tmdb:
-              - *shared
-              - 'plugins/tmdb/**'
-            plugins/bnf:
-              - *shared
-              - 'crates/**'
-              - 'plugins/bnf/**'
-            plugins/googlebooks:
-              - *shared
-              - 'crates/**'
-              - 'plugins/googlebooks/**'
-            plugins/audible:
-              - *shared
-              - 'crates/**'
-              - 'plugins/audible/**'
-            plugins/audnexus:
-              - *shared
-              - 'crates/**'
-              - 'plugins/audnexus/**'
-            plugins/tvdb:
-              - *shared
-              - 'plugins/tvdb/**'
-      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4
-        id: crates
-        with:
-          filters: |
-            crates:
-              - 'crates/**'
-              - 'Cargo.toml'
-              - 'Cargo.lock'
-              - '.github/workflows/ci.yml'
+          fetch-depth: 0
+      - id: affected
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: python3 .github/scripts/affected.py "$BASE" "$GITHUB_SHA"
 
-  # The shared library crates are native-only: no component to package.
+  # The shared library crates and xtask are native-only: no component to package.
   crates:
     needs: changes
     if: needs.changes.outputs.crates == 'true'
@@ -90,10 +41,10 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
         with:
-          key: crates
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          shared-key: plugins
+          save-if: false
       - run: cargo fmt --all --check
-      - run: cargo clippy -p provider-common --all-targets -- -D warnings
+      - run: cargo clippy -p provider-common -p xtask --all-targets -- -D warnings
       - run: cargo test -p provider-common
 
   verify:
@@ -105,8 +56,6 @@ jobs:
       fail-fast: false
       matrix:
         plugin: ${{ fromJSON(needs.changes.outputs.plugins) }}
-        exclude:
-          - plugin: shared
     services:
       postgres:
         image: postgres:17
@@ -134,7 +83,6 @@ jobs:
           shared-key: plugins
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo fmt --all --check
-      - run: cargo clippy -p xtask -- -D warnings
       - run: cargo clippy --manifest-path "$MANIFEST" --all-targets -- -D warnings
       - run: cargo clippy --manifest-path "$MANIFEST" --target wasm32-wasip2 --all-targets -- -D warnings
       # The component tests load the release component.
