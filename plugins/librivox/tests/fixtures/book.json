@@ -1,0 +1,43 @@
+{
+  "books": [
+    {
+      "id": "2001",
+      "title": "Sample Recording One",
+      "description": "<p>A made-up description.</p>",
+      "language": "English",
+      "copyright_year": "1850",
+      "num_sections": "3",
+      "totaltimesecs": 5405,
+      "authors": [{ "id": "11", "first_name": "Jane", "last_name": "Doe" }],
+      "sections": [
+        {
+          "id": "9003",
+          "section_number": "3",
+          "title": "Part 3",
+          "listen_url": "https://archive.test/download/sample_01/part3.mp3",
+          "language": "English",
+          "playtime": "1800",
+          "readers": [{ "reader_id": "21", "display_name": "Reader Two" }]
+        },
+        {
+          "id": "9001",
+          "section_number": "1",
+          "title": "Part 1",
+          "listen_url": "https://archive.test/download/sample_01/part1.mp3",
+          "language": "English",
+          "playtime": "1800",
+          "readers": [{ "reader_id": "20", "display_name": "Reader One" }]
+        },
+        {
+          "id": "9002",
+          "section_number": "2",
+          "title": "Part 2",
+          "listen_url": "https://archive.test/download/sample_01/part2.mp3",
+          "language": "English",
+          "playtime": "1805",
+          "readers": [{ "reader_id": "20", "display_name": "Reader One" }]
+        }
+      ]
+    }
+  ]
+}

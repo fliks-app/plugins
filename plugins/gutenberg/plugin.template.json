@@ -1,0 +1,114 @@
+{
+  "id": "fliks.gutenberg",
+  "pluginApi": 3,
+  "name": "Project Gutenberg",
+  "fliks": ">=6.0.0 <7.0.0",
+  "author": "Fliks",
+  "description": "Search Project Gutenberg and add its free ebooks to the library.",
+  "license": "AGPL-3.0-or-later",
+  "logo": "logo.svg",
+  "kind": "process",
+  "runtime": "wasm",
+  "memoryMb": 256,
+  "database": { "schema": false, "coreRefs": [] },
+  "scopes": ["media:read", "media:create", "ingest:write"],
+  "ingestRoots": [],
+  "permissions": ["books"],
+  "routes": [
+    { "method": "GET", "path": "/search", "policy": "read:plugin:fliks.gutenberg:books" },
+    { "method": "POST", "path": "/add/:id", "policy": "create:plugin:fliks.gutenberg:books" }
+  ],
+  "provider": {
+    "namespaces": [
+      {
+        "name": "fliks.gutenberg:id",
+        "label": "Project Gutenberg",
+        "idPattern": "^[1-9][0-9]{0,7}$"
+      }
+    ],
+    "kinds": { "book": ["search", "work"] },
+    "limits": { "ratePerSec": 1, "burst": 2 },
+    "snapshotTtlSecs": { "work": 2592000 }
+  },
+  "ui": {
+    "contributions": [
+      {
+        "id": "fliks-gutenberg.nav.search",
+        "slot": "nav.acquisition",
+        "weight": 400,
+        "labelKey": "gutenberg.title",
+        "icon": "book-open",
+        "when": ["hasPermission:read:plugin:fliks.gutenberg:books"],
+        "action": { "kind": "route", "path": "/plugins/fliks.gutenberg/search" }
+      },
+      {
+        "id": "fliks-gutenberg.settings.general",
+        "slot": "settings.page",
+        "weight": 400,
+        "labelKey": "gutenberg.settings.title",
+        "icon": "book-open",
+        "action": { "kind": "route", "path": "/admin/settings/plugins/fliks.gutenberg/settings" }
+      }
+    ],
+    "configPages": [
+      {
+        "id": "search",
+        "kind": "table",
+        "labelKey": "gutenberg.title",
+        "subtitleKey": "gutenberg.subtitle",
+        "icon": "book-open",
+        "list": "/search",
+        "filters": [
+          { "kind": "search", "key": "q", "placeholderKey": "gutenberg.search_placeholder" }
+        ],
+        "columns": [
+          { "key": "title", "labelKey": "gutenberg.columns.title" },
+          { "key": "authors", "labelKey": "gutenberg.columns.authors" },
+          { "key": "language", "labelKey": "gutenberg.columns.language", "nowrap": true }
+        ],
+        "rowActions": [
+          {
+            "kind": "proxy",
+            "labelKey": "gutenberg.actions.add",
+            "method": "POST",
+            "path": "/add/:id",
+            "confirmKey": "gutenberg.actions.add_confirm",
+            "when": ["hasPermission:create:plugin:fliks.gutenberg:books"]
+          }
+        ]
+      },
+      {
+        "id": "settings",
+        "kind": "form",
+        "labelKey": "gutenberg.settings.title",
+        "subtitleKey": "gutenberg.settings.subtitle",
+        "icon": "book-open",
+        "fields": [
+          {
+            "key": "libraryId",
+            "type": "number",
+            "labelKey": "gutenberg.settings.library_id",
+            "hint": "gutenberg.settings.library_id_hint",
+            "min": 1
+          }
+        ]
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "gutenberg.title": "Free ebooks",
+      "gutenberg.subtitle": "Search Project Gutenberg and add a book to the library.",
+      "gutenberg.search_placeholder": "Title or author",
+      "gutenberg.columns.title": "Title",
+      "gutenberg.columns.authors": "Authors",
+      "gutenberg.columns.language": "Language",
+      "gutenberg.actions.add": "Add to library",
+      "gutenberg.actions.add_confirm": "Add this book to the library? Its EPUB is downloaded in the background.",
+      "gutenberg.settings.title": "Project Gutenberg",
+      "gutenberg.settings.subtitle": "Where the books you add are stored.",
+      "gutenberg.settings.library_id": "Library id",
+      "gutenberg.settings.library_id_hint": "Only needed when several libraries accept books."
+    }
+  }
+}

@@ -44,8 +44,8 @@ jobs:
           shared-key: plugins
           save-if: false
       - run: cargo fmt --all --check
-      - run: cargo clippy -p provider-common -p xtask --all-targets -- -D warnings
-      - run: cargo test -p provider-common
+      - run: cargo clippy -p provider-common -p direct-source -p xtask --all-targets -- -D warnings
+      - run: cargo test -p provider-common -p direct-source
 
   verify:
     needs: changes

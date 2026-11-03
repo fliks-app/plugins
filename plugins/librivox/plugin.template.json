@@ -1,0 +1,165 @@
+{
+  "id": "fliks.librivox",
+  "pluginApi": 3,
+  "name": "LibriVox",
+  "fliks": ">=6.0.0 <7.0.0",
+  "author": "Fliks",
+  "description": "Search LibriVox and add its free audiobooks to the library.",
+  "license": "AGPL-3.0-or-later",
+  "logo": "logo.svg",
+  "kind": "process",
+  "runtime": "wasm",
+  "memoryMb": 384,
+  "database": {
+    "schema": false,
+    "coreRefs": []
+  },
+  "scopes": [
+    "media:read",
+    "media:create",
+    "ingest:write"
+  ],
+  "ingestRoots": [],
+  "permissions": [
+    "books"
+  ],
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/search",
+      "policy": "read:plugin:fliks.librivox:books"
+    },
+    {
+      "method": "POST",
+      "path": "/add/:id",
+      "policy": "create:plugin:fliks.librivox:books"
+    }
+  ],
+  "provider": {
+    "namespaces": [
+      {
+        "name": "fliks.librivox:id",
+        "label": "LibriVox",
+        "idPattern": "^[1-9][0-9]{0,7}$"
+      }
+    ],
+    "kinds": {
+      "book": [
+        "search",
+        "work"
+      ]
+    },
+    "limits": {
+      "ratePerSec": 1,
+      "burst": 2
+    },
+    "snapshotTtlSecs": {
+      "work": 2592000
+    }
+  },
+  "ui": {
+    "contributions": [
+      {
+        "id": "fliks-librivox.nav.search",
+        "slot": "nav.acquisition",
+        "weight": 410,
+        "labelKey": "librivox.title",
+        "icon": "headphones",
+        "when": [
+          "hasPermission:read:plugin:fliks.librivox:books"
+        ],
+        "action": {
+          "kind": "route",
+          "path": "/plugins/fliks.librivox/search"
+        }
+      },
+      {
+        "id": "fliks-librivox.settings.general",
+        "slot": "settings.page",
+        "weight": 410,
+        "labelKey": "librivox.settings.title",
+        "icon": "headphones",
+        "action": {
+          "kind": "route",
+          "path": "/admin/settings/plugins/fliks.librivox/settings"
+        }
+      }
+    ],
+    "configPages": [
+      {
+        "id": "search",
+        "kind": "table",
+        "labelKey": "librivox.title",
+        "subtitleKey": "librivox.subtitle",
+        "icon": "headphones",
+        "list": "/search",
+        "filters": [
+          {
+            "kind": "search",
+            "key": "q",
+            "placeholderKey": "librivox.search_placeholder"
+          }
+        ],
+        "columns": [
+          {
+            "key": "title",
+            "labelKey": "librivox.columns.title"
+          },
+          {
+            "key": "authors",
+            "labelKey": "librivox.columns.authors"
+          },
+          {
+            "key": "language",
+            "labelKey": "librivox.columns.language",
+            "nowrap": true
+          }
+        ],
+        "rowActions": [
+          {
+            "kind": "proxy",
+            "labelKey": "librivox.actions.add",
+            "method": "POST",
+            "path": "/add/:id",
+            "confirmKey": "librivox.actions.add_confirm",
+            "when": [
+              "hasPermission:create:plugin:fliks.librivox:books"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "settings",
+        "kind": "form",
+        "labelKey": "librivox.settings.title",
+        "subtitleKey": "librivox.settings.subtitle",
+        "icon": "headphones",
+        "fields": [
+          {
+            "key": "libraryId",
+            "type": "number",
+            "labelKey": "librivox.settings.library_id",
+            "hint": "librivox.settings.library_id_hint",
+            "min": 1
+          }
+        ]
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "librivox.title": "Free audiobooks",
+      "librivox.subtitle": "Search LibriVox and add an audiobook to the library.",
+      "librivox.search_placeholder": "Title or author",
+      "librivox.columns.title": "Title",
+      "librivox.columns.authors": "Authors",
+      "librivox.columns.language": "Language",
+      "librivox.actions.add": "Add to library",
+      "librivox.actions.add_confirm": "Add this audiobook to the library? Its sections are downloaded in the background.",
+      "librivox.settings.title": "LibriVox",
+      "librivox.settings.subtitle": "Where the audiobooks you add are stored.",
+      "librivox.settings.library_id": "Library id",
+      "librivox.settings.library_id_hint": "Only needed when several libraries accept books."
+    }
+  }
+}
