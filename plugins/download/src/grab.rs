@@ -67,7 +67,7 @@ pub fn family_of(s: &str) -> Option<Family> {
 
 /// Book formats a release title can name, with the family each belongs to and whether the host's
 /// ingest accepts files of it (`.wav`, `.wma`, `.azw` and `.djvu` it parses but refuses).
-const BOOK_FORMATS: [(&str, Family, bool); 18] = [
+const BOOK_FORMATS: [(&str, Family, bool); 19] = [
     ("m4b", Family::Audio, true),
     ("m4a", Family::Audio, true),
     ("alac", Family::Audio, true),
@@ -84,6 +84,7 @@ const BOOK_FORMATS: [(&str, Family, bool); 18] = [
     ("kf8", Family::Text, true),
     ("mobi", Family::Text, true),
     ("fb2", Family::Text, true),
+    ("cbz", Family::Text, true),
     ("azw", Family::Text, false),
     ("djvu", Family::Text, false),
 ];
@@ -1324,5 +1325,27 @@ mod tests {
         assert!(ingestable("Dune flac wav", Family::Audio));
         assert!(ingestable("Dune", Family::Audio));
         assert!(ingestable("Dune wav", Family::Text));
+    }
+
+    #[test]
+    fn the_format_table_follows_the_hosts_ingest_lists() {
+        use crate::poller::{AUDIO_EXTS, TEXT_EXTS};
+        // `alac` rides `.m4a` and `kf8` is `.azw3`: names, not extensions.
+        let alias = ["alac", "kf8"];
+        for (name, family, ok) in BOOK_FORMATS {
+            let exts: &[&str] = if family == Family::Audio {
+                &AUDIO_EXTS
+            } else {
+                &TEXT_EXTS
+            };
+            let listed = exts.contains(&format!(".{name}").as_str());
+            assert_eq!(listed || alias.contains(&name), ok, "{name}");
+        }
+        for e in AUDIO_EXTS.iter().chain(&TEXT_EXTS) {
+            assert!(
+                BOOK_FORMATS.iter().any(|(n, ..)| format!(".{n}") == **e),
+                "{e}"
+            );
+        }
     }
 }
