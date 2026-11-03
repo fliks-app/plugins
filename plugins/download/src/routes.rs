@@ -158,7 +158,14 @@ fn search_releases(r: &Request) -> R<Response> {
         }),
         _ => None,
     };
-    let releases = grab::search_releases(media, season, episode, r.query("q"), stream.as_ref())?;
+    let releases = grab::search_releases(
+        media,
+        season,
+        episode,
+        r.query("language"),
+        r.query("q"),
+        stream.as_ref(),
+    )?;
     ok(releases.iter().map(to_wire).collect::<Vec<_>>())
 }
 
@@ -189,7 +196,13 @@ fn grab_release(r: &Request) -> R<Response> {
             info_url: info_url(b.get("infoUrl")),
             force: b.get("force") == Some(&Value::Bool(true)),
         });
-    ok(grab::grab_release(media, season, episode, manual)?)
+    ok(grab::grab_release(
+        media,
+        season,
+        episode,
+        str_field(&b, "language").as_deref(),
+        manual,
+    )?)
 }
 
 // --- indexers ------------------------------------------------------------------------------

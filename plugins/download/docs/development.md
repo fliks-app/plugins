@@ -26,7 +26,9 @@ and skipped with a log by the sweeps (`grab::Video`). A `book` is searched only 
 `t=book` with `author`/`title` when the caps advertise them, else `t=search`, under 7020 (ebook, 7000
 if only the parent is advertised) for the `text` family and 3030 for `audio`, read from the caps'
 category tree (`indexers.capsCategories`). Grabbing and importing a book wait for the host to serve
-those families. A target's `scope` is empty for a movie, one
+those families. Each language a book is wished in is its own target: the host calls, the pending-grab
+check and the sweep's resume position work per (family, language), and a video call carries no language.
+A target's `scope` is empty for a movie, one
 season for a season pack and one episode for an episode.
 
 `download_history` keys a grab by `mediaId`, `itemId` (a row of core `items`) and `seasonId` (the
