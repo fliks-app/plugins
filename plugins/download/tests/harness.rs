@@ -259,10 +259,12 @@ fn route(h: &Harness, name: &str, ip: &str, port: u16, stub: &Stub) {
 const EMPTY_FEED: &str = r#"<?xml version="1.0"?><rss><channel></channel></rss>"#;
 const CAPS: &str = r#"<caps><searching><search available="yes"/><movie-search available="yes" supportedParams="q,imdbid"/><tv-search available="no"/></searching></caps>"#;
 
-/// qBittorrent that holds one torrent once it is added; `stop`/`start` flip its state.
+/// qBittorrent that holds one torrent once it is added, under the category it was added with
+/// and listed only for that category; `stop`/`start` flip its state.
 fn fake_qbit() -> Stub {
     let state = Mutex::new(None::<&str>);
-    Stub::start(move |_, target, _| {
+    let category = Mutex::new(String::new());
+    Stub::start(move |_, target, body| {
         let path = target.split('?').next().unwrap_or("");
         let ok = |b: &str| (200, vec![], b.as_bytes().to_vec());
         match path {
@@ -272,7 +274,11 @@ fn fake_qbit() -> Stub {
                 b"Ok.".to_vec(),
             ),
             "/api/v2/torrents/info" => {
-                let t = state.lock().unwrap().map(|s| {
+                let asked = target
+                    .split_once("category=")
+                    .map(|(_, c)| c.split('&').next().unwrap_or(""));
+                let held = category.lock().unwrap().clone();
+                let t = state.lock().unwrap().filter(|_| asked.is_none_or(|a| a == held)).map(|s| {
                     json!({
                         "hash": HASH, "name": "Some.Movie.2020.1080p", "size": 1000, "downloaded": 500,
                         "progress": 0.5, "dlspeed": 100, "ratio": 0, "eta": 10,
@@ -281,7 +287,15 @@ fn fake_qbit() -> Stub {
                 });
                 ok(&json!(t.into_iter().collect::<Vec<_>>()).to_string())
             }
-            "/api/v2/torrents/add" | "/api/v2/torrents/start" => {
+            "/api/v2/torrents/add" => {
+                *category.lock().unwrap() = body
+                    .split_once("category=")
+                    .map(|(_, c)| c.split('&').next().unwrap_or("").to_owned())
+                    .unwrap_or_default();
+                *state.lock().unwrap() = Some("downloading");
+                ok("Ok.")
+            }
+            "/api/v2/torrents/start" => {
                 *state.lock().unwrap() = Some("downloading");
                 ok("Ok.")
             }
@@ -306,7 +320,7 @@ async fn add_qbit(h: &Harness, qbit: &Stub) -> i64 {
             "/download-clients",
             Some(&json!({
                 "name": "qb", "implementation": "qbittorrent",
-                "settings": { "host": "qbit.test", "port": 8080, "username": "u", "password": "pw", "category": "fliks" }
+                "settings": { "host": "qbit.test", "port": 8080, "username": "u", "password": "pw", "category": "fliks", "movieCategory": "movies" }
             })),
         )
         .await;
@@ -314,9 +328,11 @@ async fn add_qbit(h: &Harness, qbit: &Stub) -> i64 {
     body(&r)["id"].as_i64().unwrap()
 }
 
-/// Transmission that asks once for a session id, then holds one torrent once it is added.
+/// Transmission that asks once for a session id, then holds one torrent once it is added, with
+/// the labels `torrent-set` gave it.
 fn fake_transmission() -> Stub {
     let (session, status) = (Mutex::new(false), Mutex::new(None::<i64>));
+    let labels = Mutex::new(json!([]));
     Stub::start(move |_, _, body| {
         if !std::mem::replace(&mut *session.lock().unwrap(), true) {
             return (409, vec![("x-transmission-session-id", "s".into())], vec![]);
@@ -332,8 +348,12 @@ fn fake_transmission() -> Stub {
                 "hashString": HASH, "name": "Some.Movie.2020.1080p", "sizeWhenDone": 1000,
                 "downloadedEver": 500, "percentDone": 0.5, "rateDownload": 100, "uploadRatio": -1,
                 "doneDate": 0, "eta": 10, "status": st, "error": 0, "downloadDir": "/downloads",
-                "addedDate": 1, "labels": ["fliks"], "peersSendingToUs": 2,
+                "addedDate": 1, "labels": *labels.lock().unwrap(), "peersSendingToUs": 2,
             })).into_iter().collect::<Vec<_>>() }),
+            "torrent-set" => {
+                *labels.lock().unwrap() = req["arguments"]["labels"].clone();
+                json!({})
+            }
             "torrent-stop" => {
                 *status = Some(0);
                 json!({})
@@ -1121,7 +1141,7 @@ async fn a_manual_grab_reaches_the_client_and_the_queue_drives_it() {
     );
     let add = qbit.hits_to("/api/v2/torrents/add");
     assert_eq!(add.len(), 1);
-    assert!(add[0].body.contains("category=fliks"), "{}", add[0].body);
+    assert!(add[0].body.contains("category=movies"), "{}", add[0].body);
     until("the grab-started call", MAX, async || {
         logged(&h, "grabbed \"Some.Movie.2020.1080p\"") && h.scheduled_calls().await.is_empty()
     })
@@ -1219,7 +1239,7 @@ async fn a_grab_reaches_transmission_and_the_queue_drives_it() {
     };
     let tr = fake_transmission();
     route(&h, "transmission.test", "10.77.0.3", 9091, &tr);
-    let settings = json!({ "host": "transmission.test", "port": 9091, "username": "u", "password": "pw", "category": "fliks" });
+    let settings = json!({ "host": "transmission.test", "port": 9091, "username": "u", "password": "pw", "category": "fliks", "movieCategory": "movies" });
     let r = h
         .proxy(
             "POST",
@@ -1257,7 +1277,7 @@ async fn a_grab_reaches_transmission_and_the_queue_drives_it() {
     );
     assert_eq!(
         rpc_calls(&tr, "torrent-set")[0]["arguments"],
-        json!({ "ids": [HASH], "labels": ["fliks"] })
+        json!({ "ids": [HASH], "labels": ["movies"] })
     );
 
     let q = body(&h.proxy("GET", "/queue", None).await);

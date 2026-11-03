@@ -285,6 +285,36 @@ pub fn delete(c: &DownloadClientRow, hash: &str, delete_files: bool) -> R<()> {
     }
 }
 
+const TYPE_CATEGORIES: [(&str, &str); 2] =
+    [("movie", "movieCategory"), ("series", "seriesCategory")];
+
+/// The category a grab of `media_type` is filed under: its per-type one, else the base one.
+fn category_for(s: &Settings, media_type: &str) -> String {
+    TYPE_CATEGORIES
+        .iter()
+        .find(|(t, key)| *t == media_type && truthy(s.get(*key)))
+        .map_or_else(|| setting(s, "category"), |(_, key)| setting(s, key))
+        .trim()
+        .to_owned()
+}
+
+/// Every category Fliks files grabs under: the base one plus each configured per-type one.
+/// Empty when no base category is set: the client is then not scoped.
+pub(crate) fn categories(s: &Settings) -> Vec<String> {
+    let base = setting(s, "category").trim().to_owned();
+    if base.is_empty() {
+        return vec![];
+    }
+    let mut all = vec![base];
+    for (_, key) in TYPE_CATEGORIES {
+        let c = setting(s, key).trim().to_owned();
+        if !c.is_empty() && !all.contains(&c) {
+            all.push(c);
+        }
+    }
+    all
+}
+
 /// Adds the release and answers its hash; a held hash is the release already (optionally refused).
 pub fn add(
     c: &DownloadClientRow,
@@ -294,13 +324,7 @@ pub fn add(
 ) -> R<String> {
     let url = torrent_url.replace("&amp;", "&");
     let s = &c.settings;
-    let mut category = setting(s, "category").trim().to_owned();
-    if media_type == "movie" && truthy(s.get("movieCategory")) {
-        category = setting(s, "movieCategory").trim().to_owned();
-    }
-    if media_type == "series" && truthy(s.get("seriesCategory")) {
-        category = setting(s, "seriesCategory").trim().to_owned();
-    }
+    let category = category_for(s, media_type);
     match kind(c).ok_or_else(|| unsupported(c))? {
         Kind::Qbit => qbit::add(c, &url, &category, reject_if_present),
         Kind::Transmission => transmission::add(c, &url, &category, reject_if_present),
