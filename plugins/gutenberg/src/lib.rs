@@ -6,8 +6,9 @@ mod api;
 mod parse;
 mod routes;
 
+use direct_source::host::{self, Ingest};
 use direct_source::net::Live;
-use direct_source::{Fail, host};
+use direct_source::{Fail, flow};
 use fliks_plugin_sdk::bindings::fliks::plugin::types::Family;
 use fliks_plugin_sdk::{ExternalId, HttpRequest, HttpResponse, Plugin};
 use fliks_plugin_sdk_provider::{
@@ -55,32 +56,35 @@ struct Payload {
 /// Downloads the EPUB and hands it to the library, which removes it.
 fn add_book(p: &Payload) -> Result<(), Fail> {
     let name = add::fetch(&file_client(), host::data_root(), &p.id)?;
-    host::ingest(
-        p.media_id,
-        Family::Text,
-        p.language.clone(),
-        vec![host::guest_path(&name)],
-        format!("gutenberg:{}", p.id),
-        "Project Gutenberg",
+    let req = Ingest {
+        media: p.media_id,
+        family: Family::Text,
+        language: p.language.clone(),
+        key: format!("gutenberg:{}", p.id),
+        label: "Project Gutenberg",
+    };
+    flow::conclude(
+        &flow::Host,
+        host::data_root(),
+        &add::dir(&p.id),
+        &req,
+        &[name],
     )
 }
 
 struct Gutenberg;
 
 impl Plugin for Gutenberg {
-    fn scheduled(key: String, payload: String, _attempt: u32) -> Result<(), String> {
+    fn scheduled(key: String, payload: String, attempt: u32) -> Result<(), String> {
         let Ok(p) = serde_json::from_str::<Payload>(&payload) else {
             fliks_plugin_sdk::warn!("scheduled call {key} dropped: unreadable payload");
             return Ok(());
         };
-        match add_book(&p) {
-            Ok(()) => Ok(()),
-            Err(Fail::Retry(m)) => Err(m),
-            Err(Fail::Drop(m)) => {
-                fliks_plugin_sdk::error!("adding book {} failed for good: {m}", p.id);
-                Ok(())
-            }
+        if p.id.is_empty() || !p.id.bytes().all(|b| b.is_ascii_digit()) {
+            fliks_plugin_sdk::warn!("scheduled call {key} dropped: bad book id");
+            return Ok(());
         }
+        flow::settle(host::data_root(), &add::dir(&p.id), attempt, add_book(&p))
     }
 
     fn http(req: HttpRequest) -> Result<HttpResponse, String> {

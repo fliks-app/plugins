@@ -47,27 +47,35 @@ pub fn resolve(namespace: &str, id: &str) -> Result<u32, Fail> {
     host::media_resolve_or_create("book", &ids, library_id()?, None).map_err(classify)
 }
 
+/// What an ingest names besides the files.
+pub struct Ingest {
+    pub media: u32,
+    pub family: Family,
+    pub language: Option<String>,
+    pub key: String,
+    pub label: &'static str,
+}
+
 /// Hands `paths` (guest paths under `/data`) to the library and lets the host remove them.
-pub fn ingest(
-    media: u32,
-    family: Family,
-    language: Option<String>,
-    paths: Vec<String>,
-    key: String,
-    label: &str,
-) -> Result<(), Fail> {
-    host::library_ingest(&IngestRequest {
-        idempotency_key: key,
-        media_id: media,
-        family,
-        language,
+pub fn ingest(req: &Ingest, paths: Vec<String>) -> Result<(), Fail> {
+    let r = host::library_ingest(&IngestRequest {
+        idempotency_key: req.key.clone(),
+        media_id: req.media,
+        family: req.family,
+        language: req.language.clone(),
         paths,
         transfer: TransferMode::Move,
         fallback_quality: None,
-        source_label: label.to_owned(),
+        source_label: req.label.to_owned(),
     })
-    .map(|_| ())
-    .map_err(classify)
+    .map_err(classify)?;
+    fliks_plugin_sdk::info!(
+        "{}: {} file(s) imported, {} already present",
+        req.label,
+        r.imported.len(),
+        r.already_present.len()
+    );
+    Ok(())
 }
 
 /// Runs `payload` as the scheduled call `key` at once; a second call with the same key replaces it.

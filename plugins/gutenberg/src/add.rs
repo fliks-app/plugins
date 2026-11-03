@@ -14,16 +14,25 @@ fn candidates(id: &str) -> [String; 3] {
     ]
 }
 
-/// Writes the first EPUB the site serves as `gutenberg-<id>.epub` under `root`; its name.
+/// The directory of a book under the data directory.
+pub fn dir(id: &str) -> String {
+    format!("gutenberg-{id}")
+}
+
+/// Writes the first EPUB the site serves, under `gutenberg-<id>/` in `root`; its name. A candidate
+/// over the download cap is skipped, so the lighter one is tried.
 pub fn fetch(t: &impl Transport, root: &Path, id: &str) -> Result<String, Fail> {
     for url in candidates(id) {
-        let r = net::follow(t, &url).map_err(Fail::Retry)?;
+        let r = match net::follow(t, &url) {
+            Err(e) if e == net::TOO_LARGE => continue,
+            r => r.map_err(net::fail)?,
+        };
         if r.status == 404 {
             continue;
         }
         let bytes = net::body(r)?;
         if bytes.starts_with(b"PK") {
-            let name = format!("gutenberg-{id}.epub");
+            let name = format!("{}/book.epub", dir(id));
             store::save(root, &name, &bytes).map_err(|e| Fail::Retry(format!("write: {e}")))?;
             return Ok(name);
         }
@@ -40,13 +49,21 @@ mod tests {
     fn falls_back_to_the_next_format() {
         let dir = tempfile::tempdir().unwrap();
         let t = Replay::new(&[(404, ""), (200, "PKzip")]);
-        assert_eq!(fetch(&t, dir.path(), "7").unwrap(), "gutenberg-7.epub");
+        assert_eq!(fetch(&t, dir.path(), "7").unwrap(), "gutenberg-7/book.epub");
         assert_eq!(
-            std::fs::read(dir.path().join("gutenberg-7.epub")).unwrap(),
+            std::fs::read(dir.path().join("gutenberg-7/book.epub")).unwrap(),
             b"PKzip"
         );
         let urls = t.1.borrow();
         assert!(urls[0].ends_with("/7.epub3.images") && urls[1].ends_with("/7.epub.images"));
+    }
+
+    #[test]
+    fn an_epub_over_the_cap_falls_back_to_the_next_candidate() {
+        let dir = tempfile::tempdir().unwrap();
+        let t = Replay::new(&[(0, ""), (200, "PKzip")]);
+        assert_eq!(fetch(&t, dir.path(), "7").unwrap(), "gutenberg-7/book.epub");
+        assert!(t.1.borrow()[1].ends_with("/7.epub.images"));
     }
 
     #[test]

@@ -7,8 +7,9 @@ mod parse;
 mod routes;
 
 use add::Progress;
+use direct_source::host::{self, Ingest};
 use direct_source::net::Live;
-use direct_source::{Fail, host};
+use direct_source::{Fail, flow};
 use fliks_plugin_sdk::bindings::fliks::plugin::types::Family;
 use fliks_plugin_sdk::rt::Budget;
 use fliks_plugin_sdk::{ExternalId, HttpRequest, HttpResponse, Plugin};
@@ -66,33 +67,36 @@ fn add_book(key: &str, p: &Payload) -> Result<(), Fail> {
             key,
             &serde_json::json!({ "id": p.id, "mediaId": p.media_id }),
         ),
-        Progress::Done(names) => host::ingest(
-            p.media_id,
-            Family::Audio,
-            book.language,
-            names.iter().map(|n| host::guest_path(n)).collect(),
-            format!("librivox:{}", p.id),
-            "LibriVox",
-        ),
+        Progress::Done(names) => {
+            let req = Ingest {
+                media: p.media_id,
+                family: Family::Audio,
+                language: book.language,
+                key: format!("librivox:{}", p.id),
+                label: "LibriVox",
+            };
+            flow::conclude(
+                &flow::Host,
+                host::data_root(),
+                &add::dir(book.id),
+                &req,
+                &names,
+            )
+        }
     }
 }
 
 struct LibriVox;
 
 impl Plugin for LibriVox {
-    fn scheduled(key: String, payload: String, _attempt: u32) -> Result<(), String> {
+    fn scheduled(key: String, payload: String, attempt: u32) -> Result<(), String> {
         let Ok(p) = serde_json::from_str::<Payload>(&payload) else {
             fliks_plugin_sdk::warn!("scheduled call {key} dropped: unreadable payload");
             return Ok(());
         };
-        match add_book(&key, &p) {
-            Ok(()) => Ok(()),
-            Err(Fail::Retry(m)) => Err(m),
-            Err(Fail::Drop(m)) => {
-                fliks_plugin_sdk::error!("adding recording {} failed for good: {m}", p.id);
-                Ok(())
-            }
-        }
+        let dir = p.id.parse().map(add::dir).unwrap_or_default();
+        let r = add_book(&key, &p);
+        flow::settle(host::data_root(), &dir, attempt, r)
     }
 
     fn http(req: HttpRequest) -> Result<HttpResponse, String> {

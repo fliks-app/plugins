@@ -139,6 +139,9 @@ pub mod tests {
         fn get(&self, url: &str) -> Result<Reply, String> {
             self.1.borrow_mut().push(url.to_owned());
             let (status, body) = self.0.borrow_mut().pop().ok_or("unexpected request")?;
+            if status == 0 {
+                return Err(direct_source::net::TOO_LARGE.into());
+            }
             Ok(Reply {
                 status,
                 location: None,

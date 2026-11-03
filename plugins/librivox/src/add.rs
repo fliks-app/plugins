@@ -17,8 +17,13 @@ pub enum Progress {
     More,
 }
 
+/// The directory of a recording under the data directory.
+pub fn dir(book: u32) -> String {
+    format!("librivox-{book}")
+}
+
 fn name(book: u32, number: u32) -> String {
-    format!("librivox-{book}/{number:03}.mp3")
+    format!("{}/{number:03}.mp3", dir(book))
 }
 
 /// Downloads the sections not on disk yet while `left` allows, one file each.
@@ -31,6 +36,9 @@ pub fn fetch(
     if book.sections.is_empty() {
         return Err(Fail::Drop("the recording has no section".into()));
     }
+    if book.gaps > 0 {
+        return Err(Fail::Drop(format!("{} section(s) have no file", book.gaps)));
+    }
     let mut saved = 0;
     let mut names = vec![];
     for s in &book.sections {
@@ -42,7 +50,7 @@ pub fn fetch(
         if left() < MARGIN {
             continue;
         }
-        let r = net::follow(t, &s.url).map_err(Fail::Retry)?;
+        let r = net::follow(t, &s.url).map_err(net::fail)?;
         let bytes = net::body(r)?;
         if bytes.is_empty() {
             return Err(Fail::Retry("an empty section".into()));
@@ -51,6 +59,10 @@ pub fn fetch(
         saved += 1;
     }
     if names.iter().all(|n| root.join(n).exists()) {
+        // The ingest gets a call of its own when this one has spent its time downloading.
+        if saved > 0 && left() < MARGIN {
+            return Ok(Progress::More);
+        }
         return Ok(Progress::Done(names));
     }
     if saved == 0 {
@@ -126,6 +138,41 @@ mod tests {
         };
         let t = Replay::new(&[(200, "b")]);
         assert_eq!(fetch(&t, dir.path(), &book(), &once), Ok(Progress::More));
+    }
+
+    #[test]
+    fn the_ingest_waits_for_a_fresh_call_after_late_downloads() {
+        let dir = tempfile::tempdir().unwrap();
+        store::save(dir.path(), "librivox-2001/001.mp3", b"a").unwrap();
+        store::save(dir.path(), "librivox-2001/002.mp3", b"b").unwrap();
+        let calls = std::cell::Cell::new(0);
+        let late = || {
+            calls.set(calls.get() + 1);
+            if calls.get() == 1 {
+                Duration::from_secs(3600)
+            } else {
+                Duration::from_secs(10)
+            }
+        };
+        let t = Replay::new(&[(200, "c")]);
+        assert_eq!(fetch(&t, dir.path(), &book(), &late), Ok(Progress::More));
+        let t = Replay::new(&[]);
+        assert!(matches!(
+            fetch(&t, dir.path(), &book(), &|| Duration::from_secs(10)),
+            Ok(Progress::Done(_))
+        ));
+    }
+
+    #[test]
+    fn a_recording_with_a_gap_is_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut b = book();
+        b.gaps = 1;
+        let t = Replay::new(&[]);
+        assert!(matches!(
+            fetch(&t, dir.path(), &b, &PLENTY),
+            Err(Fail::Drop(_))
+        ));
     }
 
     #[test]

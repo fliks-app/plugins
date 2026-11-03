@@ -52,11 +52,12 @@ fn add(r: &Request) -> Result<Response, String> {
             &json!({ "error": "the recording has no section" }),
         ));
     }
-    let media = match host::resolve(NS, &id) {
+    let media = match host::resolve(NS, &book.id.to_string()) {
         Ok(m) => m,
         Err(Fail::Drop(m)) => return Ok(Response::json(409, &json!({ "error": m }))),
         Err(Fail::Retry(m)) => return Ok(Response::json(503, &json!({ "error": m }))),
     };
+    let id = book.id.to_string();
     let payload = json!({ "id": id, "mediaId": media });
     if let Err(e) = host::schedule(&format!("{SOURCE}:{id}"), &payload) {
         return Ok(Response::json(503, &json!({ "error": e.to_string() })));

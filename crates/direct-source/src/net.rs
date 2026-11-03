@@ -7,6 +7,13 @@ use std::time::Duration;
 use url::Url;
 
 const MAX_REDIRECTS: usize = 5;
+/// Left of the host's deadline when a request gives up, so it fails before the host kills the call.
+const SLACK: Duration = Duration::from_secs(10);
+/// One download may not run longer than this, so an endless body is cut.
+const REQUEST_LIMIT: Duration = Duration::from_secs(240);
+
+pub const TOO_LARGE: &str = "the body is larger than the download cap";
+const DENIED: &str = "target address is not allowed";
 
 pub struct Reply {
     pub status: u16,
@@ -37,6 +44,26 @@ pub fn follow(t: &impl Transport, url: &str) -> Result<Reply, String> {
     Err("too many redirects".into())
 }
 
+/// A transport failure as an add failure: a refused address is final, anything else is retried.
+pub fn fail(message: String) -> Fail {
+    if message == DENIED {
+        Fail::Drop(message)
+    } else {
+        Fail::Retry(message)
+    }
+}
+
+/// A body is whole when it is under the cap and as long as the server announced.
+fn verify(len: usize, cap: usize, announced: Option<usize>) -> Result<(), &'static str> {
+    if len >= cap {
+        return Err(TOO_LARGE);
+    }
+    if announced.is_some_and(|n| n != len) {
+        return Err("the body is shorter than announced");
+    }
+    Ok(())
+}
+
 /// The body of a 2xx reply; 404 and other 4xx (429 aside) end the add, anything else is retried.
 pub fn body(r: Reply) -> Result<Vec<u8>, Fail> {
     match r.status {
@@ -65,18 +92,16 @@ impl Transport for Live {
             .header("accept", self.accept)
             .timeout(Duration::from_secs(60))
             .body_cap(self.cap)
-            .budget(&Budget::host())
+            .deadline(REQUEST_LIMIT)
+            .budget(&Budget::new(
+                Budget::host().remaining().saturating_sub(SLACK),
+            ))
             .send()
             .map_err(|e| e.to_string())?;
-        if r.body.len() >= self.cap {
-            return Err("the body is larger than the download cap".into());
-        }
         let announced = r
             .header("content-length")
             .and_then(|v| v.trim().parse::<usize>().ok());
-        if announced.is_some_and(|n| n != r.body.len()) {
-            return Err("the body is shorter than announced".into());
-        }
+        verify(r.body.len(), self.cap, announced)?;
         Ok(Reply {
             status: r.status,
             location: r.header("location"),
@@ -130,6 +155,23 @@ mod tests {
             .map(|_| ("https://a.test/".into(), reply(302, Some("/"))))
             .collect();
         assert!(follow(&Fake(RefCell::new(hops)), "https://a.test/").is_err());
+    }
+
+    #[test]
+    fn a_body_must_be_whole_and_under_the_cap() {
+        assert_eq!(verify(10, 100, Some(10)), Ok(()));
+        assert_eq!(verify(10, 100, None), Ok(()));
+        assert_eq!(verify(100, 100, None), Err(TOO_LARGE));
+        assert!(verify(5, 100, Some(10)).is_err());
+    }
+
+    #[test]
+    fn a_refused_address_is_final() {
+        assert!(matches!(
+            fail("target address is not allowed".into()),
+            Fail::Drop(_)
+        ));
+        assert!(matches!(fail("timeout".into()), Fail::Retry(_)));
     }
 
     #[test]

@@ -23,6 +23,8 @@ pub struct Book {
     pub duration_secs: Option<u32>,
     /// Ordered by number; only the sections that have a file.
     pub sections: Vec<Section>,
+    /// Sections the API lists without a number or a file.
+    pub gaps: usize,
 }
 
 /// LibriVox sends most numbers as strings.
@@ -84,6 +86,7 @@ fn person(a: &Value) -> Option<String> {
 pub fn parse_book(v: &Value) -> Option<Book> {
     let mut narrators: Vec<String> = vec![];
     let mut sections: Vec<Section> = vec![];
+    let mut gaps = 0;
     for s in v["sections"].as_array().into_iter().flatten() {
         for r in s["readers"].as_array().into_iter().flatten() {
             if let Some(n) = text(&r["display_name"]).filter(|n| !narrators.contains(n)) {
@@ -91,6 +94,7 @@ pub fn parse_book(v: &Value) -> Option<Book> {
             }
         }
         let (Some(number), Some(url)) = (num(&s["section_number"]), text(&s["listen_url"])) else {
+            gaps += 1;
             continue;
         };
         if !sections.iter().any(|x| x.number == number) {
@@ -113,6 +117,7 @@ pub fn parse_book(v: &Value) -> Option<Book> {
         overview: text(&v["description"]),
         duration_secs: num(&v["totaltimesecs"]).filter(|s| *s > 0),
         sections,
+        gaps,
     })
 }
 
@@ -192,6 +197,17 @@ mod tests {
         let r = b.record();
         assert_eq!(r["ids"][NS], "2001");
         assert_eq!(r["narrators"][1]["name"], "Reader One");
+    }
+
+    #[test]
+    fn a_section_without_a_file_is_a_gap() {
+        let v = json!({ "id": "1", "title": "T", "sections": [
+            { "section_number": "1", "listen_url": "https://a.test/1.mp3" },
+            { "section_number": "2", "listen_url": "" },
+            { "listen_url": "https://a.test/3.mp3" }
+        ]});
+        let b = parse_book(&v).unwrap();
+        assert_eq!((b.sections.len(), b.gaps), (1, 2));
     }
 
     #[test]

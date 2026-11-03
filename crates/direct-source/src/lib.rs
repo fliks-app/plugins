@@ -1,5 +1,6 @@
 //! What the direct-source plugins share: a redirect-following GET, files under the plugin data
 //! directory, and the host calls that turn a downloaded file into a library book.
+pub mod flow;
 pub mod host;
 pub mod net;
 pub mod store;
