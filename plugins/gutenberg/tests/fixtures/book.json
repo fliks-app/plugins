@@ -1,0 +1,13 @@
+{
+  "id": 1001,
+  "title": "Sample Title One",
+  "authors": [{ "name": "Doe, Jane", "birth_year": 1800, "death_year": 1870 }],
+  "translators": [],
+  "subjects": ["Fiction", "Short stories"],
+  "bookshelves": [],
+  "languages": ["en"],
+  "copyright": false,
+  "media_type": "Text",
+  "formats": { "application/epub+zip": "https://www.gutenberg.org/ebooks/1001.epub3.images" },
+  "download_count": 120
+}

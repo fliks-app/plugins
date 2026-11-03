@@ -1,0 +1,34 @@
+{
+  "books": [
+    {
+      "id": "2001",
+      "title": "Sample Recording One",
+      "description": "<p>A made-up description.</p>",
+      "url_text_source": "https://example.test/text",
+      "language": "English",
+      "copyright_year": "1850",
+      "num_sections": "2",
+      "url_rss": "https://example.test/rss",
+      "url_zip_file": "https://example.test/book.zip",
+      "url_project": "https://example.test/project",
+      "url_librivox": "https://librivox.org/sample-recording-one-by-jane-doe/",
+      "url_other": "",
+      "totaltime": "01:30:05",
+      "totaltimesecs": 5405,
+      "authors": [{ "id": "11", "first_name": "Jane", "last_name": "Doe", "dob": "1800", "dod": "1870" }]
+    },
+    {
+      "id": "2002",
+      "title": "Sample Recording Two",
+      "description": "",
+      "language": "Français",
+      "copyright_year": "0",
+      "num_sections": 1,
+      "totaltimesecs": "600",
+      "authors": [
+        { "id": "12", "first_name": "", "last_name": "Anonymous" },
+        { "id": "13", "first_name": "Richard", "last_name": "Roe" }
+      ]
+    }
+  ]
+}

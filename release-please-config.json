@@ -102,6 +102,28 @@
           "jsonpath": "$.package[?(@.name.value=='fk-plugin-audnexus')].version"
         }
       ]
+    },
+    "plugins/gutenberg": {
+      "release-type": "rust",
+      "component": "gutenberg",
+      "extra-files": [
+        {
+          "type": "toml",
+          "path": "/Cargo.lock",
+          "jsonpath": "$.package[?(@.name.value=='fk-plugin-gutenberg')].version"
+        }
+      ]
+    },
+    "plugins/librivox": {
+      "release-type": "rust",
+      "component": "librivox",
+      "extra-files": [
+        {
+          "type": "toml",
+          "path": "/Cargo.lock",
+          "jsonpath": "$.package[?(@.name.value=='fk-plugin-librivox')].version"
+        }
+      ]
     }
   }
 }

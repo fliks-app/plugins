@@ -1,0 +1,52 @@
+{
+  "count": 3,
+  "next": null,
+  "previous": null,
+  "results": [
+    {
+      "id": 1001,
+      "title": "Sample Title One",
+      "authors": [{ "name": "Doe, Jane", "birth_year": 1800, "death_year": 1870 }],
+      "translators": [],
+      "subjects": ["Fiction", "Short stories"],
+      "bookshelves": [],
+      "languages": ["en"],
+      "copyright": false,
+      "media_type": "Text",
+      "formats": {
+        "application/epub+zip": "https://www.gutenberg.org/ebooks/1001.epub3.images",
+        "text/html": "https://www.gutenberg.org/ebooks/1001.html.images"
+      },
+      "download_count": 120
+    },
+    {
+      "id": 1002,
+      "title": "Sample Title Two",
+      "authors": [
+        { "name": "Roe, Richard Q.", "birth_year": null, "death_year": null },
+        { "name": "Various", "birth_year": null, "death_year": null }
+      ],
+      "translators": [{ "name": "Poe, Pat", "birth_year": 1900, "death_year": 1980 }],
+      "subjects": [],
+      "bookshelves": [],
+      "languages": ["fr", "en"],
+      "copyright": null,
+      "media_type": "Text",
+      "formats": { "application/epub+zip": "https://www.gutenberg.org/ebooks/1002.epub.images" },
+      "download_count": 3
+    },
+    {
+      "id": 1003,
+      "title": "Sample Recording",
+      "authors": [],
+      "translators": [],
+      "subjects": [],
+      "bookshelves": [],
+      "languages": ["en"],
+      "copyright": false,
+      "media_type": "Sound",
+      "formats": { "audio/mpeg": "https://www.gutenberg.org/files/1003/1003.mp3" },
+      "download_count": 1
+    }
+  ]
+}

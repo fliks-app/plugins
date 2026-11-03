@@ -14,10 +14,14 @@ from the plugin catalogue in **Settings → Advanced → Plugins**.
 | [`plugins/tvdb`](plugins/tvdb/README.md) | `fliks.tvdb`: movie and series metadata from TheTVDB | AGPL-3.0-or-later |
 | [`plugins/audible`](plugins/audible/README.md) | `fliks.audible`: audiobook metadata from the unofficial Audible catalog | AGPL-3.0-or-later |
 | [`plugins/audnexus`](plugins/audnexus/README.md) | `fliks.audnexus`: audiobook metadata and chapters from Audnexus | AGPL-3.0-or-later |
+| [`plugins/gutenberg`](plugins/gutenberg/README.md) | `fliks.gutenberg`: search Project Gutenberg and add its free ebooks | AGPL-3.0-or-later |
+| [`plugins/librivox`](plugins/librivox/README.md) | `fliks.librivox`: search LibriVox and add its free audiobooks | AGPL-3.0-or-later |
 
 [`crates/provider-common`](crates/provider-common) holds what several provider plugins share (language
 codes, the HTTP status mapping, the book model and ISBN); it is a library, not a plugin. Each provider
 keeps its own parser and golden fixtures (`src/parse.rs`, `tests/fixtures`).
+[`crates/direct-source`](crates/direct-source) holds what the plugins that add a book from a free source
+share (a redirect-following download, files under `/data`, the resolve and ingest host calls).
 
 Each folder holds its own `LICENSE`, `plugin.template.json`, `migrations/`, `tests/` and `docs/`.
 `xtask/` is the shared packaging CLI over the SDK build tooling, and the root `Cargo.toml` pins one
