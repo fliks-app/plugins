@@ -895,6 +895,62 @@ async fn two_searches_share_one_slot_per_indexer() {
     h.finish().await;
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_split_season_issues_one_query_per_scene_season() {
+    let Some(h) = Harness::start(setup()).await else {
+        return;
+    };
+    let tz = Stub::start(|_, _, _| (200, vec![], EMPTY_FEED.as_bytes().to_vec()));
+    route(&h, "torznab.test", "10.77.0.1", 80, &tz);
+    let mut db = plugin_db(&h).await;
+    add_indexer(
+        &mut db,
+        "tz",
+        json!({ "baseUrl": "http://torznab.test/api", "apiKey": "k" }),
+    )
+    .await;
+    let media = add_work(&h, "Some Show", "series", None).await;
+    let season: i32 = sqlx::query_scalar(
+        r#"INSERT INTO item_groups ("mediaId", "number", monitored) VALUES ($1, 1, true) RETURNING id"#,
+    )
+    .bind(media as i32)
+    .fetch_one(&h.pool)
+    .await
+    .unwrap();
+    sqlx::raw_sql(AssertSqlSafe(format!(
+        r#"INSERT INTO items ("mediaId", "editionId", "groupId", "number", monitored)
+             SELECT {media}, (SELECT id FROM editions WHERE "mediaId" = {media}), {season}, n, true
+             FROM generate_series(1, 10) n;
+           INSERT INTO media_external_ids ("mediaId", kind, provider, value) VALUES ({media}, 'series', 'tvdb', '9');
+           INSERT INTO scene_mappings ("tvdbId", entries) VALUES (9, '{{"entries": [{}]}}')"#,
+        (1..=10)
+            .map(|n| format!(
+                r#"{{"sceneSeason": {}, "sceneEpisode": {}, "season": 1, "episode": {n}}}"#,
+                if n <= 5 { 1 } else { 2 },
+                if n <= 5 { n } else { n - 5 }
+            ))
+            .collect::<Vec<_>>()
+            .join(",")
+    )))
+    .execute(&h.pool)
+    .await
+    .unwrap();
+    let r = h
+        .proxy("GET", &format!("/{media}/seasons/{season}/releases"), None)
+        .await;
+    assert_eq!(r.status, 200, "{:?}", body(&r));
+    let queries: Vec<String> = tz
+        .hits()
+        .into_iter()
+        .map(|h| h.target)
+        .filter(|t| t.contains("q=Some%20Show"))
+        .collect();
+    assert_eq!(queries.len(), 2, "{queries:?}");
+    assert!(queries.iter().any(|q| q.contains("Some%20Show%20S01")));
+    assert!(queries.iter().any(|q| q.contains("Some%20Show%20S02")));
+    h.finish().await;
+}
+
 fn one_item_feed(title: &str) -> Vec<u8> {
     format!(
         r#"<?xml version="1.0"?><rss><channel><item><title>{title}</title><link>http://dl.test/{title}.torrent</link><size>1000</size></item></channel></rss>"#

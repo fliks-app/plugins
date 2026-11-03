@@ -404,6 +404,7 @@ fn target(want: Option<WantDecision>) -> Target {
         expected_titles: vec![],
         search_title: String::new(),
         scope: vec![],
+        search_units: vec![],
     }
 }
 
