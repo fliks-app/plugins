@@ -5,7 +5,7 @@ use crate::config;
 use crate::db::{
     DownloadClientRow, HistoryRow, blocklist, clients, history, indexers, stalled, state,
 };
-use crate::error::R;
+use crate::error::{Error, R};
 use crate::grab::{coverage_columns, family_of, family_str, group_item_ids, identify};
 use crate::util::{decode_html_entities, js_number, now_ms, parse_date_ms};
 use fliks_plugin_sdk::bindings::fliks::plugin::types::{
@@ -759,12 +759,23 @@ struct Intake {
     paths: Vec<String>,
 }
 
+/// Series rows carry their ids; a movie or a book row without a family asks the host once.
+fn is_book(h: &HistoryRow, media: u32) -> R<bool> {
+    match h.family.as_deref().and_then(family_of) {
+        Some(f) => Ok(matches!(f, Family::Text | Family::Audio)),
+        None if h.season_id.is_some() || h.item_id.is_some() => Ok(false),
+        None => Ok(host::media_acquisition_context(media, None, None, None)?
+            .ok_or_else(|| Error::Other("the host no longer knows this media".into()))?
+            .kind
+            == "book"),
+    }
+}
+
 /// The families to ingest from a torrent: a row's own, then every other wished book family the
 /// files carry; a row without one takes the first family found. Empty when nothing is ingestable.
 fn intake(h: &HistoryRow, media: u32, files: &[TorrentFile], save: &str) -> R<Vec<Intake>> {
     let own = h.family.as_deref().and_then(family_of);
-    let video = own == Some(Family::Video)
-        || (own.is_none() && (h.season_id.is_some() || h.item_id.is_some()));
+    let video = !is_book(h, media)?;
     if video {
         let paths = paths_of(files, save, Family::Video);
         let found = Intake {
@@ -1081,11 +1092,12 @@ fn fmt_js(f: f64) -> String {
 /// when that cannot be told, it does.
 fn holds_unimported(row: &HistoryRow, client: &DownloadClientRow, t: &Torrent) -> bool {
     let own = row.family.as_deref().and_then(family_of);
-    let book = matches!(own, Some(Family::Text | Family::Audio))
-        || (own.is_none() && row.season_id.is_none() && row.item_id.is_none());
-    let Some(media) = row.media_id.filter(|_| book) else {
+    let Some(media) = row.media_id else {
         return false;
     };
+    if !is_book(row, media as u32).unwrap_or(true) {
+        return false;
+    }
     let Some(files) = client::files(client, &t.hash) else {
         return true;
     };

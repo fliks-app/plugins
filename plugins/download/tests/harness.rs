@@ -2597,7 +2597,8 @@ async fn a_torrent_with_both_families_imports_both() {
         return;
     };
     let mut db = plugin_db(&h).await;
-    assert_eq!(status_of(&mut db, id).await.0, "completed");
+    let (status, message) = status_of(&mut db, id).await;
+    assert_eq!(status, "completed", "{message:?}");
     assert_eq!(editions_of(&h, media).await, ["audio", "text"]);
     let family: Option<String> =
         sqlx::query_scalar(r#"SELECT "family" FROM "download_history" WHERE "id" = $1::int"#)
