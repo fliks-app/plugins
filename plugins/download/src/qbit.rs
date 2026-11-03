@@ -57,17 +57,40 @@ fn info_url(base: &str, category: &str) -> String {
     }
 }
 
-fn snapshot(base: &str, cookie: &str, category: &str) -> HashSet<String> {
-    net::get(&info_url(base, category), &[("cookie", cookie)], T60)
-        .ok()
-        .and_then(|r| json_array::<Torrent>(&r))
-        .map(|ts| {
-            ts.into_iter()
-                .filter(|t| !t.hash.is_empty())
-                .map(|t| t.hash.to_lowercase())
-                .collect()
-        })
+/// The torrents of every managed category, or of the whole client when `categories` is empty;
+/// none when any request failed.
+fn list(
+    base: &str,
+    cookie: &str,
+    categories: &[String],
+    timeout: Duration,
+) -> Option<Vec<Torrent>> {
+    let urls: Vec<String> = if categories.is_empty() {
+        vec![info_url(base, "")]
+    } else {
+        categories.iter().map(|c| info_url(base, c)).collect()
+    };
+    let mut all: Vec<Torrent> = vec![];
+    for url in urls {
+        let found = net::get(&url, &[("cookie", cookie)], timeout)
+            .ok()
+            .and_then(|r| json_array::<Torrent>(&r))?;
+        for t in found {
+            if !all.iter().any(|x| x.hash.eq_ignore_ascii_case(&t.hash)) {
+                all.push(t);
+            }
+        }
+    }
+    Some(all)
+}
+
+fn snapshot(base: &str, cookie: &str, categories: &[String]) -> HashSet<String> {
+    list(base, cookie, categories, T60)
         .unwrap_or_default()
+        .into_iter()
+        .filter(|t| !t.hash.is_empty())
+        .map(|t| t.hash.to_lowercase())
+        .collect()
 }
 
 /// The torrent that appeared since `before`, polled for about 3 s.
@@ -144,29 +167,19 @@ pub fn torrents(c: &DownloadClientRow) -> (bool, Vec<Torrent>) {
             return (false, vec![]);
         }
     };
-    let category = setting(&c.settings, "category").trim().to_owned();
-    match net::get(&info_url(&base, &category), &[("cookie", &cookie)], T15) {
-        Ok(r) => match json_array::<Torrent>(&r) {
-            Some(ts) => (
-                true,
-                ts.into_iter()
-                    .map(|t| Torrent {
-                        name: decode_html_entities(&t.name),
-                        ..t
-                    })
-                    .collect(),
-            ),
-            None => {
-                warn!(
-                    "getTorrentsResult: unexpected response from \"{}\" (HTTP {})",
-                    c.name, r.status
-                );
-                (false, vec![])
-            }
-        },
-        Err(e) => {
+    match list(&base, &cookie, &client::categories(&c.settings), T15) {
+        Some(ts) => (
+            true,
+            ts.into_iter()
+                .map(|t| Torrent {
+                    name: decode_html_entities(&t.name),
+                    ..t
+                })
+                .collect(),
+        ),
+        None => {
             warn!(
-                "getTorrentsResult: error fetching torrents from \"{}\": {e}",
+                "getTorrentsResult: could not list the torrents of \"{}\"",
                 c.name
             );
             (false, vec![])
@@ -265,7 +278,7 @@ pub fn delete(c: &DownloadClientRow, hash: &str, delete_files: bool) -> R<()> {
 pub fn add(c: &DownloadClientRow, url: &str, category: &str, reject_if_present: bool) -> R<String> {
     let base = client::base_url(&c.settings).ok_or_else(no_host)?;
     let cookie = login(&base, &c.settings, T60)?;
-    let before = snapshot(&base, &cookie, category);
+    let before = snapshot(&base, &cookie, &client::categories(&c.settings));
     let held = |hash: &Option<String>| -> R<Option<String>> {
         match hash {
             Some(h) if before.contains(&h.to_lowercase()) => {

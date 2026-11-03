@@ -179,23 +179,19 @@ fn get(s: &Settings, ids: Option<&str>, fields: &[&str], timeout: Duration) -> R
         .map_err(|_| Error::Client("unexpected response from the download client".into()))
 }
 
-fn category(s: &Settings) -> String {
-    setting(s, "category").trim().to_owned()
-}
-
-fn labelled(t: &Item, category: &str) -> bool {
-    category.is_empty() || t.labels.iter().any(|l| l == category)
+fn labelled(t: &Item, categories: &[String]) -> bool {
+    categories.is_empty() || t.labels.iter().any(|l| categories.contains(l))
 }
 
 pub fn torrents(c: &DownloadClientRow) -> (bool, Vec<Torrent>) {
     match get(&c.settings, None, &FIELDS, T15) {
         Ok(items) => {
-            let category = category(&c.settings);
+            let categories = client::categories(&c.settings);
             (
                 true,
                 items
                     .into_iter()
-                    .filter(|t| labelled(t, &category))
+                    .filter(|t| labelled(t, &categories))
                     .map(torrent)
                     .collect(),
             )
@@ -254,7 +250,7 @@ pub fn add(c: &DownloadClientRow, url: &str, category: &str, reject_if_present: 
     if let Some(hash) = hash_of("torrent-duplicate") {
         let held = get(s, Some(&hash), &["labels"], T60)?
             .first()
-            .is_some_and(|t| labelled(t, category));
+            .is_some_and(|t| labelled(t, &client::categories(s)));
         return match (held, reject_if_present) {
             (false, _) => Err(client::held_outside_category()),
             (true, true) => Err(client::already_held(&hash)),
