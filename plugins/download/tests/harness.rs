@@ -2347,6 +2347,17 @@ async fn book_fixture(
     held: bool,
     files: &[&str],
 ) -> Option<(Harness, std::path::PathBuf, i64, Stub)> {
+    let qbit = |dl: &std::path::Path| finished_qbit(dl, BOOK_RELEASE, files, !held);
+    book_fixture_with(name, families, files, qbit).await
+}
+
+/// `qbit` builds the client stub over the download folder, which holds `files`.
+async fn book_fixture_with(
+    name: &str,
+    families: &[&str],
+    files: &[&str],
+    qbit: impl FnOnce(&std::path::Path) -> Stub,
+) -> Option<(Harness, std::path::PathBuf, i64, Stub)> {
     let base = std::path::PathBuf::from("/tmp/fliks-parity/download-port")
         .join(format!("{name}-{}", std::process::id()));
     let (dl, lib) = (base.join("dl"), base.join("lib"));
@@ -2358,7 +2369,7 @@ async fn book_fixture(
     let mut s = setup();
     s.template["ingestRoots"] = json!([dl.to_string_lossy()]);
     let h = Harness::start(s).await?;
-    let qbit = finished_qbit(&dl, BOOK_RELEASE, files, !held);
+    let qbit = qbit(&dl);
     let client = add_qbit(&h, &qbit).await;
     let mut db = plugin_db(&h).await;
     exec(
@@ -2472,11 +2483,11 @@ async fn the_rss_sweep_grabs_a_book_through_its_targets() {
     let _ = std::fs::remove_dir_all(base);
 }
 
-/// An edition already in another language is the host's `ERR_VALIDATION`: the row fails once and
-/// stays failed.
+/// A row grabbed for a language the book has no edition in imports into a new edition of it,
+/// next to the edition of another language.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn a_book_edition_in_another_language_fails_its_import_once() {
-    let Some((h, base, media, qbit)) =
+async fn a_book_row_imports_into_a_new_edition_of_its_language() {
+    let Some((h, base, media, _qbit)) =
         book_fixture("book-lang", &["text"], true, &["Mirelune.epub"]).await
     else {
         return;
@@ -2505,19 +2516,153 @@ async fn a_book_edition_in_another_language_fails_its_import_once() {
         ),
     )
     .await;
-    let mut rx = h.st.hub.subscribe();
     h.job("ImportCompleted", None).await.unwrap();
-    let (status, message) = status_of(&mut db, id).await;
-    assert_eq!(status, "import_failed");
-    assert!(message.is_some_and(|m| !m.is_empty()));
-    assert!(hub_saw(&mut rx, &["ImportFailed"]));
-    h.job("ImportCompleted", None).await.unwrap();
-    assert_eq!(status_of(&mut db, id).await.0, "import_failed");
+    assert_eq!(status_of(&mut db, id).await.0, "completed");
+    assert_eq!(edition_languages(&h, media).await, ["en", "fr"]);
+    h.finish().await;
+    let _ = std::fs::remove_dir_all(base);
+}
+
+const HASH_FR: &str = "89abcdef0123456789abcdef0123456789abcdef";
+
+/// A client holding the German epub of `HASH` and the French epub of `HASH_FR` once each is added.
+fn twin_qbit(save: &std::path::Path) -> Stub {
+    let save = save.to_string_lossy().into_owned();
+    let added: Mutex<Vec<&'static str>> = Mutex::default();
+    Stub::start(move |_, target, body| {
+        let ok = |b: String| (200, vec![], b.into_bytes());
+        match target.split('?').next().unwrap_or("") {
+            "/api/v2/auth/login" => (
+                200,
+                vec![("set-cookie", "SID=s; path=/".into())],
+                b"Ok.".to_vec(),
+            ),
+            "/api/v2/torrents/add" => {
+                for h in [HASH, HASH_FR] {
+                    if body.contains(h) {
+                        added.lock().unwrap().push(h);
+                    }
+                }
+                ok("Ok.".into())
+            }
+            "/api/v2/torrents/info" => ok(json!(
+                added
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .map(|h| {
+                        let name = if *h == HASH {
+                            BOOK_RELEASE_DE
+                        } else {
+                            BOOK_RELEASE_FR
+                        };
+                        json!({
+                            "hash": h, "name": name, "size": 1000, "downloaded": 1000,
+                            "progress": 1, "dlspeed": 0, "ratio": 0, "eta": 0,
+                            "state": "stalledUP", "save_path": save, "added_on": 1
+                        })
+                    })
+                    .collect::<Vec<_>>()
+            )
+            .to_string()),
+            "/api/v2/torrents/files" => {
+                let file = if target.contains(HASH_FR) {
+                    "Mirelune.FR.epub"
+                } else {
+                    "Mirelune.DE.epub"
+                };
+                ok(json!([{ "name": file, "progress": 1 }]).to_string())
+            }
+            _ => (404, vec![], vec![]),
+        }
+    })
+}
+
+const BOOK_RELEASE_FR: &str = "Mirelune.2020.FR.EPUB-GRP";
+const BOOK_RELEASE_DE: &str = "Mirelune.2020.GERMAN.EPUB-GRP";
+
+async fn edition_languages(h: &Harness, media: i64) -> Vec<String> {
+    sqlx::query_scalar(
+        r#"SELECT language FROM editions WHERE "mediaId" = $1 AND language IS NOT NULL ORDER BY language"#,
+    )
+    .bind(media as i32)
+    .fetch_all(&h.pool)
+    .await
+    .unwrap()
+}
+
+/// A book wished in text/fr and text/de is two targets (a language-less want is only the fallback
+/// of a family with no language want): the sweep grabs one release for each, a second sweep grabs
+/// nothing, and each row is ingested with the language it was grabbed for.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_book_wished_in_two_languages_is_grabbed_and_ingested_per_language() {
+    let files = ["Mirelune.DE.epub", "Mirelune.FR.epub"];
+    let Some((h, base, media, qbit)) =
+        book_fixture_with("book-two-lang", &["text"], &files, twin_qbit).await
+    else {
+        return;
+    };
+    sqlx::query(r#"UPDATE wants SET language = 'fr' WHERE "mediaId" = $1"#)
+        .bind(media as i32)
+        .execute(&h.pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        r#"INSERT INTO wants ("mediaId", family, language, "folderId")
+           SELECT "mediaId", family, 'de', "folderId" FROM wants WHERE "mediaId" = $1"#,
+    )
+    .bind(media as i32)
+    .execute(&h.pool)
+    .await
+    .unwrap();
+    let feed = format!(
+        r#"<?xml version="1.0"?><rss xmlns:torznab="http://torznab.com/schemas/2015/feed"><channel>
+<item><title>{BOOK_RELEASE_DE}</title><link>magnet:?xt=urn:btih:{HASH}&amp;dn={BOOK_RELEASE_DE}</link><size>2000000</size><torznab:attr name="seeders" value="5"/></item>
+<item><title>{BOOK_RELEASE_FR}</title><link>magnet:?xt=urn:btih:{HASH_FR}&amp;dn={BOOK_RELEASE_FR}</link><size>2000000</size><torznab:attr name="seeders" value="5"/></item>
+</channel></rss>"#
+    )
+    .into_bytes();
+    let tracker = Stub::start(move |_, _, _| (200, vec![], feed.clone()));
+    add_book_indexer(&h, &tracker).await;
+
+    let sweep = json!({ "mediaIds": [media] }).to_string();
+    h.job("SearchMissing", Some(&sweep)).await.unwrap();
     assert_eq!(
-        qbit.hits_to("/api/v2/torrents/files").len(),
-        1,
-        "not retried"
+        qbit.hits_to("/api/v2/torrents/add").len(),
+        2,
+        "one grab per language"
     );
+    h.job("SearchMissing", Some(&sweep)).await.unwrap();
+    assert_eq!(
+        qbit.hits_to("/api/v2/torrents/add").len(),
+        2,
+        "each language's grab is pending on its own"
+    );
+    let mut db = plugin_db(&h).await;
+    let rows: Vec<(String, Option<String>)> = sqlx::query_as(
+        r#"SELECT "torrentHash", "language" FROM "download_history" WHERE "mediaId" = $1 ORDER BY "language""#,
+    )
+    .bind(media as i32)
+    .fetch_all(&mut db)
+    .await
+    .unwrap();
+    assert_eq!(
+        rows,
+        [
+            (HASH.to_owned(), Some("de".to_owned())),
+            (HASH_FR.to_owned(), Some("fr".to_owned()))
+        ]
+    );
+
+    h.job("ImportCompleted", None).await.unwrap();
+    let done = scalar_i64(
+        &mut db,
+        format!(r#"SELECT count(*) FROM "download_history" WHERE "mediaId" = {media} AND "status" = 'completed'"#),
+    )
+    .await;
+    assert_eq!(done, 2);
+    assert_eq!(edition_languages(&h, media).await, ["de", "fr"]);
+    assert_eq!(editions_of(&h, media).await, ["text", "text"]);
     h.finish().await;
     let _ = std::fs::remove_dir_all(base);
 }

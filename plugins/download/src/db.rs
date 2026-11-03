@@ -762,14 +762,19 @@ pub mod history {
         ]
     }
 
-    /// A book wished in two families is pending per family; a row with no family blocks both.
-    pub fn find_pending_for_media(media_id: i64, family: &str) -> R<Option<HistoryRow>> {
+    /// A book is pending per (family, language); a row with no family blocks both. A video row
+    /// ignores the language.
+    pub fn find_pending_for_media(
+        media_id: i64,
+        family: &str,
+        language: Option<&str>,
+    ) -> R<Option<HistoryRow>> {
         first(
             &format!(
                 r#"SELECT {COLUMNS} FROM "download_history" WHERE "mediaId" = $1 AND "status" IN ('grabbed', 'importing')
-          AND ("family" IS NULL OR "family" = $2) LIMIT 1"#
+          AND ("family" IS NULL OR ("family" = $2 AND ($2 = 'video' OR "language" IS NOT DISTINCT FROM $3))) LIMIT 1"#
             ),
-            &[int(media_id), text(family)],
+            &[int(media_id), text(family), opt_text(language)],
         )
     }
 

@@ -507,18 +507,17 @@ fn a_target_is_the_work_a_season_or_an_episode() {
     use grab::Piece;
     let mut t = target(None);
     assert_eq!(grab::piece(&t), Piece::Work);
-    assert_eq!(grab::key_of(&t), (1, None, None, 0));
+    assert_eq!(grab::key_of(&t, 0), (1, None, None, 0));
     t.scope = vec![unit(Some(2), None)];
     assert_eq!(grab::piece(&t), Piece::Season(2));
-    assert_eq!(grab::key_of(&t), (1, Some(20), None, 0));
+    assert_eq!(grab::key_of(&t, 0), (1, Some(20), None, 0));
     t.scope = vec![unit(Some(2), Some(5.0))];
     assert_eq!(grab::piece(&t), Piece::Episode(2, 5));
     assert_eq!(grab::numbers(&t), (Some(2), Some(5)));
-    assert_eq!(grab::key_of(&t), (1, Some(20), Some(50), 0));
-    t.family = Family::Audio;
+    assert_eq!(grab::key_of(&t, 0), (1, Some(20), Some(50), 0));
     assert!(
-        grab::key_of(&t) > (1, Some(20), Some(50), 0),
-        "a book's audio want sorts after its text one"
+        grab::key_of(&t, 1) > (1, Some(20), Some(50), 0),
+        "a book's second want sorts after its first"
     );
 }
 

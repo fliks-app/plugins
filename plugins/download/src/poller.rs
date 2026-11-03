@@ -754,6 +754,13 @@ fn holds_media(files: &[TorrentFile]) -> bool {
     })
 }
 
+/// The language a row was grabbed for, when `family` is the family it was grabbed for.
+fn row_language(h: &HistoryRow, family: Family) -> Option<&str> {
+    (h.family.as_deref().and_then(family_of) == Some(family))
+        .then_some(h.language.as_deref())
+        .flatten()
+}
+
 /// A family of a torrent to ingest, with the language its want has now.
 struct Intake {
     family: Family,
@@ -766,10 +773,12 @@ fn is_book(h: &HistoryRow, media: u32) -> R<bool> {
     match h.family.as_deref().and_then(family_of) {
         Some(f) => Ok(matches!(f, Family::Text | Family::Audio)),
         None if h.season_id.is_some() || h.item_id.is_some() => Ok(false),
-        None => Ok(host::media_acquisition_context(media, None, None, None)?
-            .ok_or_else(|| Error::Other("the host no longer knows this media".into()))?
-            .kind
-            == "book"),
+        None => Ok(
+            host::media_acquisition_context(media, None, None, None, None)?
+                .ok_or_else(|| Error::Other("the host no longer knows this media".into()))?
+                .kind
+                == "book",
+        ),
     }
 }
 
@@ -796,7 +805,14 @@ fn intake(h: &HistoryRow, media: u32, files: &[TorrentFile], save: &str) -> R<Ve
         if paths.is_empty() || out.iter().any(|i| i.family == family) {
             continue;
         }
-        let Some(target) = host::media_acquisition_context(media, Some(family), None, None)? else {
+        let Some(target) = host::media_acquisition_context(
+            media,
+            Some(family),
+            row_language(h, family),
+            None,
+            None,
+        )?
+        else {
             continue;
         };
         let missing = target
@@ -1122,14 +1138,20 @@ fn holds_unimported(row: &HistoryRow, client: &DownloadClientRow, t: &Torrent) -
     [Family::Text, Family::Audio]
         .into_iter()
         .filter(|f| !paths_of(&files, &save, *f).is_empty())
-        .any(
-            |f| match host::media_acquisition_context(media as u32, Some(f), None, None) {
+        .any(|f| {
+            match host::media_acquisition_context(
+                media as u32,
+                Some(f),
+                row_language(row, f),
+                None,
+                None,
+            ) {
                 Ok(target) => target
                     .and_then(|t| t.want)
                     .is_some_and(|w| w.decision != WantDecision::Skip),
                 Err(_) => true,
-            },
-        )
+            }
+        })
 }
 
 pub fn clean_seeded() -> R<()> {

@@ -301,6 +301,7 @@ fn rank(target: &Target, indexers: &[IndexerRow], releases: &[Release]) -> R<Vec
     let scored = host::releases_score(
         target.media_id,
         Some(target.family),
+        book_language(target),
         unit_ref_of(target).as_ref(),
         &score_request(releases, indexers, &blocked),
     )?;
@@ -544,41 +545,56 @@ fn author_of(t: &Target) -> Option<&str> {
         .filter(|n| !n.is_empty())
 }
 
+/// The language a host call carries: a book's want language, none for video (the host refuses one).
+pub fn book_language(t: &Target) -> Option<&str> {
+    matches!(t.family, Family::Text | Family::Audio)
+        .then_some(t.language.as_deref())
+        .flatten()
+}
+
 /// No family: the host answers the media's first want, whose family the target carries.
 fn fetch_target(
     media_id: u32,
     family: Option<Family>,
+    language: Option<&str>,
     group_id: Option<u32>,
     item_id: Option<u32>,
 ) -> R<Target> {
-    host::media_acquisition_context(media_id, family, group_id, item_id)?.ok_or_else(|| {
-        Error::grab_with("download.grab.errors.media_not_found", media_id.to_string())
-    })
+    host::media_acquisition_context(media_id, family, language, group_id, item_id)?.ok_or_else(
+        || Error::grab_with("download.grab.errors.media_not_found", media_id.to_string()),
+    )
 }
 
-/// A target of a kind this plugin does not acquire is refused, not searched.
-fn load_target(media_id: u32, group_id: Option<u32>, item_id: Option<u32>) -> R<(Target, Media)> {
-    let mut target = fetch_target(media_id, None, group_id, item_id)?;
+/// A target of a kind this plugin does not acquire is refused, not searched. `language` picks a
+/// book's want; none takes the first unsatisfied one.
+fn load_target(
+    media_id: u32,
+    group_id: Option<u32>,
+    item_id: Option<u32>,
+    language: Option<&str>,
+) -> R<(Target, Media)> {
+    let mut target = fetch_target(media_id, None, language, group_id, item_id)?;
     if target.kind == "book"
+        && language.is_none()
         && target
             .want
             .as_ref()
             .is_some_and(|w| w.decision == WantDecision::Skip)
     {
-        // The host answers the first want; a book with only a later family missing is searched for that one.
-        for family in [Family::Text, Family::Audio]
-            .into_iter()
-            .filter(|f| *f != target.family)
-        {
-            let next = fetch_target(media_id, Some(family), group_id, item_id)?;
-            if next
-                .want
+        let page = host::acquisition_candidates(&CandidatesQuery {
+            kind: Some("book".into()),
+            family: None,
+            media_ids: Some(vec![media_id]),
+            available_on: today(),
+            limit: 50,
+            cursor: None,
+        })?;
+        if let Some(next) = page.items.into_iter().find(|t| {
+            t.want
                 .as_ref()
                 .is_some_and(|w| w.decision != WantDecision::Skip)
-            {
-                target = next;
-                break;
-            }
+        }) {
+            target = next;
         }
     }
     let Some(media) = Media::of(&target.kind, target.family) else {
@@ -595,10 +611,11 @@ pub fn search_releases(
     media_id: u32,
     group_id: Option<u32>,
     item_id: Option<u32>,
+    language: Option<&str>,
     custom: Option<&str>,
     stream: Option<&Stream>,
 ) -> R<Vec<Ranked>> {
-    let (target, _) = load_target(media_id, group_id, item_id)?;
+    let (target, _) = load_target(media_id, group_id, item_id, language)?;
     let Some(want) = &target.want else {
         return Err(Error::grab("download.grab.errors.unprofiled"));
     };
@@ -764,9 +781,10 @@ pub fn grab_release(
     media_id: u32,
     group_id: Option<u32>,
     item_id: Option<u32>,
+    language: Option<&str>,
     manual: Option<Manual>,
 ) -> R<Value> {
-    let (target, media) = load_target(media_id, group_id, item_id)?;
+    let (target, media) = load_target(media_id, group_id, item_id, language)?;
     let client =
         pick_client()?.ok_or_else(|| Error::grab("download.grab.errors.no_download_client"))?;
     if target.want.is_none() {
@@ -784,7 +802,11 @@ pub fn grab_release(
         let (target, media) = title_family(&source_title)
             .filter(|f| target.kind == "book" && *f != target.family)
             .and_then(|f| {
-                host::media_acquisition_context(media_id, Some(f), group_id, item_id).ok()?
+                let ctx =
+                    |l| host::media_acquisition_context(media_id, Some(f), l, group_id, item_id);
+                ctx(book_language(&target))
+                    .ok()?
+                    .or_else(|| ctx(None).ok()?)
             })
             .and_then(|t| Some((Media::of(&t.kind, t.family)?, t)))
             .map_or((target, media), |(media, t)| (t, media));
@@ -916,7 +938,7 @@ fn grab_season_episodes(target: &Target, why: &str) -> R<Value> {
         let (Some(g), Some(i), Some(e)) = (group_id(ep), item_id(ep), numbers(ep).1) else {
             continue;
         };
-        match grab_release(target.media_id, Some(g), Some(i), None) {
+        match grab_release(target.media_id, Some(g), Some(i), None, None) {
             Ok(v) => hashes.push(v["torrentHash"].clone()),
             Err(err) => warn!(
                 "Grab #{} \"{}\" {season}E{} skipped — {err}",
@@ -947,6 +969,7 @@ fn pending(target: &Target) -> R<Option<String>> {
         _ => Ok(history::find_pending_for_media(
             target.media_id.into(),
             family_str(target.family),
+            book_language(target),
         )?
         .map(|h| h.source_title)),
     }
@@ -1029,21 +1052,12 @@ fn try_auto_grab(target: &Target, client: &DownloadClientRow) -> R<bool> {
     skip("every eligible release was unobtainable".into())
 }
 
-/// Candidates arrive sorted by this tuple; a season pack sorts before its episodes and a book's
-/// text want before its audio one (`family_rank`).
+/// Candidates arrive sorted by this tuple; a season pack sorts before its episodes. The last
+/// field is a book want's position among those of its media, the host's order of (family, language).
 pub type Key = (u32, Option<u32>, Option<u32>, u8);
 
-/// A book's targets come text first, then audio.
-pub fn family_rank(f: Family) -> u8 {
-    match f {
-        Family::Video | Family::Text => 0,
-        Family::Audio => 1,
-        Family::Image => 2,
-    }
-}
-
-pub fn key_of(t: &Target) -> Key {
-    (t.media_id, group_id(t), item_id(t), family_rank(t.family))
+pub fn key_of(t: &Target, ordinal: u8) -> Key {
+    (t.media_id, group_id(t), item_id(t), ordinal)
 }
 
 /// Whether a target still has to run in a sweep resumed after `resume`.
@@ -1061,6 +1075,8 @@ pub fn search_missing(media_ids: Option<Vec<u32>>, resume: Option<Key>) -> R<Opt
         return Ok(None);
     };
     let (mut cursor, mut count, mut done, mut current) = (None, 0, resume, None);
+    let mut prev: Option<(u32, Option<u32>, Option<u32>)> = None;
+    let mut ordinal = 0u8;
     let mut packs: Vec<u32> = vec![];
     loop {
         let page = host::acquisition_candidates(&CandidatesQuery {
@@ -1073,7 +1089,14 @@ pub fn search_missing(media_ids: Option<Vec<u32>>, resume: Option<Key>) -> R<Opt
         })?;
         for target in &page.items {
             count += 1;
-            let key = key_of(target);
+            let id = (target.media_id, group_id(target), item_id(target));
+            ordinal = if prev == Some(id) {
+                ordinal.saturating_add(1)
+            } else {
+                0
+            };
+            prev = Some(id);
+            let key = key_of(target, ordinal);
             if !after(key, resume) {
                 continue;
             }
