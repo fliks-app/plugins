@@ -1091,6 +1091,12 @@
           "search": "/:id/episodes/:episodeId/releases",
           "grab": "/:id/episodes/:episodeId/grab"
         }
+      },
+      "book": {
+        "work": {
+          "search": "/:id/releases",
+          "grab": "/:id/grab"
+        }
       }
     }
   },
@@ -1251,6 +1257,8 @@
       "download.config.download_clients.fields.category": "Category",
       "download.config.download_clients.fields.movie_category": "Movie category",
       "download.config.download_clients.fields.series_category": "Series category",
+      "download.config.download_clients.fields.ebook_category": "Ebook category",
+      "download.config.download_clients.fields.audiobook_category": "Audiobook category",
       "download.config.download_clients.labels.new": "New download client",
       "download.config.download_clients.labels.empty": "No download clients configured",
       "download.config.download_clients.labels.test": "Test connection",
@@ -1439,6 +1447,8 @@
       "download.config.download_clients.fields.category": "Catégorie",
       "download.config.download_clients.fields.movie_category": "Catégorie films",
       "download.config.download_clients.fields.series_category": "Catégorie séries",
+      "download.config.download_clients.fields.ebook_category": "Catégorie livres",
+      "download.config.download_clients.fields.audiobook_category": "Catégorie livres audio",
       "download.config.download_clients.labels.new": "Nouveau client de téléchargement",
       "download.config.download_clients.labels.empty": "Aucun client de téléchargement configuré",
       "download.config.download_clients.labels.test": "Tester la connexion",

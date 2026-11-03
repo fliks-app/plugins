@@ -389,7 +389,7 @@ async fn start_migrates_and_routes_answer() {
         return;
     };
     let mut db = plugin_db(&h).await;
-    assert_eq!(ledger(&mut db).await.len(), 13);
+    assert_eq!(ledger(&mut db).await.len(), 14);
     assert!(h.health().await.unwrap().ok);
     for p in ["/indexers", "/indexer-sources", "/download-clients"] {
         let r = h.proxy("GET", &format!("{p}/implementations"), None).await;
@@ -531,12 +531,12 @@ async fn an_adopted_ledger_runs_only_the_new_migrations() {
     let ix = add_indexer(&mut db, "old", json!({})).await;
     h.restart().await;
     until("the re-run migrations", MAX, async || {
-        ledger(&mut plugin_db(&h).await).await.len() == 13
+        ledger(&mut plugin_db(&h).await).await.len() == 14
     })
     .await;
     assert!(logged(
         &h,
-        "migrations applied: 0009_indexer_throttle, 0010_poller_state, 0011_download_history_import_lease, 0012_item_history, 0013_indexer_caps_books"
+        "migrations applied: 0009_indexer_throttle, 0010_poller_state, 0011_download_history_import_lease, 0012_item_history, 0013_indexer_caps_books, 0014_download_history_family"
     ));
     let backfilled = scalar_i64(
         &mut db,
@@ -2172,9 +2172,15 @@ async fn retry_import_rearms_only_a_failed_import_and_only_once() {
     h.finish().await;
 }
 
-/// qBittorrent holding one finished torrent whose single file sits under `save`.
-fn finished_qbit(save: &std::path::Path) -> Stub {
-    let save = save.to_string_lossy().into_owned();
+/// A qBittorrent whose one finished torrent `name` (holding `files`) is there from the start, or
+/// from the moment it is added when `after_add`; `delete` empties it.
+fn finished_qbit(save: &std::path::Path, name: &str, files: &[&str], after_add: bool) -> Stub {
+    let (save, name) = (save.to_string_lossy().into_owned(), name.to_owned());
+    let files: Vec<Value> = files
+        .iter()
+        .map(|f| json!({ "name": f, "progress": 1 }))
+        .collect();
+    let held = Mutex::new(!after_add);
     Stub::start(move |_, target, _| {
         let ok = |b: String| (200, vec![], b.into_bytes());
         match target.split('?').next().unwrap_or("") {
@@ -2183,14 +2189,21 @@ fn finished_qbit(save: &std::path::Path) -> Stub {
                 vec![("set-cookie", "SID=s; path=/".into())],
                 b"Ok.".to_vec(),
             ),
+            "/api/v2/torrents/add" => {
+                *held.lock().unwrap() = true;
+                ok("Ok.".into())
+            }
+            "/api/v2/torrents/info" if !*held.lock().unwrap() => ok("[]".into()),
             "/api/v2/torrents/info" => ok(json!([{
-                "hash": HASH, "name": "Some.Movie.2020.1080p", "size": 1000, "downloaded": 1000,
+                "hash": HASH, "name": name, "size": 1000, "downloaded": 1000,
                 "progress": 1, "dlspeed": 0, "ratio": 0, "eta": 0, "state": "stalledUP",
                 "save_path": save, "added_on": 1
             }])
             .to_string()),
-            "/api/v2/torrents/files" => {
-                ok(json!([{ "name": "Some.Movie.2020.1080p.mkv", "progress": 1 }]).to_string())
+            "/api/v2/torrents/files" => ok(json!(files).to_string()),
+            "/api/v2/torrents/delete" => {
+                *held.lock().unwrap() = false;
+                ok(String::new())
             }
             _ => (404, vec![], vec![]),
         }
@@ -2212,7 +2225,12 @@ async fn import_fixture(
     let mut s = setup();
     s.template["ingestRoots"] = json!([dl.to_string_lossy()]);
     let h = Harness::start(s).await?;
-    let qbit = finished_qbit(&dl);
+    let qbit = finished_qbit(
+        &dl,
+        "Some.Movie.2020.1080p",
+        &["Some.Movie.2020.1080p.mkv"],
+        false,
+    );
     let client = add_qbit(&h, &qbit).await;
     let media = add_movie_in(&h, "Some Movie", library.then_some(lib.as_path())).await;
     let mut db = plugin_db(&h).await;
@@ -2248,6 +2266,415 @@ async fn an_import_core_refuses_is_failed_and_announced() {
             .any(|b| format!("{b:?}").contains("ImportFailed")),
         "no acquisition.failed reached the hub"
     );
+    h.finish().await;
+    let _ = std::fs::remove_dir_all(base);
+}
+
+// --- books ---------------------------------------------------------------------------------
+
+const BOOK_RELEASE: &str = "Mirelune.2020.EPUB-GRP";
+
+/// A monitored book with a want per family, anchored to `library`; the host makes the edition on
+/// the first import.
+async fn add_book(h: &Harness, title: &str, library: &std::path::Path, families: &[&str]) -> i64 {
+    let lib: i32 = sqlx::query_scalar(
+        r#"INSERT INTO libraries (name, "mediaTypes") VALUES ($1, '["book"]') RETURNING id"#,
+    )
+    .bind(title)
+    .fetch_one(&h.pool)
+    .await
+    .unwrap();
+    sqlx::query(r#"INSERT INTO library_folders ("libraryId", path) VALUES ($1, $2)"#)
+        .bind(lib)
+        .bind(library.to_string_lossy().into_owned())
+        .execute(&h.pool)
+        .await
+        .unwrap();
+    let media: i32 = sqlx::query_scalar(
+        r#"INSERT INTO media (title, type, year, monitored, "libraryId", "folderName")
+           VALUES ($1, 'book', 2020, true, $2, $1) RETURNING id"#,
+    )
+    .bind(title)
+    .bind(lib)
+    .fetch_one(&h.pool)
+    .await
+    .unwrap();
+    for family in families {
+        sqlx::query(
+            r#"INSERT INTO wants ("mediaId", family, "folderId")
+               VALUES ($1, $2, (SELECT df."folderId" FROM library_default_folders df WHERE df."libraryId" = $3))"#,
+        )
+        .bind(media)
+        .bind(family)
+        .bind(lib)
+        .execute(&h.pool)
+        .await
+        .unwrap();
+    }
+    media.into()
+}
+
+/// A tracker whose every answer, feed or search, is one epub release.
+fn book_tracker() -> Stub {
+    let feed = format!(
+        r#"<?xml version="1.0"?><rss xmlns:torznab="http://torznab.com/schemas/2015/feed"><channel><item><title>{BOOK_RELEASE}</title><link>magnet:?xt=urn:btih:{HASH}&amp;dn={BOOK_RELEASE}</link><size>2000000</size><torznab:attr name="seeders" value="5"/></item></channel></rss>"#
+    )
+    .into_bytes();
+    Stub::start(move |_, _, _| (200, vec![], feed.clone()))
+}
+
+/// The tracker as an enabled indexer advertising both book categories.
+async fn add_book_indexer(h: &Harness, tracker: &Stub) {
+    route(h, "books.test", "10.77.0.1", 80, tracker);
+    let mut db = plugin_db(h).await;
+    let id = add_indexer(
+        &mut db,
+        "books",
+        json!({ "baseUrl": "http://books.test/api", "apiKey": "k" }),
+    )
+    .await;
+    exec(
+        &mut db,
+        format!(r#"UPDATE "indexers" SET "capsCategories" = '3030,7000,7020' WHERE "id" = {id}"#),
+    )
+    .await;
+}
+
+/// `held`: the torrent is in the client from the start, else only once added.
+async fn book_fixture(
+    name: &str,
+    families: &[&str],
+    held: bool,
+    files: &[&str],
+) -> Option<(Harness, std::path::PathBuf, i64, Stub)> {
+    let base = std::path::PathBuf::from("/tmp/fliks-parity/download-port")
+        .join(format!("{name}-{}", std::process::id()));
+    let (dl, lib) = (base.join("dl"), base.join("lib"));
+    std::fs::create_dir_all(&dl).unwrap();
+    std::fs::create_dir_all(&lib).unwrap();
+    for f in files {
+        std::fs::write(dl.join(f), b"not really a book").unwrap();
+    }
+    let mut s = setup();
+    s.template["ingestRoots"] = json!([dl.to_string_lossy()]);
+    let h = Harness::start(s).await?;
+    let qbit = finished_qbit(&dl, BOOK_RELEASE, files, !held);
+    let client = add_qbit(&h, &qbit).await;
+    let mut db = plugin_db(&h).await;
+    exec(
+        &mut db,
+        format!(
+            r#"UPDATE "download_clients" SET "settings" = "settings" || '{{"ebookCategory": "ebooks"}}'::jsonb WHERE "id" = {client}"#
+        ),
+    )
+    .await;
+    let media = add_book(&h, "Mirelune", &lib, families).await;
+    Some((h, base, media, qbit))
+}
+
+fn hub_saw(events: &mut tokio::sync::broadcast::Receiver<Arc<Bus>>, what: &[&str]) -> bool {
+    std::iter::from_fn(|| events.try_recv().ok()).any(|b| {
+        let d = format!("{b:?}");
+        what.iter().all(|w| d.contains(w))
+    })
+}
+
+/// A wanted book is found by the sweep per family, grabbed under its ebook category, imported
+/// from its book files and announced with its family and no unit.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_book_is_acquired_from_want_to_import() {
+    let Some((h, base, media, qbit)) =
+        book_fixture("book", &["text", "audio"], false, &["Mirelune.epub"]).await
+    else {
+        return;
+    };
+    let tracker = book_tracker();
+    add_book_indexer(&h, &tracker).await;
+    let mut events = h.st.hub.subscribe();
+
+    h.job(
+        "SearchMissing",
+        Some(&json!({ "mediaIds": [media] }).to_string()),
+    )
+    .await
+    .unwrap();
+    let searched: Vec<String> = tracker.hits().into_iter().map(|x| x.target).collect();
+    for cat in ["cat=7020", "cat=3030"] {
+        assert!(
+            searched.iter().any(|t| t.contains(cat)),
+            "a search per family: {searched:?}"
+        );
+    }
+    let add = qbit.hits_to("/api/v2/torrents/add");
+    assert_eq!(add.len(), 1, "only the text target takes the epub");
+    assert!(add[0].body.contains("category=ebooks"), "{}", add[0].body);
+    assert!(hub_saw(&mut events, &["AcquisitionGrabbed", "Text"]));
+
+    let mut db = plugin_db(&h).await;
+    let (family, language): (Option<String>, Option<String>) = sqlx::query_as(
+        r#"SELECT "family", "language" FROM "download_history" WHERE "torrentHash" = $1 AND "mediaId" = $2"#,
+    )
+    .bind(HASH)
+    .bind(media as i32)
+    .fetch_one(&mut db)
+    .await
+    .unwrap();
+    assert_eq!((family.as_deref(), language), (Some("text"), None));
+
+    h.job("ImportCompleted", None).await.unwrap();
+    let done: i64 = scalar_i64(
+        &mut db,
+        format!(r#"SELECT count(*) FROM "download_history" WHERE "mediaId" = {media} AND "status" = 'completed'"#),
+    )
+    .await;
+    assert_eq!(done, 1);
+    assert!(hub_saw(&mut events, &["ImportComplete"]));
+    let editions: Vec<String> =
+        sqlx::query_scalar(r#"SELECT family FROM editions WHERE "mediaId" = $1 ORDER BY family"#)
+            .bind(media as i32)
+            .fetch_all(&h.pool)
+            .await
+            .unwrap();
+    assert_eq!(editions, ["text"]);
+    h.finish().await;
+    let _ = std::fs::remove_dir_all(base);
+}
+
+/// The feed names no family: the book's RSS reads its categories from the caps and tries each
+/// target the host lists.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_rss_sweep_grabs_a_book_through_its_targets() {
+    let Some((h, base, media, qbit)) =
+        book_fixture("book-rss", &["text", "audio"], false, &["Mirelune.epub"]).await
+    else {
+        return;
+    };
+    let tracker = book_tracker();
+    add_book_indexer(&h, &tracker).await;
+
+    h.job("RssSync", None).await.unwrap();
+    let hits = tracker.hits();
+    assert!(
+        hits[0].target.contains("t=search&q=&cat=2000,7020,3030"),
+        "{:?}",
+        hits[0].target
+    );
+    assert_eq!(qbit.hits_to("/api/v2/torrents/add").len(), 1);
+    let mut db = plugin_db(&h).await;
+    let family: Option<String> =
+        sqlx::query_scalar(r#"SELECT "family" FROM "download_history" WHERE "mediaId" = $1"#)
+            .bind(media as i32)
+            .fetch_one(&mut db)
+            .await
+            .unwrap();
+    assert_eq!(family.as_deref(), Some("text"));
+    h.finish().await;
+    let _ = std::fs::remove_dir_all(base);
+}
+
+/// An edition already in another language is the host's `ERR_VALIDATION`: the row fails once and
+/// stays failed.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_book_edition_in_another_language_fails_its_import_once() {
+    let Some((h, base, media, qbit)) =
+        book_fixture("book-lang", &["text"], true, &["Mirelune.epub"]).await
+    else {
+        return;
+    };
+    sqlx::query(r#"UPDATE wants SET language = 'en' WHERE "mediaId" = $1"#)
+        .bind(media as i32)
+        .execute(&h.pool)
+        .await
+        .unwrap();
+    sqlx::query(r#"INSERT INTO editions ("mediaId", family, language) VALUES ($1, 'text', 'fr')"#)
+        .bind(media as i32)
+        .execute(&h.pool)
+        .await
+        .unwrap();
+    let mut db = plugin_db(&h).await;
+    let client = scalar_i64(
+        &mut db,
+        r#"SELECT min("id")::bigint FROM "download_clients""#,
+    )
+    .await;
+    let id = scalar_i64(
+        &mut db,
+        format!(
+            r#"INSERT INTO "download_history" ("sourceTitle", "quality", "status", "torrentHash", "downloadClientId", "mediaId", "grabSource", "family", "language")
+               VALUES ('{BOOK_RELEASE}', 'EPUB', 'grabbed', '{HASH}', {client}, {media}, 'auto', 'text', 'en') RETURNING "id"::bigint"#
+        ),
+    )
+    .await;
+    let mut rx = h.st.hub.subscribe();
+    h.job("ImportCompleted", None).await.unwrap();
+    let (status, message) = status_of(&mut db, id).await;
+    assert_eq!(status, "import_failed");
+    assert!(message.is_some_and(|m| !m.is_empty()));
+    assert!(hub_saw(&mut rx, &["ImportFailed"]));
+    h.job("ImportCompleted", None).await.unwrap();
+    assert_eq!(status_of(&mut db, id).await.0, "import_failed");
+    assert_eq!(
+        qbit.hits_to("/api/v2/torrents/files").len(),
+        1,
+        "not retried"
+    );
+    h.finish().await;
+    let _ = std::fs::remove_dir_all(base);
+}
+
+/// A finished torrent holding `files` for a book wished in `families`, claimed by one history row
+/// of `family` (none: auto-matched); the import has run once.
+async fn imported_book(
+    name: &str,
+    families: &[&str],
+    files: &[&str],
+    family: Option<&str>,
+) -> Option<(Harness, std::path::PathBuf, i64, i64, Stub)> {
+    let (h, base, media, qbit) = book_fixture(name, families, true, files).await?;
+    let mut db = plugin_db(&h).await;
+    let client = scalar_i64(
+        &mut db,
+        r#"SELECT min("id")::bigint FROM "download_clients""#,
+    )
+    .await;
+    let (cols, vals) = family.map_or((String::new(), String::new()), |f| {
+        (r#", "family""#.into(), format!(", '{f}'"))
+    });
+    // The release title names the formats its files carry, as an indexer's does.
+    let title = ["epub", "m4b"]
+        .iter()
+        .filter(|e| files.iter().any(|f| f.ends_with(*e)))
+        .fold("Mirelune.2020".to_owned(), |t, e| {
+            format!("{t}.{}", e.to_uppercase())
+        })
+        + "-GRP";
+    let id = scalar_i64(
+        &mut db,
+        format!(
+            r#"INSERT INTO "download_history" ("sourceTitle", "quality", "status", "torrentHash", "downloadClientId", "mediaId", "grabSource"{cols})
+               VALUES ('{title}', 'EPUB', 'grabbed', '{HASH}', {client}, {media}, 'auto'{vals}) RETURNING "id"::bigint"#
+        ),
+    )
+    .await;
+    h.job("ImportCompleted", None).await.unwrap();
+    Some((h, base, media, id, qbit))
+}
+
+async fn editions_of(h: &Harness, media: i64) -> Vec<String> {
+    sqlx::query_scalar(r#"SELECT family FROM editions WHERE "mediaId" = $1 ORDER BY family"#)
+        .bind(media as i32)
+        .fetch_all(&h.pool)
+        .await
+        .unwrap()
+}
+
+/// A torrent of another family than the book wishes is never deleted nor blocklisted, whether
+/// its row names a family or was auto-matched.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn an_audiobook_torrent_on_a_text_only_book_is_kept() {
+    for (name, family) in [("book-kept-text", Some("text")), ("book-kept-none", None)] {
+        let Some((h, base, media, id, qbit)) =
+            imported_book(name, &["text"], &["Mirelune.m4b"], family).await
+        else {
+            return;
+        };
+        let mut db = plugin_db(&h).await;
+        let (status, message) = status_of(&mut db, id).await;
+        assert_eq!(status, "import_failed", "{name}: {message:?}");
+        assert_eq!(qbit.hits_to("/api/v2/torrents/delete").len(), 0, "{name}");
+        let blocked = scalar_i64(&mut db, r#"SELECT count(*) FROM "blocklist""#).await;
+        assert_eq!(blocked, 0, "{name}");
+        assert!(editions_of(&h, media).await.is_empty(), "{name}");
+        h.finish().await;
+        let _ = std::fs::remove_dir_all(base);
+    }
+}
+
+/// One torrent with the book's ebook and audiobook ingests each wished family, the row learning
+/// the first. The harness has no streaming engine, which an audio ingest needs: the ebook is
+/// imported and the audiobook's failed ingest does not fail the row.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_torrent_with_both_families_ingests_each_wished_family() {
+    let Some((h, base, media, id, qbit)) = imported_book(
+        "book-both",
+        &["text", "audio"],
+        &["Mirelune.epub", "Mirelune.m4b"],
+        None,
+    )
+    .await
+    else {
+        return;
+    };
+    let mut db = plugin_db(&h).await;
+    let (status, message) = status_of(&mut db, id).await;
+    assert_eq!(status, "completed", "{message:?}");
+    assert_eq!(editions_of(&h, media).await, ["text"]);
+    let family: Option<String> =
+        sqlx::query_scalar(r#"SELECT "family" FROM "download_history" WHERE "id" = $1::int"#)
+            .bind(id as i32)
+            .fetch_one(&mut db)
+            .await
+            .unwrap();
+    assert_eq!(family.as_deref(), Some("text"));
+    assert_eq!(qbit.hits_to("/api/v2/torrents/delete").len(), 0);
+    h.finish().await;
+    let _ = std::fs::remove_dir_all(base);
+}
+
+/// A file of a family the release does not name (a companion pdf in an audiobook torrent) is not
+/// imported as that family.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_companion_file_of_an_unnamed_family_is_not_imported() {
+    let Some((h, base, media, _, qbit)) = imported_book(
+        "book-companion",
+        &["text", "audio"],
+        &["Mirelune.m4b", "Mirelune - Companion.pdf"],
+        Some("audio"),
+    )
+    .await
+    else {
+        return;
+    };
+    assert!(editions_of(&h, media).await.is_empty());
+    assert_eq!(qbit.hits_to("/api/v2/torrents/delete").len(), 0);
+    h.finish().await;
+    let _ = std::fs::remove_dir_all(base);
+}
+
+/// A family the book does not wish is left alone: the wished one imports, nothing is deleted.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn an_unwished_family_in_a_torrent_is_not_imported_nor_deleted() {
+    let Some((h, base, media, id, qbit)) = imported_book(
+        "book-unwished",
+        &["text"],
+        &["Mirelune.epub", "Mirelune.m4b"],
+        Some("text"),
+    )
+    .await
+    else {
+        return;
+    };
+    let mut db = plugin_db(&h).await;
+    assert_eq!(status_of(&mut db, id).await.0, "completed");
+    assert_eq!(editions_of(&h, media).await, ["text"]);
+    assert_eq!(qbit.hits_to("/api/v2/torrents/delete").len(), 0);
+    h.finish().await;
+    let _ = std::fs::remove_dir_all(base);
+}
+
+/// A torrent with no media file of any family is still a dud: failed, blocklisted, removed.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_torrent_without_any_media_file_is_removed_and_blocklisted() {
+    let Some((h, base, _media, id, qbit)) =
+        imported_book("book-dud", &["text"], &["readme.nfo"], Some("text")).await
+    else {
+        return;
+    };
+    let mut db = plugin_db(&h).await;
+    assert_eq!(status_of(&mut db, id).await.0, "failed");
+    assert_eq!(qbit.hits_to("/api/v2/torrents/delete").len(), 1);
+    let blocked = scalar_i64(&mut db, r#"SELECT count(*) FROM "blocklist""#).await;
+    assert_eq!(blocked, 1);
     h.finish().await;
     let _ = std::fs::remove_dir_all(base);
 }
