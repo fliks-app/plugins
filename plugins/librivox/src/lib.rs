@@ -37,6 +37,14 @@ fn api_client() -> Live {
     }
 }
 
+/// The catalogue API for the search route, which the host does not pace: one request per second.
+fn search_client() -> Live {
+    Live {
+        gap: Duration::from_secs(1),
+        ..api_client()
+    }
+}
+
 /// The audio files: one request per second, a section is at most 128 MiB.
 fn file_client() -> Live {
     Live {
@@ -114,3 +122,13 @@ impl MetadataProvider for LibriVox {
 }
 
 export_provider!(LibriVox);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_search_route_is_paced() {
+        assert!(!search_client().gap.is_zero());
+    }
+}

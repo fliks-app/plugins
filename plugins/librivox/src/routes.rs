@@ -1,7 +1,7 @@
 //! The search table and its add action.
 use crate::api;
 use crate::parse::NS;
-use crate::{SOURCE, api_client};
+use crate::{SOURCE, api_client, search_client};
 use direct_source::{Fail, host};
 use fliks_plugin_sdk::router::{Request, Response, Router};
 use fliks_plugin_sdk_provider::ProviderError;
@@ -27,7 +27,7 @@ fn fail(e: ProviderError) -> Response {
 fn search(r: &Request) -> Result<Response, String> {
     let page = r.query("page").and_then(|p| p.parse().ok()).unwrap_or(1);
     match api::search_books(
-        &api_client(),
+        &search_client(),
         r.query("q").unwrap_or(""),
         r.query("language"),
         page,

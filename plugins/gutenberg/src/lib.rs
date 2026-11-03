@@ -35,6 +35,14 @@ fn api_client() -> Live {
     }
 }
 
+/// The catalogue API for the search route, which the host does not pace: one request per second.
+fn search_client() -> Live {
+    Live {
+        gap: Duration::from_secs(1),
+        ..api_client()
+    }
+}
+
 /// The book files: one request every two seconds, an EPUB is at most 64 MiB.
 fn file_client() -> Live {
     Live {
@@ -102,3 +110,13 @@ impl MetadataProvider for Gutenberg {
 }
 
 export_provider!(Gutenberg);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_search_route_is_paced() {
+        assert!(!search_client().gap.is_zero());
+    }
+}
