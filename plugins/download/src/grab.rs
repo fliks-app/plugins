@@ -1325,4 +1325,30 @@ mod tests {
         assert!(ingestable("Dune", Family::Audio));
         assert!(ingestable("Dune wav", Family::Text));
     }
+
+    #[test]
+    fn the_format_table_follows_the_hosts_ingest_lists() {
+        use crate::poller::{AUDIO_EXTS, TEXT_EXTS};
+        // `alac` rides `.m4a` and `kf8` is `.azw3`: names, not extensions.
+        let alias = ["alac", "kf8"];
+        for (name, family, ok) in BOOK_FORMATS {
+            let exts: &[&str] = if family == Family::Audio {
+                &AUDIO_EXTS
+            } else {
+                &TEXT_EXTS
+            };
+            let listed = exts.contains(&format!(".{name}").as_str());
+            assert_eq!(listed || alias.contains(&name), ok, "{name}");
+        }
+        for e in AUDIO_EXTS
+            .iter()
+            .chain(&TEXT_EXTS)
+            .filter(|e| **e != ".cbz")
+        {
+            assert!(
+                BOOK_FORMATS.iter().any(|(n, ..)| format!(".{n}") == **e),
+                "{e}"
+            );
+        }
+    }
 }
