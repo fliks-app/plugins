@@ -6,7 +6,9 @@ use crate::db::{
     DownloadClientRow, HistoryRow, blocklist, clients, history, indexers, stalled, state,
 };
 use crate::error::{Error, R};
-use crate::grab::{coverage_columns, family_of, family_str, group_item_ids, identify};
+use crate::grab::{
+    coverage_columns, family_of, family_str, group_item_ids, identify, title_formats,
+};
 use crate::util::{decode_html_entities, js_number, now_ms, parse_date_ms};
 use fliks_plugin_sdk::bindings::fliks::plugin::types::{
     AcquisitionEvent, DownloadProgress, DownloadState, Failed, Family, Imported, IngestRequest,
@@ -801,7 +803,10 @@ fn intake(h: &HistoryRow, media: u32, files: &[TorrentFile], save: &str) -> R<Ve
             .want
             .as_ref()
             .is_none_or(|w| w.decision != WantDecision::Skip);
-        if own == Some(family) || missing || (own.is_none() && out.is_empty()) {
+        let named = title_formats(&h.source_title)
+            .iter()
+            .any(|(f, _)| *f == family);
+        if own == Some(family) || (missing && named) || (own.is_none() && out.is_empty()) {
             out.push(Intake {
                 family,
                 language: target.language,
@@ -865,7 +870,7 @@ fn process_one(h: &HistoryRow, t: &Torrent, client: &DownloadClientRow) -> R<()>
         .as_deref()
         .and_then(family_of)
         .unwrap_or(plan[0].family);
-    let (mut placed, mut files_placed) = (0, 0);
+    let (mut files_placed, mut own_placed) = (0, false);
     for it in plan {
         let (family, key) = (
             it.family,
@@ -875,7 +880,7 @@ fn process_one(h: &HistoryRow, t: &Torrent, client: &DownloadClientRow) -> R<()>
                 format!("download-history:{}:{}", h.id, family_str(it.family))
             },
         );
-        let result = host::library_ingest(&IngestRequest {
+        let result = match host::library_ingest(&IngestRequest {
             idempotency_key: key,
             media_id: media as u32,
             family,
@@ -884,7 +889,18 @@ fn process_one(h: &HistoryRow, t: &Torrent, client: &DownloadClientRow) -> R<()>
             transfer: TransferMode::Copy,
             fallback_quality: None,
             source_label: h.source_title.clone(),
-        })?;
+        }) {
+            Ok(r) => r,
+            Err(e) if family != base && !Error::from(e.clone()).is_unknown_outcome() => {
+                warn!(
+                    "Import[{}]: the {} ingest failed: {e}",
+                    h.source_title,
+                    family_str(family)
+                );
+                continue;
+            }
+            Err(e) => return Err(e.into()),
+        };
         let ingested = classify(&result);
         if ingested == Ingested::NothingPlaced {
             warn!(
@@ -894,7 +910,9 @@ fn process_one(h: &HistoryRow, t: &Torrent, client: &DownloadClientRow) -> R<()>
             );
             continue;
         }
-        placed += 1;
+        if family == base {
+            own_placed = true;
+        }
         files_placed += result.imported.len();
         let quality = match (family == base, result.imported.first()) {
             (false, Some(f)) => f.quality.clone(),
@@ -912,7 +930,7 @@ fn process_one(h: &HistoryRow, t: &Torrent, client: &DownloadClientRow) -> R<()>
             &h.source_title,
         );
     }
-    if placed == 0 {
+    if !own_placed {
         let msg = format!(
             "Import failed: no file could be placed under the library root for \"{}\"",
             t.name
@@ -1091,7 +1109,6 @@ fn fmt_js(f: f64) -> String {
 /// Whether a torrent of a book still holds finished files of another wished, missing family;
 /// when that cannot be told, it does.
 fn holds_unimported(row: &HistoryRow, client: &DownloadClientRow, t: &Torrent) -> bool {
-    let own = row.family.as_deref().and_then(family_of);
     let Some(media) = row.media_id else {
         return false;
     };
@@ -1104,7 +1121,7 @@ fn holds_unimported(row: &HistoryRow, client: &DownloadClientRow, t: &Torrent) -
     let save = t.save_path.clone().unwrap_or_default();
     [Family::Text, Family::Audio]
         .into_iter()
-        .filter(|f| Some(*f) != own && !paths_of(&files, &save, *f).is_empty())
+        .filter(|f| !paths_of(&files, &save, *f).is_empty())
         .any(
             |f| match host::media_acquisition_context(media as u32, Some(f), None, None) {
                 Ok(target) => target
@@ -1162,7 +1179,8 @@ pub fn clean_seeded() -> R<()> {
         if reason.is_empty() {
             continue;
         }
-        if holds_unimported(row, client, t) {
+        // Retention bounds the keep; only a ratio is overridden.
+        if !reason.starts_with("retention") && holds_unimported(row, client, t) {
             info!(
                 "SeedCleanup: keeping \"{}\" ({reason}), it holds files of a wished family not yet imported",
                 t.name

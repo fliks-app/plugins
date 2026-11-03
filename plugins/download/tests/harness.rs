@@ -2540,11 +2540,19 @@ async fn imported_book(
     let (cols, vals) = family.map_or((String::new(), String::new()), |f| {
         (r#", "family""#.into(), format!(", '{f}'"))
     });
+    // The release title names the formats its files carry, as an indexer's does.
+    let title = ["epub", "m4b"]
+        .iter()
+        .filter(|e| files.iter().any(|f| f.ends_with(*e)))
+        .fold("Mirelune.2020".to_owned(), |t, e| {
+            format!("{t}.{}", e.to_uppercase())
+        })
+        + "-GRP";
     let id = scalar_i64(
         &mut db,
         format!(
             r#"INSERT INTO "download_history" ("sourceTitle", "quality", "status", "torrentHash", "downloadClientId", "mediaId", "grabSource"{cols})
-               VALUES ('{BOOK_RELEASE}', 'EPUB', 'grabbed', '{HASH}', {client}, {media}, 'auto'{vals}) RETURNING "id"::bigint"#
+               VALUES ('{title}', 'EPUB', 'grabbed', '{HASH}', {client}, {media}, 'auto'{vals}) RETURNING "id"::bigint"#
         ),
     )
     .await;
@@ -2584,7 +2592,7 @@ async fn an_audiobook_torrent_on_a_text_only_book_is_kept() {
 
 /// One torrent with the book's ebook and audiobook ingests each wished family, the row learning
 /// the first. The harness has no streaming engine, which an audio ingest needs: the ebook is
-/// imported and the audiobook's ingest is the refusal.
+/// imported and the audiobook's failed ingest does not fail the row.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_torrent_with_both_families_ingests_each_wished_family() {
     let Some((h, base, media, id, qbit)) = imported_book(
@@ -2599,11 +2607,7 @@ async fn a_torrent_with_both_families_ingests_each_wished_family() {
     };
     let mut db = plugin_db(&h).await;
     let (status, message) = status_of(&mut db, id).await;
-    assert_eq!(status, "import_failed", "{message:?}");
-    assert!(
-        message.is_some_and(|m| m.contains("streaming engine")),
-        "the audiobook was ingested"
-    );
+    assert_eq!(status, "completed", "{message:?}");
     assert_eq!(editions_of(&h, media).await, ["text"]);
     let family: Option<String> =
         sqlx::query_scalar(r#"SELECT "family" FROM "download_history" WHERE "id" = $1::int"#)
@@ -2612,6 +2616,26 @@ async fn a_torrent_with_both_families_ingests_each_wished_family() {
             .await
             .unwrap();
     assert_eq!(family.as_deref(), Some("text"));
+    assert_eq!(qbit.hits_to("/api/v2/torrents/delete").len(), 0);
+    h.finish().await;
+    let _ = std::fs::remove_dir_all(base);
+}
+
+/// A file of a family the release does not name (a companion pdf in an audiobook torrent) is not
+/// imported as that family.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_companion_file_of_an_unnamed_family_is_not_imported() {
+    let Some((h, base, media, _, qbit)) = imported_book(
+        "book-companion",
+        &["text", "audio"],
+        &["Mirelune.m4b", "Mirelune - Companion.pdf"],
+        Some("audio"),
+    )
+    .await
+    else {
+        return;
+    };
+    assert!(editions_of(&h, media).await.is_empty());
     assert_eq!(qbit.hits_to("/api/v2/torrents/delete").len(), 0);
     h.finish().await;
     let _ = std::fs::remove_dir_all(base);

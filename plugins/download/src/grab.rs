@@ -89,7 +89,7 @@ const BOOK_FORMATS: [(&str, Family, bool); 18] = [
 ];
 
 /// The formats a title names, as (family, accepted).
-fn title_formats(title: &str) -> Vec<(Family, bool)> {
+pub(crate) fn title_formats(title: &str) -> Vec<(Family, bool)> {
     static WORD: std::sync::LazyLock<regex::Regex> =
         std::sync::LazyLock::new(|| regex::Regex::new(r"[a-z0-9]+").unwrap());
     let lower = title.to_lowercase();
@@ -327,6 +327,7 @@ pub fn pick(sorted: &[Ranked], target: &Target) -> Vec<usize> {
                 !book
                     || (r.scored.allowed
                         && r.scored.language_allowed
+                        && title_family(&r.raw.title).is_none_or(|f| f == target.family)
                         && ingestable(&r.raw.title, target.family))
             })
             .filter(|(_, r)| !season_only || r.scored.whole_group)
@@ -557,7 +558,29 @@ fn fetch_target(
 
 /// A target of a kind this plugin does not acquire is refused, not searched.
 fn load_target(media_id: u32, group_id: Option<u32>, item_id: Option<u32>) -> R<(Target, Media)> {
-    let target = fetch_target(media_id, None, group_id, item_id)?;
+    let mut target = fetch_target(media_id, None, group_id, item_id)?;
+    if target.kind == "book"
+        && target
+            .want
+            .as_ref()
+            .is_some_and(|w| w.decision == WantDecision::Skip)
+    {
+        // The host answers the first want; a book with only a later family missing is searched for that one.
+        for family in [Family::Text, Family::Audio]
+            .into_iter()
+            .filter(|f| *f != target.family)
+        {
+            let next = fetch_target(media_id, Some(family), group_id, item_id)?;
+            if next
+                .want
+                .as_ref()
+                .is_some_and(|w| w.decision != WantDecision::Skip)
+            {
+                target = next;
+                break;
+            }
+        }
+    }
     let Some(media) = Media::of(&target.kind, target.family) else {
         info!(
             "Media #{media_id} \"{}\" is a {}: this plugin acquires movies, series and books only",
