@@ -18,19 +18,23 @@ use serde_json::{Map, Value, json};
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
-/// The kinds of work this plugin acquires; the others have no torrent search here.
+/// What a target is acquired as: the download client's category and the log tag.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Video {
+pub enum Media {
     Movie,
     Series,
+    Ebook,
+    Audiobook,
 }
 
-impl Video {
-    /// `None` for `book`, `comic`, `album` and any kind added later.
-    pub fn of(kind: &str) -> Option<Self> {
-        match kind {
-            "movie" => Some(Self::Movie),
-            "series" => Some(Self::Series),
+impl Media {
+    /// `None` for `comic`, `album`, any kind added later and a book of another family.
+    pub fn of(kind: &str, family: Family) -> Option<Self> {
+        match (kind, family) {
+            ("movie", _) => Some(Self::Movie),
+            ("series", _) => Some(Self::Series),
+            ("book", Family::Text) => Some(Self::Ebook),
+            ("book", Family::Audio) => Some(Self::Audiobook),
             _ => None,
         }
     }
@@ -39,8 +43,26 @@ impl Video {
         match self {
             Self::Movie => "movie",
             Self::Series => "series",
+            Self::Ebook => "ebook",
+            Self::Audiobook => "audiobook",
         }
     }
+}
+
+/// The family as stored on a history row.
+pub fn family_str(f: Family) -> &'static str {
+    match f {
+        Family::Video => "video",
+        Family::Audio => "audio",
+        Family::Text => "text",
+        Family::Image => "image",
+    }
+}
+
+pub fn family_of(s: &str) -> Option<Family> {
+    [Family::Video, Family::Audio, Family::Text, Family::Image]
+        .into_iter()
+        .find(|f| family_str(*f) == s)
 }
 
 /// What a video target asks for: the whole work, a season or one episode.
@@ -244,11 +266,13 @@ fn rank(target: &Target, indexers: &[IndexerRow], releases: &[Release]) -> R<Vec
 /// A season target takes packs only; its loose episodes are grabbed as episode targets.
 pub fn pick(sorted: &[Ranked], target: &Target) -> Vec<usize> {
     let season_only = is_season(target);
+    let book = target.kind == "book";
     match &target.want {
         Some(w) if w.decision != WantDecision::Skip => sorted
             .iter()
             .enumerate()
             .filter(|(_, r)| r.scored.rejections.is_empty())
+            .filter(|(_, r)| !book || (r.scored.allowed && r.scored.language_allowed))
             .filter(|(_, r)| !season_only || r.scored.whole_group)
             .map(|(i, _)| i)
             .take(3)
@@ -463,6 +487,7 @@ fn author_of(t: &Target) -> Option<&str> {
         .filter(|n| !n.is_empty())
 }
 
+/// A route names no family: the host answers the media's first want, whose family the target carries.
 fn fetch_target(media_id: u32, group_id: Option<u32>, item_id: Option<u32>) -> R<Target> {
     host::media_acquisition_context(media_id, None, group_id, item_id)?.ok_or_else(|| {
         Error::grab_with("download.grab.errors.media_not_found", media_id.to_string())
@@ -470,16 +495,16 @@ fn fetch_target(media_id: u32, group_id: Option<u32>, item_id: Option<u32>) -> R
 }
 
 /// A target of a kind this plugin does not acquire is refused, not searched.
-fn load_target(media_id: u32, group_id: Option<u32>, item_id: Option<u32>) -> R<(Target, Video)> {
+fn load_target(media_id: u32, group_id: Option<u32>, item_id: Option<u32>) -> R<(Target, Media)> {
     let target = fetch_target(media_id, group_id, item_id)?;
-    let Some(video) = Video::of(&target.kind) else {
+    let Some(media) = Media::of(&target.kind, target.family) else {
         info!(
-            "Media #{media_id} \"{}\" is a {}: this plugin acquires movies and series only",
+            "Media #{media_id} \"{}\" is a {}: this plugin acquires movies, series and books only",
             target.title, target.kind
         );
         return Err(Error::grab("download.grab.errors.unsupported_kind"));
     };
-    Ok((target, video))
+    Ok((target, media))
 }
 
 pub fn search_releases(
@@ -489,11 +514,7 @@ pub fn search_releases(
     custom: Option<&str>,
     stream: Option<&Stream>,
 ) -> R<Vec<Ranked>> {
-    // A book is searched here; grabbing and importing one wait for the host to serve its family.
-    let target = fetch_target(media_id, group_id, item_id)?;
-    if target.kind != "book" && Video::of(&target.kind).is_none() {
-        return Err(Error::grab("download.grab.errors.unsupported_kind"));
-    }
+    let (target, _) = load_target(media_id, group_id, item_id)?;
     let Some(want) = &target.want else {
         return Err(Error::grab("download.grab.errors.unprofiled"));
     };
@@ -535,7 +556,9 @@ fn title_from_url(url: &str) -> String {
 struct GrabArgs<'a> {
     media_id: u32,
     client: &'a DownloadClientRow,
-    video: Video,
+    media: Media,
+    family: Family,
+    language: Option<String>,
     label: &'a str,
     source_title: String,
     download_url: String,
@@ -556,14 +579,14 @@ struct GrabArgs<'a> {
 fn grab_and_record(a: GrabArgs) -> R<String> {
     info!(
         "AutoGrab[{}]: sending \"{}\" to the download client — {}",
-        a.video.as_str(),
+        a.media.as_str(),
         a.source_title,
         fliks_plugin_sdk::log::redact_url(&a.download_url)
     );
     let hash = client::add(
         a.client,
         &a.download_url,
-        a.video.as_str(),
+        a.media.as_str(),
         a.reject_if_present,
     )?;
     let cov = coverage_columns(a.coverage.as_ref());
@@ -573,7 +596,7 @@ fn grab_and_record(a: GrabArgs) -> R<String> {
     {
         info!(
             "AutoGrab[{}]: \"{}\" is already in flight as history #{}",
-            a.video.as_str(),
+            a.media.as_str(),
             a.source_title,
             existing.id
         );
@@ -583,6 +606,8 @@ fn grab_and_record(a: GrabArgs) -> R<String> {
     let row = history::insert_grab(&history::Grab {
         source_title: decode_html_entities(&a.source_title),
         quality: a.quality.clone(),
+        family: Some(family_str(a.family)),
+        language: a.language.clone(),
         torrent_hash: Some(hash.clone()).filter(|h| !h.is_empty()),
         size: Some(a.size).filter(|s| *s != 0),
         info_url: a.info_url.filter(|u| !u.is_empty()),
@@ -596,7 +621,7 @@ fn grab_and_record(a: GrabArgs) -> R<String> {
     })?;
     let ev = AcquisitionEvent::Grabbed(Grabbed {
         media_id: a.media_id,
-        family: Family::Video,
+        family: a.family,
         unit: a.unit,
     });
     if let Err(e) = host::events_publish(&[ev]) {
@@ -610,7 +635,7 @@ fn grab_and_record(a: GrabArgs) -> R<String> {
     }
     info!(
         "AutoGrab[{}]: grabbed \"{}\" for \"{}\"",
-        a.video.as_str(),
+        a.media.as_str(),
         a.source_title,
         a.label
     );
@@ -623,7 +648,7 @@ fn pick_client() -> R<Option<DownloadClientRow>> {
 
 fn args_for<'a>(
     t: &'a Target,
-    video: Video,
+    media: Media,
     client: &'a DownloadClientRow,
     r: &Ranked,
     grab_source: &'static str,
@@ -631,7 +656,9 @@ fn args_for<'a>(
     GrabArgs {
         media_id: t.media_id,
         client,
-        video,
+        media,
+        family: t.family,
+        language: t.language.clone(),
         label: &t.title,
         source_title: r.raw.title.clone(),
         download_url: r.raw.download_url.clone(),
@@ -655,7 +682,7 @@ pub fn grab_release(
     item_id: Option<u32>,
     manual: Option<Manual>,
 ) -> R<Value> {
-    let (target, video) = load_target(media_id, group_id, item_id)?;
+    let (target, media) = load_target(media_id, group_id, item_id)?;
     let client =
         pick_client()?.ok_or_else(|| Error::grab("download.grab.errors.no_download_client"))?;
     if target.want.is_none() {
@@ -707,7 +734,7 @@ pub fn grab_release(
                 " (forced)"
             }
         );
-        let mut a = args_for(&target, video, &client, &scored, "manual");
+        let mut a = args_for(&target, media, &client, &scored, "manual");
         a.info_url = m.info_url;
         a.indexer_id = m.indexer_id;
         a.source_title = source_title;
@@ -724,7 +751,7 @@ pub fn grab_release(
     let mut last = None;
     for i in picks {
         let c = &scored[i];
-        match grab_and_record(args_for(&target, video, &client, c, "manual")) {
+        match grab_and_record(args_for(&target, media, &client, c, "manual")) {
             Ok(hash) => return Ok(json!({ "torrentHash": hash })),
             Err(Error::Unobtainable(m)) => {
                 warn!(
@@ -825,20 +852,24 @@ fn pending(target: &Target) -> R<Option<String>> {
             episode_number: episode.map(Into::into),
             episode_tag_pattern: episode.map(|e| format!("%S{}E{}%", pad2(s), pad2(e))),
         }),
-        _ => Ok(history::find_pending_for_media(target.media_id.into())?.map(|h| h.source_title)),
+        _ => Ok(history::find_pending_for_media(
+            target.media_id.into(),
+            family_str(target.family),
+        )?
+        .map(|h| h.source_title)),
     }
 }
 
 /// Search, pick and grab one automatic target; false when nothing was grabbed.
 fn try_auto_grab(target: &Target, client: &DownloadClientRow) -> R<bool> {
-    let Some(video) = Video::of(&target.kind) else {
+    let Some(media) = Media::of(&target.kind, target.family) else {
         info!(
-            "AutoGrab[{}]: \"{}\" skipped — this plugin acquires movies and series only",
+            "AutoGrab[{}]: \"{}\" skipped — this plugin acquires movies, series and books only",
             target.kind, target.title
         );
         return Ok(false);
     };
-    let kind = video.as_str();
+    let kind = media.as_str();
     let skip = |reason: String| {
         info!("AutoGrab[{kind}]: \"{}\" skipped — {reason}", target.title);
         Ok(false)
@@ -893,7 +924,7 @@ fn try_auto_grab(target: &Target, client: &DownloadClientRow) -> R<bool> {
         ));
     }
     for i in picks {
-        let mut a = args_for(target, video, client, &scored[i], "auto");
+        let mut a = args_for(target, media, client, &scored[i], "auto");
         a.reject_if_present = true;
         match grab_and_record(a) {
             Ok(_) => return Ok(true),
@@ -927,12 +958,13 @@ pub fn search_missing(media_ids: Option<Vec<u32>>, resume: Option<Key>) -> R<Opt
         warn!("SearchMissing: no enabled download client configured");
         return Ok(None);
     };
-    let (mut cursor, mut count, mut last) = (None, 0, resume);
+    // Two families of one book share a key: the resume point is the last key fully behind us.
+    let (mut cursor, mut count, mut done, mut current) = (None, 0, resume, None);
     let mut packs: Vec<u32> = vec![];
     loop {
         let page = host::acquisition_candidates(&CandidatesQuery {
             kind: None,
-            family: Some(Family::Video),
+            family: None,
             media_ids: media_ids.clone(),
             available_on: today(),
             limit: 200,
@@ -944,11 +976,14 @@ pub fn search_missing(media_ids: Option<Vec<u32>>, resume: Option<Key>) -> R<Opt
             if !after(key, resume) {
                 continue;
             }
+            if current != Some(key) {
+                done = current.or(done);
+                current = Some(key);
+            }
             if net::budget().remaining() < Duration::from_millis(config::search_budget_ms()) {
                 info!("SearchMissing: out of time after {count} candidate(s), resuming later");
-                return Ok(last);
+                return Ok(done);
             }
-            last = Some(key);
             if target
                 .want
                 .as_ref()
@@ -1108,31 +1143,31 @@ pub fn rss_sync() -> R<()> {
             }
             let page = host::acquisition_candidates(&CandidatesQuery {
                 kind: None,
-                family: Some(Family::Video),
+                family: None,
                 media_ids: Some(vec![m.media_id]),
                 available_on: today(),
                 limit: 500,
                 cursor: None,
             })?;
-            let target = page
+            // `releases.match` names no family: a book is tried on each target it has.
+            let targets: Vec<&Target> = page
                 .items
                 .iter()
-                .find(|it| numbers(it) == (m.season_number, m.episode_number));
-            match target {
-                Some(t)
-                    if t.want
-                        .as_ref()
-                        .is_some_and(|w| w.decision != WantDecision::Skip) =>
+                .filter(|it| numbers(it) == (m.season_number, m.episode_number))
+                .collect();
+            if targets.is_empty() && page.cursor.is_some() {
+                warn!(
+                    "RssSync: \"{}\" matched #{} but its candidate was past the first page — skipped",
+                    release.title, m.media_id
+                );
+            }
+            for t in targets {
+                if t.want
+                    .as_ref()
+                    .is_some_and(|w| w.decision != WantDecision::Skip)
                 {
                     try_auto_grab(t, &client)?;
                 }
-                None if page.cursor.is_some() => {
-                    warn!(
-                        "RssSync: \"{}\" matched #{} but its candidate was past the first page — skipped",
-                        release.title, m.media_id
-                    )
-                }
-                _ => {}
             }
         }
     }

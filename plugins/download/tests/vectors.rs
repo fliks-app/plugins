@@ -308,7 +308,8 @@ fn template_matches_the_published_manifest() {
                     "search": "/:id/episodes/:episodeId/releases",
                     "grab": "/:id/episodes/:episodeId/grab"
                 }
-            }
+            },
+            "book": { "work": { "search": "/:id/releases", "grab": "/:id/grab" } }
         }))
     );
     old["ui"].as_object_mut().unwrap().remove("releasePicker");
@@ -481,12 +482,23 @@ fn pick_release() {
 }
 
 #[test]
-fn only_video_kinds_are_acquired() {
-    use grab::Video;
-    assert_eq!(Video::of("movie"), Some(Video::Movie));
-    assert_eq!(Video::of("series"), Some(Video::Series));
-    for kind in ["book", "comic", "album", "podcast", ""] {
-        assert_eq!(Video::of(kind), None, "{kind}");
+fn movies_series_and_books_of_a_served_family_are_acquired() {
+    use grab::{Media, family_of, family_str};
+    assert_eq!(Media::of("movie", Family::Video), Some(Media::Movie));
+    assert_eq!(Media::of("series", Family::Video), Some(Media::Series));
+    assert_eq!(Media::of("book", Family::Text), Some(Media::Ebook));
+    assert_eq!(Media::of("book", Family::Audio), Some(Media::Audiobook));
+    for (kind, family) in [
+        ("book", Family::Video),
+        ("book", Family::Image),
+        ("comic", Family::Text),
+        ("album", Family::Audio),
+        ("", Family::Video),
+    ] {
+        assert_eq!(Media::of(kind, family), None, "{kind}");
+    }
+    for f in [Family::Video, Family::Audio, Family::Text, Family::Image] {
+        assert_eq!(family_of(family_str(f)), Some(f));
     }
 }
 

@@ -6,7 +6,7 @@ use crate::db::{
     DownloadClientRow, HistoryRow, blocklist, clients, history, indexers, stalled, state,
 };
 use crate::error::R;
-use crate::grab::{coverage_columns, group_item_ids, identify};
+use crate::grab::{coverage_columns, family_of, family_str, group_item_ids, identify};
 use crate::util::{decode_html_entities, js_number, now_ms, parse_date_ms};
 use fliks_plugin_sdk::bindings::fliks::plugin::types::{
     AcquisitionEvent, DownloadProgress, DownloadState, Failed, Family, Imported, IngestRequest,
@@ -22,6 +22,9 @@ use std::time::{Duration, Instant};
 const VIDEO_EXTS: [&str; 8] = [
     ".mkv", ".mp4", ".avi", ".mov", ".ts", ".m2ts", ".wmv", ".flv",
 ];
+/// The host's own book formats (`domain::media`): the ingest refuses any other path.
+const AUDIO_EXTS: [&str; 7] = [".m4b", ".m4a", ".mp3", ".flac", ".ogg", ".opus", ".aac"];
+const TEXT_EXTS: [&str; 6] = [".epub", ".pdf", ".azw3", ".mobi", ".fb2", ".cbz"];
 const ORPHAN_GRACE_MS: i64 = 5 * 60_000;
 const ORPHAN_STATUS_MESSAGE: &str = "Torrent no longer present in download client";
 const RESOLVE_BATCH: usize = 50;
@@ -566,6 +569,8 @@ fn auto_match(all: &[Held]) -> R<()> {
                 history::insert_grab(&history::Grab {
                     source_title: decode_html_entities(&held.t.name),
                     quality: "unknown".into(),
+                    family: None,
+                    language: None,
                     torrent_hash: Some(held.t.hash.clone()).filter(|h| !h.is_empty()),
                     size: Some(held.t.size).filter(|s| *s != 0),
                     info_url: None,
@@ -711,6 +716,15 @@ fn classify(r: &IngestResult) -> Ingested {
     }
 }
 
+/// The family and language a row imports under: its own, else the media's first want.
+fn ingest_target(h: &HistoryRow, media: u32) -> R<(Family, Option<String>)> {
+    if let Some(f) = h.family.as_deref().and_then(family_of) {
+        return Ok((f, h.language.clone()));
+    }
+    let t = host::media_acquisition_context(media, None, None, None)?;
+    Ok(t.map_or((Family::Video, None), |t| (t.family, t.language)))
+}
+
 fn process_one(h: &HistoryRow, t: &Torrent, client: &DownloadClientRow) -> R<()> {
     let Some(files) = client::files(client, &t.hash) else {
         let message = format!("could not list files for \"{}\"", t.name);
@@ -718,19 +732,32 @@ fn process_one(h: &HistoryRow, t: &Torrent, client: &DownloadClientRow) -> R<()>
         return history::set_status(&[h.id], "grabbed", Some(&message));
     };
     let save = t.save_path.clone().unwrap_or_default();
+    let (family, language) = match h.media_id {
+        Some(m) => ingest_target(h, m as u32)?,
+        None => (Family::Video, None),
+    };
+    let exts: &[&str] = match family {
+        Family::Audio => &AUDIO_EXTS,
+        Family::Text => &TEXT_EXTS,
+        _ => &VIDEO_EXTS,
+    };
+    let what = family_str(family);
     let videos: Vec<String> = files
         .iter()
-        .filter(|f| f.progress >= 1.0 && VIDEO_EXTS.contains(&ext_of(&f.name).as_str()))
+        .filter(|f| f.progress >= 1.0 && exts.contains(&ext_of(&f.name).as_str()))
         .map(|f| join_path(&save, &f.name))
         .collect();
     if videos.is_empty() {
         let msg = format!(
-            "Import failed: no valid video file in the download \"{}\"",
+            "Import failed: no valid {what} file in the download \"{}\"",
             t.name
         );
         warn!("Import[{}]: {msg}", h.source_title);
         history::mark_failed(h.id, &msg)?;
-        auto_blocklist(h, "Auto-blocklist: no valid video file in the download");
+        auto_blocklist(
+            h,
+            &format!("Auto-blocklist: no valid {what} file in the download"),
+        );
         if let Err(e) = client::delete(client, &t.hash, true) {
             warn!(
                 "Import[{}]: failed to remove dud torrent: {e}",
@@ -750,8 +777,8 @@ fn process_one(h: &HistoryRow, t: &Torrent, client: &DownloadClientRow) -> R<()>
     let result = host::library_ingest(&IngestRequest {
         idempotency_key: format!("download-history:{}", h.id),
         media_id: media as u32,
-        family: Family::Video,
-        language: None,
+        family,
+        language,
         paths: videos,
         transfer: TransferMode::Copy,
         fallback_quality: None,
@@ -760,7 +787,7 @@ fn process_one(h: &HistoryRow, t: &Torrent, client: &DownloadClientRow) -> R<()>
     let imported = |r: &IngestResult| {
         let ev = AcquisitionEvent::Imported(Imported {
             media_id: media as u32,
-            family: Family::Video,
+            family,
             unit: r.unit.clone(),
             quality: h.quality.clone(),
             source_title: h.source_title.clone(),

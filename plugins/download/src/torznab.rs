@@ -345,6 +345,21 @@ pub fn pick_category(tree: Option<&str>, family: Family) -> Option<u32> {
         .find(|c| tree.split(',').any(|id| id.parse() == Ok(*c)))
 }
 
+/// The RSS feed's categories: video, plus each book family the advertised tree carries.
+/// An unprobed tree adds none: an indexer that lacks a category may refuse the feed.
+pub fn rss_categories(tree: Option<&str>) -> String {
+    let books = tree.into_iter().flat_map(|t| {
+        [Family::Text, Family::Audio]
+            .into_iter()
+            .filter_map(move |f| pick_category(Some(t), f))
+    });
+    std::iter::once(2000)
+        .chain(books)
+        .map(|c| c.to_string())
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
 pub fn parse_caps(body: &str) -> CapsFound {
     let body = &body[..body.floor_char_boundary(MAX_CAPS_BYTES)];
     static MOVIE: LazyLock<Regex> =
@@ -638,7 +653,8 @@ pub async fn rss(ix: &IndexerRow, budget: Budget) -> Result<Vec<Release>, Lapsed
         return Ok(vec![]);
     };
     let url = format!(
-        "{base}?t=search&q=&cat=2000&apikey={}",
+        "{base}?t=search&q=&cat={}&apikey={}",
+        rss_categories(ix.caps_categories.as_deref()),
         encode_uri_component(&key)
     );
     let start = Instant::now();
@@ -951,6 +967,9 @@ mod book_tests {
         );
         assert_eq!(pick_category(None, Family::Audio), Some(3030));
         assert_eq!(pick_category(None, Family::Video), None);
+        assert_eq!(rss_categories(None), "2000");
+        assert_eq!(rss_categories(Some("2000,5000")), "2000");
+        assert_eq!(rss_categories(Some("3030,7000,7020")), "2000,7020,3030");
     }
 
     #[test]

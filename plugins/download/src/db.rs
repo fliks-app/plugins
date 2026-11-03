@@ -8,7 +8,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value as Json};
 
-pub const MIGRATIONS: [(&str, &str); 13] = [
+pub const MIGRATIONS: [(&str, &str); 14] = [
     (
         "0001_initial_schema",
         include_str!("../migrations/0001_initial_schema.sql"),
@@ -60,6 +60,10 @@ pub const MIGRATIONS: [(&str, &str); 13] = [
     (
         "0013_indexer_caps_books",
         include_str!("../migrations/0013_indexer_caps_books.sql"),
+    ),
+    (
+        "0014_download_history_family",
+        include_str!("../migrations/0014_download_history_family.sql"),
     ),
 ];
 
@@ -200,6 +204,8 @@ pub struct HistoryRow {
     pub source_title: String,
     pub quality: String,
     pub language: Option<String>,
+    /// None for a row written before books, or bound by auto-match: the media decides.
+    pub family: Option<String>,
     pub torrent_hash: Option<String>,
     pub size: Option<i64>,
     pub info_url: Option<String>,
@@ -725,13 +731,15 @@ pub mod stalled {
 pub mod history {
     use super::*;
 
-    const COLUMNS: &str = r#""id", "sourceTitle", "quality", "language", "torrentHash", "size", "infoUrl", "status", "statusMessage",
+    const COLUMNS: &str = r#""id", "sourceTitle", "quality", "language", "family", "torrentHash", "size", "infoUrl", "status", "statusMessage",
   "grabSource", "mediaId", "itemId", "seasonId", "indexerId", "downloadClientId", "createdAt", "updatedAt",
   "coverSeasonFrom", "coverSeasonTo", "coverEpisodeFrom", "coverEpisodeTo", "coverCompleteSeries""#;
 
     pub struct Grab {
         pub source_title: String,
         pub quality: String,
+        pub family: Option<&'static str>,
+        pub language: Option<String>,
         pub torrent_hash: Option<String>,
         pub size: Option<i64>,
         pub info_url: Option<String>,
@@ -754,12 +762,14 @@ pub mod history {
         ]
     }
 
-    pub fn find_pending_for_media(media_id: i64) -> R<Option<HistoryRow>> {
+    /// A book wished in two families is pending per family; a row with no family blocks both.
+    pub fn find_pending_for_media(media_id: i64, family: &str) -> R<Option<HistoryRow>> {
         first(
             &format!(
-                r#"SELECT {COLUMNS} FROM "download_history" WHERE "mediaId" = $1 AND "status" IN ('grabbed', 'importing') LIMIT 1"#
+                r#"SELECT {COLUMNS} FROM "download_history" WHERE "mediaId" = $1 AND "status" IN ('grabbed', 'importing')
+          AND ("family" IS NULL OR "family" = $2) LIMIT 1"#
             ),
-            &[int(media_id)],
+            &[int(media_id), text(family)],
         )
     }
 
@@ -934,16 +944,17 @@ pub mod history {
     pub fn insert_grab(g: &Grab) -> R<HistoryRow> {
         let sql = format!(
             r#"INSERT INTO "download_history"
-         ("sourceTitle", "quality", "language", "torrentHash", "size", "infoUrl", "grabSource",
+         ("sourceTitle", "quality", "language", "family", "torrentHash", "size", "infoUrl", "grabSource",
           "mediaId", "itemId", "seasonId", "indexerId", "downloadClientId",
           "coverSeasonFrom", "coverSeasonTo", "coverEpisodeFrom", "coverEpisodeTo", "coverCompleteSeries")
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
        RETURNING {COLUMNS}"#
         );
         let mut p = vec![
             text(&g.source_title),
             text(&g.quality),
-            Param::Null,
+            opt_text(g.language.as_deref()),
+            opt_text(g.family),
             opt_text(g.torrent_hash.as_deref()),
             opt_int(g.size),
             opt_text(g.info_url.as_deref()),
