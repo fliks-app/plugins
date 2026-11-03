@@ -511,3 +511,15 @@ fn the_template_declares_the_key_and_what_the_code_serves() {
     );
     assert_eq!(field["secret"], true);
 }
+
+#[test]
+fn an_svg_logo_is_fetched_as_png() {
+    let images = json!({"logos": [
+        {"file_path": "/a.svg", "vote_average": 9, "iso_639_1": "en"},
+        {"file_path": "/b.png", "vote_average": 1},
+    ]});
+    assert_eq!(
+        pick_logo("https://img", &images, "en"),
+        json!("https://img/original/a.png")
+    );
+}

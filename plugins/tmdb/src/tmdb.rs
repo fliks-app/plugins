@@ -624,6 +624,7 @@ fn id_string(v: &Value) -> Option<String> {
 }
 
 /// Best clearlogo: community vote plus a language bonus, the provider's order breaking ties.
+/// An SVG is fetched as the PNG rendition TMDB serves for it: the image store decodes no SVG.
 pub fn pick_logo(base: &str, images: &Value, prefer: &str) -> Value {
     let bonus = |l: &Value| match get(l, "iso_639_1").as_str() {
         Some(x) if x == prefer => 0.5,
@@ -640,9 +641,16 @@ pub fn pick_logo(base: &str, images: &Value, prefer: &str) -> Value {
             best = Some((l, s));
         }
     }
-    best.map_or(Value::Null, |(l, _)| {
-        image(base, "original", l, "file_path")
-    })
+    best.and_then(|(l, _)| text(l, "file_path"))
+        .map_or(Value::Null, |p| {
+            let p = match p.len().checked_sub(4) {
+                Some(i) if p.is_char_boundary(i) && p[i..].eq_ignore_ascii_case(".svg") => {
+                    format!("{}.png", &p[..i])
+                }
+                _ => p.to_owned(),
+            };
+            json!(format!("{base}/original{p}"))
+        })
 }
 
 /// The top backdrops other than the primary one, by vote.
