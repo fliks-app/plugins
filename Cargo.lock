@@ -1279,7 +1279,7 @@ dependencies = [
 [[package]]
 name = "fliks-plugin-route"
 version = "0.1.0"
-source = "git+https://github.com/fliks-app/fliks?rev=31d8a0ce75e26c2a2b9ebf449d545e25f3cc3762#31d8a0ce75e26c2a2b9ebf449d545e25f3cc3762"
+source = "git+https://github.com/fliks-app/fliks?rev=d1aa3a6af179b2e8973ec20d7e1cc6433e40f321#d1aa3a6af179b2e8973ec20d7e1cc6433e40f321"
 dependencies = [
  "fancy-regex",
 ]
@@ -1287,7 +1287,7 @@ dependencies = [
 [[package]]
 name = "fliks-plugin-sdk"
 version = "0.1.0"
-source = "git+https://github.com/fliks-app/fliks?rev=31d8a0ce75e26c2a2b9ebf449d545e25f3cc3762#31d8a0ce75e26c2a2b9ebf449d545e25f3cc3762"
+source = "git+https://github.com/fliks-app/fliks?rev=d1aa3a6af179b2e8973ec20d7e1cc6433e40f321#d1aa3a6af179b2e8973ec20d7e1cc6433e40f321"
 dependencies = [
  "axum",
  "base64 0.23.1",
@@ -1311,7 +1311,7 @@ dependencies = [
 [[package]]
 name = "fliks-plugin-sdk-provider"
 version = "0.1.0"
-source = "git+https://github.com/fliks-app/fliks?rev=31d8a0ce75e26c2a2b9ebf449d545e25f3cc3762#31d8a0ce75e26c2a2b9ebf449d545e25f3cc3762"
+source = "git+https://github.com/fliks-app/fliks?rev=d1aa3a6af179b2e8973ec20d7e1cc6433e40f321#d1aa3a6af179b2e8973ec20d7e1cc6433e40f321"
 dependencies = [
  "fliks-plugin-sdk",
  "wasip2",
@@ -1321,7 +1321,7 @@ dependencies = [
 [[package]]
 name = "fliks-server"
 version = "5.2.1"
-source = "git+https://github.com/fliks-app/fliks?rev=31d8a0ce75e26c2a2b9ebf449d545e25f3cc3762#31d8a0ce75e26c2a2b9ebf449d545e25f3cc3762"
+source = "git+https://github.com/fliks-app/fliks?rev=d1aa3a6af179b2e8973ec20d7e1cc6433e40f321#d1aa3a6af179b2e8973ec20d7e1cc6433e40f321"
 dependencies = [
  "anyhow",
  "axum",
@@ -1385,7 +1385,7 @@ dependencies = [
 [[package]]
 name = "fliks_domain"
 version = "5.2.1"
-source = "git+https://github.com/fliks-app/fliks?rev=31d8a0ce75e26c2a2b9ebf449d545e25f3cc3762#31d8a0ce75e26c2a2b9ebf449d545e25f3cc3762"
+source = "git+https://github.com/fliks-app/fliks?rev=d1aa3a6af179b2e8973ec20d7e1cc6433e40f321#d1aa3a6af179b2e8973ec20d7e1cc6433e40f321"
 dependencies = [
  "chrono",
  "encoding_rs",
