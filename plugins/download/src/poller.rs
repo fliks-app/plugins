@@ -1,6 +1,6 @@
 //! `ImportCompleted`, `CleanStalled`, `CleanSeeded` and the progress sets they publish.
 
-use crate::client::{self, Torrent};
+use crate::client::{self, Torrent, TorrentFile};
 use crate::config;
 use crate::db::{
     DownloadClientRow, HistoryRow, blocklist, clients, history, indexers, stalled, state,
@@ -10,7 +10,7 @@ use crate::grab::{coverage_columns, family_of, family_str, group_item_ids, ident
 use crate::util::{decode_html_entities, js_number, now_ms, parse_date_ms};
 use fliks_plugin_sdk::bindings::fliks::plugin::types::{
     AcquisitionEvent, DownloadProgress, DownloadState, Failed, Family, Imported, IngestRequest,
-    IngestResult, ResolveQuery, StalledRemoved, TransferMode, UnitRef,
+    IngestResult, ResolveQuery, SkipReason, StalledRemoved, TransferMode, UnitRef, WantDecision,
 };
 use fliks_plugin_sdk::host;
 use regex::Regex;
@@ -19,12 +19,17 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{LazyLock, Mutex};
 use std::time::{Duration, Instant};
 
-const VIDEO_EXTS: [&str; 8] = [
-    ".mkv", ".mp4", ".avi", ".mov", ".ts", ".m2ts", ".wmv", ".flv",
+/// The host's own formats (`domain::media`): the ingest refuses any other path.
+const VIDEO_EXTS: [&str; 14] = [
+    ".mkv", ".mp4", ".avi", ".mov", ".ts", ".m2ts", ".wmv", ".flv", ".webm", ".m4v", ".mpg",
+    ".mpeg", ".ogm", ".mts",
 ];
-/// The host's own book formats (`domain::media`): the ingest refuses any other path.
-const AUDIO_EXTS: [&str; 7] = [".m4b", ".m4a", ".mp3", ".flac", ".ogg", ".opus", ".aac"];
-const TEXT_EXTS: [&str; 6] = [".epub", ".pdf", ".azw3", ".mobi", ".fb2", ".cbz"];
+pub const AUDIO_EXTS: [&str; 7] = [".m4b", ".m4a", ".mp3", ".flac", ".ogg", ".opus", ".aac"];
+pub const TEXT_EXTS: [&str; 6] = [".epub", ".pdf", ".azw3", ".mobi", ".fb2", ".cbz"];
+/// Media the ingest refuses: a torrent holding them is never taken for a dud.
+const REFUSED_MEDIA_EXTS: [&str; 8] = [
+    ".oga", ".wma", ".wav", ".azw", ".djvu", ".kfx", ".cbr", ".cb7",
+];
 const ORPHAN_GRACE_MS: i64 = 5 * 60_000;
 const ORPHAN_STATUS_MESSAGE: &str = "Torrent no longer present in download client";
 const RESOLVE_BATCH: usize = 50;
@@ -541,7 +546,10 @@ fn auto_match(all: &[Held]) -> R<()> {
     let mut still = HashSet::new();
     for held in to_identify {
         let hash = held.t.hash.to_lowercase();
-        let Some(Some(m)) = matches.get(&held.t.name) else {
+        let Some(Some(m)) = matches.get(&held.t.name).map(|m| {
+            m.as_ref()
+                .filter(|m| m.skip != Some(SkipReason::NotAvailable))
+        }) else {
             if !seen(&UNIDENTIFIED, &hash) {
                 info!(
                     "Auto-match: \"{}\" — releases.match found no media for it",
@@ -716,13 +724,86 @@ fn classify(r: &IngestResult) -> Ingested {
     }
 }
 
-/// The family and language a row imports under: its own, else the media's first want.
-fn ingest_target(h: &HistoryRow, media: u32) -> R<(Family, Option<String>)> {
-    if let Some(f) = h.family.as_deref().and_then(family_of) {
-        return Ok((f, h.language.clone()));
+fn exts_of(f: Family) -> &'static [&'static str] {
+    match f {
+        Family::Audio => &AUDIO_EXTS,
+        Family::Text => &TEXT_EXTS,
+        _ => &VIDEO_EXTS,
     }
-    let t = host::media_acquisition_context(media, None, None, None)?;
-    Ok(t.map_or((Family::Video, None), |t| (t.family, t.language)))
+}
+
+/// The finished files of `family` the ingest accepts.
+fn paths_of(files: &[TorrentFile], save: &str, family: Family) -> Vec<String> {
+    files
+        .iter()
+        .filter(|f| f.progress >= 1.0 && exts_of(family).contains(&ext_of(&f.name).as_str()))
+        .map(|f| join_path(save, &f.name))
+        .collect()
+}
+
+/// Any media file of any family, finished or not, accepted by the ingest or not.
+fn holds_media(files: &[TorrentFile]) -> bool {
+    files.iter().any(|f| {
+        let e = ext_of(&f.name);
+        [Family::Video, Family::Audio, Family::Text]
+            .into_iter()
+            .any(|fam| exts_of(fam).contains(&e.as_str()))
+            || REFUSED_MEDIA_EXTS.contains(&e.as_str())
+    })
+}
+
+/// A family of a torrent to ingest, with the language its want has now.
+struct Intake {
+    family: Family,
+    language: Option<String>,
+    paths: Vec<String>,
+}
+
+/// The families to ingest from a torrent: a row's own, then every other wished book family the
+/// files carry; a row without one takes the first family found. Empty when nothing is ingestable.
+fn intake(h: &HistoryRow, media: u32, files: &[TorrentFile], save: &str) -> R<Vec<Intake>> {
+    let own = h.family.as_deref().and_then(family_of);
+    let video = own == Some(Family::Video)
+        || (own.is_none() && (h.season_id.is_some() || h.item_id.is_some()));
+    if video {
+        let paths = paths_of(files, save, Family::Video);
+        let found = Intake {
+            family: Family::Video,
+            language: None,
+            paths,
+        };
+        return Ok(Some(found)
+            .filter(|i| !i.paths.is_empty())
+            .into_iter()
+            .collect());
+    }
+    let mut out: Vec<Intake> = vec![];
+    for family in own.into_iter().chain([Family::Text, Family::Audio]) {
+        let paths = paths_of(files, save, family);
+        if paths.is_empty() || out.iter().any(|i| i.family == family) {
+            continue;
+        }
+        let Some(target) = host::media_acquisition_context(media, Some(family), None, None)? else {
+            continue;
+        };
+        let missing = target
+            .want
+            .as_ref()
+            .is_none_or(|w| w.decision != WantDecision::Skip);
+        if own == Some(family) || missing || (own.is_none() && out.is_empty()) {
+            out.push(Intake {
+                family,
+                language: target.language,
+                paths,
+            });
+        }
+    }
+    if own.is_none()
+        && let Some(first) = out.first()
+    {
+        history::set_family(h.id, family_str(first.family))?;
+    }
+    Ok(out)
 }
 
 fn process_one(h: &HistoryRow, t: &Torrent, client: &DownloadClientRow) -> R<()> {
@@ -731,33 +812,34 @@ fn process_one(h: &HistoryRow, t: &Torrent, client: &DownloadClientRow) -> R<()>
         warn!("Import[{}]: {message}; will retry", h.source_title);
         return history::set_status(&[h.id], "grabbed", Some(&message));
     };
+    let Some(media) = h.media_id else {
+        return history::set_status(
+            &[h.id],
+            "import_failed",
+            Some("Import failed: no media linked to this download"),
+        );
+    };
     let save = t.save_path.clone().unwrap_or_default();
-    let (family, language) = match h.media_id {
-        Some(m) => ingest_target(h, m as u32)?,
-        None => (Family::Video, None),
-    };
-    let exts: &[&str] = match family {
-        Family::Audio => &AUDIO_EXTS,
-        Family::Text => &TEXT_EXTS,
-        _ => &VIDEO_EXTS,
-    };
-    let what = family_str(family);
-    let videos: Vec<String> = files
-        .iter()
-        .filter(|f| f.progress >= 1.0 && exts.contains(&ext_of(&f.name).as_str()))
-        .map(|f| join_path(&save, &f.name))
-        .collect();
-    if videos.is_empty() {
+    let plan = intake(h, media as u32, &files, &save)?;
+    let what = h.family.as_deref().unwrap_or("media");
+    if plan.is_empty() {
+        if holds_media(&files) {
+            let msg = format!(
+                "Import failed: no {what} file this media wishes in the download \"{}\", which holds other media files",
+                t.name
+            );
+            warn!("Import[{}]: {msg}", h.source_title);
+            history::set_status(&[h.id], "import_failed", Some(&msg))?;
+            publish_failed(h, &msg);
+            return Ok(());
+        }
         let msg = format!(
-            "Import failed: no valid {what} file in the download \"{}\"",
+            "Import failed: no media file in the download \"{}\"",
             t.name
         );
         warn!("Import[{}]: {msg}", h.source_title);
         history::mark_failed(h.id, &msg)?;
-        auto_blocklist(
-            h,
-            &format!("Auto-blocklist: no valid {what} file in the download"),
-        );
+        auto_blocklist(h, "Auto-blocklist: no media file in the download");
         if let Err(e) = client::delete(client, &t.hash, true) {
             warn!(
                 "Import[{}]: failed to remove dud torrent: {e}",
@@ -767,62 +849,73 @@ fn process_one(h: &HistoryRow, t: &Torrent, client: &DownloadClientRow) -> R<()>
         publish_failed(h, &msg);
         return Ok(());
     }
-    let Some(media) = h.media_id else {
-        return history::set_status(
-            &[h.id],
-            "import_failed",
-            Some("Import failed: no media linked to this download"),
+    let base = h
+        .family
+        .as_deref()
+        .and_then(family_of)
+        .unwrap_or(plan[0].family);
+    let (mut placed, mut files_placed) = (0, 0);
+    for it in plan {
+        let (family, key) = (
+            it.family,
+            if it.family == base {
+                format!("download-history:{}", h.id)
+            } else {
+                format!("download-history:{}:{}", h.id, family_str(it.family))
+            },
         );
-    };
-    let result = host::library_ingest(&IngestRequest {
-        idempotency_key: format!("download-history:{}", h.id),
-        media_id: media as u32,
-        family,
-        language,
-        paths: videos,
-        transfer: TransferMode::Copy,
-        fallback_quality: None,
-        source_label: h.source_title.clone(),
-    })?;
-    let imported = |r: &IngestResult| {
-        let ev = AcquisitionEvent::Imported(Imported {
+        let result = host::library_ingest(&IngestRequest {
+            idempotency_key: key,
             media_id: media as u32,
             family,
-            unit: r.unit.clone(),
-            quality: h.quality.clone(),
-            source_title: h.source_title.clone(),
-        });
-        publish(ev, "acquisition.imported", &h.source_title);
-    };
-    match classify(&result) {
-        Ingested::AlreadyPresent => {
-            info!(
-                "Import[{}]: already in the library — completing the row",
-                h.source_title
+            language: it.language,
+            paths: it.paths,
+            transfer: TransferMode::Copy,
+            fallback_quality: None,
+            source_label: h.source_title.clone(),
+        })?;
+        let ingested = classify(&result);
+        if ingested == Ingested::NothingPlaced {
+            warn!(
+                "Import[{}]: no {} file could be placed under the library root",
+                h.source_title,
+                family_str(family)
             );
-            history::complete_import(h.id)?;
-            imported(&result);
-            return Ok(());
+            continue;
         }
-        Ingested::NothingPlaced => {
-            let msg = format!(
-                "Import failed: no file could be placed under the library root for \"{}\"",
-                t.name
-            );
-            error!("Import[{}]: {msg}", h.source_title);
-            history::set_status(&[h.id], "import_failed", Some(&msg))?;
-            publish_failed(h, &msg);
-            return Ok(());
-        }
-        Ingested::Imported => {}
+        placed += 1;
+        files_placed += result.imported.len();
+        let quality = match (family == base, result.imported.first()) {
+            (false, Some(f)) => f.quality.clone(),
+            _ => h.quality.clone(),
+        };
+        publish(
+            AcquisitionEvent::Imported(Imported {
+                media_id: media as u32,
+                family,
+                unit: result.unit,
+                quality,
+                source_title: h.source_title.clone(),
+            }),
+            "acquisition.imported",
+            &h.source_title,
+        );
+    }
+    if placed == 0 {
+        let msg = format!(
+            "Import failed: no file could be placed under the library root for \"{}\"",
+            t.name
+        );
+        error!("Import[{}]: {msg}", h.source_title);
+        history::set_status(&[h.id], "import_failed", Some(&msg))?;
+        publish_failed(h, &msg);
+        return Ok(());
     }
     history::complete_import(h.id)?;
     info!(
-        "Import[{}]: completed successfully ({} file(s))",
-        h.source_title,
-        result.imported.len()
+        "Import[{}]: completed successfully ({files_placed} file(s))",
+        h.source_title
     );
-    imported(&result);
     Ok(())
 }
 
@@ -984,6 +1077,32 @@ fn fmt_js(f: f64) -> String {
     }
 }
 
+/// Whether a torrent of a book still holds finished files of another wished, missing family;
+/// when that cannot be told, it does.
+fn holds_unimported(row: &HistoryRow, client: &DownloadClientRow, t: &Torrent) -> bool {
+    let own = row.family.as_deref().and_then(family_of);
+    let book = matches!(own, Some(Family::Text | Family::Audio))
+        || (own.is_none() && row.season_id.is_none() && row.item_id.is_none());
+    let Some(media) = row.media_id.filter(|_| book) else {
+        return false;
+    };
+    let Some(files) = client::files(client, &t.hash) else {
+        return true;
+    };
+    let save = t.save_path.clone().unwrap_or_default();
+    [Family::Text, Family::Audio]
+        .into_iter()
+        .filter(|f| Some(*f) != own && !paths_of(&files, &save, *f).is_empty())
+        .any(
+            |f| match host::media_acquisition_context(media as u32, Some(f), None, None) {
+                Ok(target) => target
+                    .and_then(|t| t.want)
+                    .is_some_and(|w| w.decision != WantDecision::Skip),
+                Err(_) => true,
+            },
+        )
+}
+
 pub fn clean_seeded() -> R<()> {
     let enabled: Vec<DownloadClientRow> = clients::list_enabled()?
         .into_iter()
@@ -1029,6 +1148,13 @@ pub fn clean_seeded() -> R<()> {
             .unwrap_or_default();
         let reason = seed_reason(t, &settings, now_s);
         if reason.is_empty() {
+            continue;
+        }
+        if holds_unimported(row, client, t) {
+            info!(
+                "SeedCleanup: keeping \"{}\" ({reason}), it holds files of a wished family not yet imported",
+                t.name
+            );
             continue;
         }
         info!("SeedCleanup: removing \"{}\" ({reason})", t.name);

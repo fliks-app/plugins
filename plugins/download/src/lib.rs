@@ -50,14 +50,19 @@ fn text(e: impl std::fmt::Display) -> String {
     e.to_string()
 }
 
-fn resume_of(v: &Value) -> Option<(Option<u32>, Option<u32>)> {
+fn resume_of(v: &Value) -> Option<(Option<u32>, Option<u32>, u8)> {
     let r = v.get("resume")?;
     let id = |k: &str| {
         r.get(k)
             .and_then(Value::as_u64)
             .and_then(|i| u32::try_from(i).ok())
     };
-    Some((id("seasonId"), id("episodeId")))
+    let rank = r.get("family").and_then(Value::as_u64).unwrap_or(0);
+    Some((
+        id("seasonId"),
+        id("episodeId"),
+        u8::try_from(rank).unwrap_or(0),
+    ))
 }
 
 /// `SearchMissing`: a scoped run starts from the top; the unscoped sweep resumes where the
@@ -79,8 +84,16 @@ fn search_missing_job(args: Option<&str>) -> error::R<()> {
         grab::search_missing(Some(ids), None)?;
         return Ok(());
     }
-    let resume = db::state::get("searchMissingResume")?
-        .and_then(|v| serde_json::from_value::<(u32, Option<u32>, Option<u32>)>(v).ok());
+    // A key saved before books has no family rank: it resumes from the text want.
+    let resume = db::state::get("searchMissingResume")?.and_then(|v| {
+        serde_json::from_value::<grab::Key>(v.clone())
+            .ok()
+            .or_else(|| {
+                let (m, g, i) =
+                    serde_json::from_value::<(u32, Option<u32>, Option<u32>)>(v).ok()?;
+                Some((m, g, i, 0))
+            })
+    });
     match grab::search_missing(None, resume)? {
         Some(key) => db::state::set("searchMissingResume", &json!(key)),
         None => db::state::delete("searchMissingResume"),
@@ -129,14 +142,14 @@ impl Plugin for Download {
         let id: Option<u32> = rest.parse().ok();
         match (prefix, id) {
             ("search", Some(media)) => {
-                let resume = resume_of(&payload).map(|(s, e)| (media, s, e));
-                if let Some((_, s, e)) =
+                let resume = resume_of(&payload).map(|(s, e, f)| (media, s, e, f));
+                if let Some((_, s, e, f)) =
                     grab::search_missing(Some(vec![media]), resume).map_err(text)?
                 {
                     fliks_plugin_sdk::scheduled::schedule(
                         &key,
                         0,
-                        &json!({ "resume": { "seasonId": s, "episodeId": e } }),
+                        &json!({ "resume": { "seasonId": s, "episodeId": e, "family": f } }),
                     )
                     .map_err(|e| e.message)?;
                 }

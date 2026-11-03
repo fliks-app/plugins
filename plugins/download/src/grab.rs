@@ -10,7 +10,7 @@ use crate::util::{
 use crate::{client, net, throttle};
 use fliks_plugin_sdk::bindings::fliks::plugin::types::{
     AcquisitionEvent, Audience, CandidateRelease, CandidatesQuery, Family, Grabbed, ParamValue,
-    ReleaseCoverage, ReleaseTitle, ScoredRelease, Target, UnitRef, WantDecision,
+    ReleaseCoverage, ReleaseTitle, ScoredRelease, SkipReason, Target, UnitRef, WantDecision,
 };
 use fliks_plugin_sdk::host;
 use fliks_plugin_sdk::rt::{self, Budget, FuturesUnordered, StreamExt};
@@ -63,6 +63,57 @@ pub fn family_of(s: &str) -> Option<Family> {
     [Family::Video, Family::Audio, Family::Text, Family::Image]
         .into_iter()
         .find(|f| family_str(*f) == s)
+}
+
+/// Book formats a release title can name, with the family each belongs to and whether the host's
+/// ingest accepts files of it (`.wav`, `.wma`, `.azw` and `.djvu` it parses but refuses).
+const BOOK_FORMATS: [(&str, Family, bool); 18] = [
+    ("m4b", Family::Audio, true),
+    ("m4a", Family::Audio, true),
+    ("alac", Family::Audio, true),
+    ("mp3", Family::Audio, true),
+    ("flac", Family::Audio, true),
+    ("ogg", Family::Audio, true),
+    ("opus", Family::Audio, true),
+    ("aac", Family::Audio, true),
+    ("wav", Family::Audio, false),
+    ("wma", Family::Audio, false),
+    ("epub", Family::Text, true),
+    ("pdf", Family::Text, true),
+    ("azw3", Family::Text, true),
+    ("kf8", Family::Text, true),
+    ("mobi", Family::Text, true),
+    ("fb2", Family::Text, true),
+    ("azw", Family::Text, false),
+    ("djvu", Family::Text, false),
+];
+
+/// The formats a title names, as (family, accepted).
+fn title_formats(title: &str) -> Vec<(Family, bool)> {
+    static WORD: std::sync::LazyLock<regex::Regex> =
+        std::sync::LazyLock::new(|| regex::Regex::new(r"[a-z0-9]+").unwrap());
+    let lower = title.to_lowercase();
+    WORD.find_iter(&lower)
+        .filter_map(|w| BOOK_FORMATS.iter().find(|(f, ..)| *f == w.as_str()))
+        .map(|(_, family, ok)| (*family, *ok))
+        .collect()
+}
+
+/// The one family a release title names by its format; none when it names both or neither.
+pub fn title_family(title: &str) -> Option<Family> {
+    let mut found = title_formats(title).into_iter().map(|(f, _)| f);
+    let first = found.next()?;
+    found.all(|f| f == first).then_some(first)
+}
+
+/// False when the title's only formats for `family` are ones the ingest would refuse.
+fn ingestable(title: &str, family: Family) -> bool {
+    let named: Vec<bool> = title_formats(title)
+        .into_iter()
+        .filter(|(f, _)| *f == family)
+        .map(|(_, ok)| ok)
+        .collect();
+    named.is_empty() || named.contains(&true)
 }
 
 /// What a video target asks for: the whole work, a season or one episode.
@@ -272,7 +323,12 @@ pub fn pick(sorted: &[Ranked], target: &Target) -> Vec<usize> {
             .iter()
             .enumerate()
             .filter(|(_, r)| r.scored.rejections.is_empty())
-            .filter(|(_, r)| !book || (r.scored.allowed && r.scored.language_allowed))
+            .filter(|(_, r)| {
+                !book
+                    || (r.scored.allowed
+                        && r.scored.language_allowed
+                        && ingestable(&r.raw.title, target.family))
+            })
             .filter(|(_, r)| !season_only || r.scored.whole_group)
             .map(|(i, _)| i)
             .take(3)
@@ -487,16 +543,21 @@ fn author_of(t: &Target) -> Option<&str> {
         .filter(|n| !n.is_empty())
 }
 
-/// A route names no family: the host answers the media's first want, whose family the target carries.
-fn fetch_target(media_id: u32, group_id: Option<u32>, item_id: Option<u32>) -> R<Target> {
-    host::media_acquisition_context(media_id, None, group_id, item_id)?.ok_or_else(|| {
+/// No family: the host answers the media's first want, whose family the target carries.
+fn fetch_target(
+    media_id: u32,
+    family: Option<Family>,
+    group_id: Option<u32>,
+    item_id: Option<u32>,
+) -> R<Target> {
+    host::media_acquisition_context(media_id, family, group_id, item_id)?.ok_or_else(|| {
         Error::grab_with("download.grab.errors.media_not_found", media_id.to_string())
     })
 }
 
 /// A target of a kind this plugin does not acquire is refused, not searched.
 fn load_target(media_id: u32, group_id: Option<u32>, item_id: Option<u32>) -> R<(Target, Media)> {
-    let target = fetch_target(media_id, group_id, item_id)?;
+    let target = fetch_target(media_id, None, group_id, item_id)?;
     let Some(media) = Media::of(&target.kind, target.family) else {
         info!(
             "Media #{media_id} \"{}\" is a {}: this plugin acquires movies, series and books only",
@@ -696,6 +757,14 @@ pub fn grab_release(
             .map(str::trim)
             .filter(|t| !t.is_empty())
             .map_or_else(|| title_from_url(&m.download_url), str::to_owned);
+        // The route names no family: a book release is grabbed for the family its format names.
+        let (target, media) = title_family(&source_title)
+            .filter(|f| target.kind == "book" && *f != target.family)
+            .and_then(|f| {
+                host::media_acquisition_context(media_id, Some(f), group_id, item_id).ok()?
+            })
+            .and_then(|t| Some((Media::of(&t.kind, t.family)?, t)))
+            .map_or((target, media), |(media, t)| (t, media));
         let fabricated = Release {
             title: source_title.clone(),
             download_url: m.download_url.clone(),
@@ -937,11 +1006,21 @@ fn try_auto_grab(target: &Target, client: &DownloadClientRow) -> R<bool> {
     skip("every eligible release was unobtainable".into())
 }
 
-/// Candidates arrive sorted by this tuple; a season pack sorts before its episodes.
-pub type Key = (u32, Option<u32>, Option<u32>);
+/// Candidates arrive sorted by this tuple; a season pack sorts before its episodes and a book's
+/// text want before its audio one (`family_rank`).
+pub type Key = (u32, Option<u32>, Option<u32>, u8);
+
+/// A book's targets come text first, then audio.
+pub fn family_rank(f: Family) -> u8 {
+    match f {
+        Family::Video | Family::Text => 0,
+        Family::Audio => 1,
+        Family::Image => 2,
+    }
+}
 
 pub fn key_of(t: &Target) -> Key {
-    (t.media_id, group_id(t), item_id(t))
+    (t.media_id, group_id(t), item_id(t), family_rank(t.family))
 }
 
 /// Whether a target still has to run in a sweep resumed after `resume`.
@@ -958,7 +1037,6 @@ pub fn search_missing(media_ids: Option<Vec<u32>>, resume: Option<Key>) -> R<Opt
         warn!("SearchMissing: no enabled download client configured");
         return Ok(None);
     };
-    // Two families of one book share a key: the resume point is the last key fully behind us.
     let (mut cursor, mut count, mut done, mut current) = (None, 0, resume, None);
     let mut packs: Vec<u32> = vec![];
     loop {
@@ -1019,6 +1097,7 @@ pub fn search_missing(media_ids: Option<Vec<u32>>, resume: Option<Key>) -> R<Opt
 }
 
 pub struct Match {
+    pub skip: Option<SkipReason>,
     pub media_id: u32,
     pub season_number: Option<u32>,
     pub episode_number: Option<u32>,
@@ -1046,6 +1125,7 @@ pub fn identify(titles: &[String]) -> R<HashMap<String, Option<Match>>> {
             continue;
         };
         let m = r.media_id.map(|media_id| Match {
+            skip: r.skip_reason,
             media_id,
             season_number: r.unit.as_ref().and_then(|u| u.group),
             episode_number: r.unit.as_ref().and_then(|u| u.number).map(|n| n as u32),
@@ -1149,11 +1229,14 @@ pub fn rss_sync() -> R<()> {
                 limit: 500,
                 cursor: None,
             })?;
-            // `releases.match` names no family: a book is tried on each target it has.
+            // `releases.match` names no family: a book is tried on each target of the family the
+            // title names, else on each target it has.
+            let named = title_family(&release.title);
             let targets: Vec<&Target> = page
                 .items
                 .iter()
                 .filter(|it| numbers(it) == (m.season_number, m.episode_number))
+                .filter(|it| named.is_none_or(|f| it.kind != "book" || it.family == f))
                 .collect();
             if targets.is_empty() && page.cursor.is_some() {
                 warn!(
@@ -1172,4 +1255,28 @@ pub fn rss_sync() -> R<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_title_names_at_most_one_family() {
+        assert_eq!(title_family("Dune [M4B] 64kbps"), Some(Family::Audio));
+        assert_eq!(title_family("Dune (EPUB)"), Some(Family::Text));
+        assert_eq!(title_family("Dune epub + mp3"), None);
+        assert_eq!(title_family("Dune"), None);
+    }
+
+    #[test]
+    fn a_format_the_ingest_refuses_is_not_grabbed() {
+        assert!(!ingestable("Dune WAV", Family::Audio));
+        assert!(!ingestable("Dune azw", Family::Text));
+        assert!(!ingestable("Dune djvu", Family::Text));
+        assert!(ingestable("Dune azw3", Family::Text));
+        assert!(ingestable("Dune flac wav", Family::Audio));
+        assert!(ingestable("Dune", Family::Audio));
+        assert!(ingestable("Dune wav", Family::Text));
+    }
 }

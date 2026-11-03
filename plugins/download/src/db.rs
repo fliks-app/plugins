@@ -204,7 +204,7 @@ pub struct HistoryRow {
     pub source_title: String,
     pub quality: String,
     pub language: Option<String>,
-    /// None for a row written before books, or bound by auto-match: the media decides.
+    /// None for a row written before books, or bound by auto-match: the poller reads it off the files.
     pub family: Option<String>,
     pub torrent_hash: Option<String>,
     pub size: Option<i64>,
@@ -1018,6 +1018,15 @@ pub mod history {
         exec(
             r#"UPDATE "download_history" SET "status" = 'completed', "updatedAt" = now() WHERE "id" = $1"#,
             &[int(id)],
+        )
+        .map(drop)
+    }
+
+    /// Stamps the family a row without one was found to carry.
+    pub fn set_family(id: i64, family: &str) -> R<()> {
+        exec(
+            r#"UPDATE "download_history" SET "family" = $2, "updatedAt" = now() WHERE "id" = $1 AND "family" IS NULL"#,
+            &[int(id), text(family)],
         )
         .map(drop)
     }
