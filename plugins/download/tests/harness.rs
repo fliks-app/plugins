@@ -231,6 +231,13 @@ fn serve(
     let _ = r.read_exact(&mut b);
     let body = String::from_utf8_lossy(&b).into_owned();
     let (status, headers, payload) = answer(&method, &target, &body);
+    // Logged before the reply: the caller may read the log as soon as it has the answer.
+    log.lock().unwrap().push(Hit {
+        target,
+        body,
+        start,
+        end: Instant::now(),
+    });
     let mut out = format!(
         "HTTP/1.1 {status} X\r\ncontent-length: {}\r\nconnection: close\r\n",
         payload.len()
@@ -242,12 +249,6 @@ fn serve(
     let mut c = c;
     let _ = c.write_all(out.as_bytes());
     let _ = c.write_all(&payload);
-    log.lock().unwrap().push(Hit {
-        target,
-        body,
-        start,
-        end: Instant::now(),
-    });
 }
 
 /// `name` resolves to a private address the host vets, then connects to the stub instead.
