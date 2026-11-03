@@ -56,10 +56,11 @@ pub fn search_books(
         t,
         &[("title", text), ("limit", &limit), ("offset", &offset)],
     )?;
-    if found.is_empty() && page == 1 {
-        if let Some(last) = text.split_whitespace().last() {
-            found = books(t, &[("author", last), ("limit", &limit)])?;
-        }
+    if found.is_empty()
+        && page == 1
+        && let Some(last) = text.split_whitespace().last()
+    {
+        found = books(t, &[("author", last), ("limit", &limit)])?;
     }
     let want = language
         .map(|l| normalize_language_code(Some(l)))

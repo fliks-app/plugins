@@ -101,6 +101,16 @@ mod tests {
     }
 
     #[test]
+    fn a_refused_ingest_is_given_up_and_cleaned() {
+        let d = seeded();
+        let lib = Fake(Err(Fail::Drop("ERR_VALIDATION".into())), RefCell::default());
+        let r = conclude(&lib, d.path(), "b", &req(), &["b/001.mp3".into()]);
+        assert!(matches!(r, Err(Fail::Drop(_))));
+        assert_eq!(settle(d.path(), "b", 1, r), Ok(()));
+        assert!(!d.path().join("b").exists());
+    }
+
+    #[test]
     fn settle_cleans_on_a_final_failure_only() {
         let d = seeded();
         assert!(settle(d.path(), "b", 1, Err(Fail::Retry("x".into()))).is_err());
