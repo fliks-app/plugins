@@ -2404,6 +2404,12 @@ async fn an_import_the_host_refuses_for_now_is_retried_then_failed() {
     let Some(h) = Harness::start(s).await else {
         return;
     };
+    // A scene provider that lists the series but cannot answer: its mapping stays unknown.
+    let down = Arc::new(
+        fliks_plugin_sdk::harness::fliks_server::metadata::scene_stub::SceneStub::default(),
+    );
+    down.down.store(true, std::sync::atomic::Ordering::SeqCst);
+    h.st.metadata.add_plugin(down);
     let qbit = finished_qbit(
         &dl,
         "Some.Show.S04E01.1080p",
