@@ -129,11 +129,11 @@ jobs:
         with:
           targets: wasm32-wasip2
           components: rustfmt, clippy
-      # A PR run saves the cache for its own reruns; pushes to main are saved by warm-cache.
+      # Only warm-cache saves: a 3 GB entry per PR would evict main's from the 10 GB repo quota.
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: plugins
-          save-if: ${{ github.event_name == 'pull_request' }}
+          save-if: false
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: |
