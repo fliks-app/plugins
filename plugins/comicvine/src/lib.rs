@@ -72,7 +72,12 @@ impl MetadataProvider for Provider {
         json_of(api::work(&Live, &id.value)?)
     }
 
-    fn fetch_children(_kind: String, id: ExternalId, _lang: Lang) -> R<String> {
+    fn fetch_children(
+        _kind: String,
+        id: ExternalId,
+        _season: Option<u32>,
+        _lang: Lang,
+    ) -> R<String> {
         json_of(api::children(&Live, &id.value)?)
     }
 }
