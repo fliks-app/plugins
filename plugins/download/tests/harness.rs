@@ -2527,6 +2527,41 @@ async fn a_refused_book_search_is_remembered() {
     let _ = std::fs::remove_dir_all(base);
 }
 
+/// A tracker that fails `t=book` without refusing it keeps its book search and gets no fallback.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_failed_book_search_is_not_a_refusal() {
+    let Some((h, base, media, _qbit)) =
+        book_fixture("book-failed", &["text"], false, &["Mirelune.epub"]).await
+    else {
+        return;
+    };
+    let tracker = Stub::start(|_, _, _| (500, vec![], vec![]));
+    add_book_indexer(&h, &tracker).await;
+    let mut db = plugin_db(&h).await;
+    exec(
+        &mut db,
+        r#"UPDATE "indexers" SET "capsBookSearch" = true WHERE "name" = 'books'"#,
+    )
+    .await;
+
+    let search = json!({ "mediaIds": [media] }).to_string();
+    h.job("SearchMissing", Some(&search)).await.unwrap();
+    let targets: Vec<String> = tracker.hits().into_iter().map(|x| x.target).collect();
+    assert!(targets.iter().any(|t| t.contains("t=book")), "{targets:?}");
+    assert!(
+        !targets.iter().any(|t| t.contains("t=search")),
+        "{targets:?}"
+    );
+    let caps: bool =
+        sqlx::query_scalar(r#"SELECT "capsBookSearch" FROM "indexers" WHERE "name" = 'books'"#)
+            .fetch_one(&mut db)
+            .await
+            .unwrap();
+    assert!(caps);
+    h.finish().await;
+    let _ = std::fs::remove_dir_all(base);
+}
+
 /// A row grabbed for a language the book has no edition in imports into a new edition of it,
 /// next to the edition of another language.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

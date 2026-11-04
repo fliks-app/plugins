@@ -555,13 +555,30 @@ fn search_target(ix: &IndexerRow, kind: Kind) -> Option<(String, String)> {
     endpoint(ix)
 }
 
-/// Results, or the Torznab/transport error text.
+/// A failed search; `refused` when the tracker answered and turned the query down.
+struct Failed {
+    msg: String,
+    refused: bool,
+}
+
+impl std::fmt::Display for Failed {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.msg)
+    }
+}
+
+/// Timeouts and throttling are not refusals: a typed query is only given up on a real answer.
+fn refused(e: &FetchError) -> bool {
+    matches!(e, FetchError::Status { status: s @ 400..500, .. } if !matches!(s, 408 | 429))
+}
+
+/// Results, or the Torznab/transport error.
 async fn exec_search(
     url: &str,
     query_type: &str,
     ix: &IndexerRow,
     round: Round,
-) -> Result<Result<Vec<Release>, String>, Lapsed> {
+) -> Result<Result<Vec<Release>, Failed>, Lapsed> {
     let query = describe_query(url);
     let start = Instant::now();
     match throttle::run(ix, round.budget, round.fetch_timeout, |t| fetch_ok(url, t)).await? {
@@ -569,7 +586,7 @@ async fn exec_search(
             if let Some(msg) = torznab_error(&body) {
                 record(ix, query_type, start, 0, Some(&msg));
                 warn!("[{}] {query} → {msg}", ix.name);
-                return Ok(Err(msg));
+                return Ok(Err(Failed { msg, refused: true }));
             }
             let results = parse_items(&body, ix);
             record(ix, query_type, start, results.len(), None);
@@ -586,7 +603,10 @@ async fn exec_search(
             let msg = e.message();
             record(ix, query_type, start, 0, Some(&msg));
             warn!("[{}] {query} failed: {msg}", ix.name);
-            Ok(Err(msg))
+            Ok(Err(Failed {
+                msg,
+                refused: refused(&e),
+            }))
         }
     }
 }
@@ -732,7 +752,7 @@ pub async fn search_season_pack(
     );
     match exec_search(&url, "season", ix, round).await? {
         Ok(r) => Ok(r),
-        Err(err) if tv => {
+        Err(err) if tv && err.refused => {
             warn!(
                 "[{}] tvsearch failed ({err}), falling back to t=search",
                 ix.name
@@ -794,7 +814,7 @@ pub async fn search_series(
     );
     match exec_search(&url, "tvsearch", ix, round).await? {
         Ok(r) => Ok(r),
-        Err(err) if tv => {
+        Err(err) if tv && err.refused => {
             warn!(
                 "[{}] tvsearch failed ({err}), falling back to t=search",
                 ix.name
@@ -846,7 +866,7 @@ pub async fn search_movie(
     );
     match exec_search(&url, "search", ix, round).await? {
         Ok(r) => Ok(r),
-        Err(err) if movie => {
+        Err(err) if movie && err.refused => {
             warn!(
                 "[{}] t=movie failed ({err}), falling back to t=search",
                 ix.name
@@ -916,7 +936,7 @@ pub async fn search_book(
     );
     match exec_search(&url, "book", ix, round).await? {
         Ok(r) => Ok(r),
-        Err(err) if book => {
+        Err(err) if book && err.refused => {
             warn!(
                 "[{}] t=book failed ({err}), falling back to t=search",
                 ix.name
