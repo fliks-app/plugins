@@ -791,6 +791,17 @@ pub mod history {
         )
     }
 
+    /// The pending grab of one issue of a comic: issues of a volume are grabbed side by side.
+    pub fn find_pending_for_item(media_id: i64, item_id: i64) -> R<Option<HistoryRow>> {
+        first(
+            &format!(
+                r#"SELECT {COLUMNS} FROM "download_history" WHERE "mediaId" = $1 AND "itemId" = $2
+          AND "status" IN ('grabbed', 'importing') LIMIT 1"#
+            ),
+            &[int(media_id), int(item_id)],
+        )
+    }
+
     pub struct Covering {
         pub media_id: i64,
         pub season_id: i64,

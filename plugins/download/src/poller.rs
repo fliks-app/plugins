@@ -7,7 +7,7 @@ use crate::db::{
 };
 use crate::error::{Error, R};
 use crate::grab::{
-    coverage_columns, family_of, family_str, group_item_ids, identify, title_formats,
+    comic_item, coverage_columns, family_of, family_str, group_item_ids, identify, title_formats,
 };
 use crate::util::{decode_html_entities, js_number, now_ms, parse_date_ms};
 use fliks_plugin_sdk::bindings::fliks::plugin::types::{
@@ -27,6 +27,7 @@ const VIDEO_EXTS: [&str; 14] = [
     ".mpeg", ".ogm", ".mts",
 ];
 pub const AUDIO_EXTS: [&str; 7] = [".m4b", ".m4a", ".mp3", ".flac", ".ogg", ".opus", ".aac"];
+pub const COMIC_EXTS: [&str; 4] = [".cbz", ".cbr", ".cb7", ".pdf"];
 pub const TEXT_EXTS: [&str; 6] = [".epub", ".pdf", ".azw3", ".mobi", ".fb2", ".cbz"];
 /// Media the ingest refuses: a torrent holding them is never taken for a dud.
 const REFUSED_MEDIA_EXTS: [&str; 8] = [
@@ -579,7 +580,14 @@ fn auto_match(all: &[Held]) -> R<()> {
             still.insert(hash);
             continue;
         };
-        let (group_id, item_id) = group_item_ids(m.media_id, m.season_number, m.episode_number)?;
+        let comic_item = match (&m.unit, m.season_number) {
+            (Some(u), None) if u.number.is_some() => comic_item(m.media_id, u)?,
+            _ => None,
+        };
+        let (group_id, item_id) = match comic_item {
+            Some(item) => (None, Some(item)),
+            None => group_item_ids(m.media_id, m.season_number, m.episode_number)?,
+        };
         let cov = coverage_columns(m.coverage.as_ref());
         match by_hash.get(&hash) {
             Some(row) => {
@@ -597,7 +605,7 @@ fn auto_match(all: &[Held]) -> R<()> {
                 history::insert_grab(&history::Grab {
                     source_title: decode_html_entities(&held.t.name),
                     quality: "unknown".into(),
-                    family: None,
+                    family: comic_item.map(|_| "image"),
                     language: None,
                     torrent_hash: Some(held.t.hash.clone()).filter(|h| !h.is_empty()),
                     size: Some(held.t.size).filter(|s| *s != 0),
@@ -748,7 +756,8 @@ fn exts_of(f: Family) -> &'static [&'static str] {
     match f {
         Family::Audio => &AUDIO_EXTS,
         Family::Text => &TEXT_EXTS,
-        _ => &VIDEO_EXTS,
+        Family::Image => &COMIC_EXTS,
+        Family::Video => &VIDEO_EXTS,
     }
 }
 
@@ -765,7 +774,7 @@ fn paths_of(files: &[TorrentFile], save: &str, family: Family) -> Vec<String> {
 fn holds_media(files: &[TorrentFile]) -> bool {
     files.iter().any(|f| {
         let e = ext_of(&f.name);
-        [Family::Video, Family::Audio, Family::Text]
+        [Family::Video, Family::Audio, Family::Text, Family::Image]
             .into_iter()
             .any(|fam| exts_of(fam).contains(&e.as_str()))
             || REFUSED_MEDIA_EXTS.contains(&e.as_str())
@@ -804,6 +813,17 @@ fn is_book(h: &HistoryRow, media: u32) -> R<bool> {
 /// files carry; a row without one takes the first family found. Empty when nothing is ingestable.
 fn intake(h: &HistoryRow, media: u32, files: &[TorrentFile], save: &str) -> R<Vec<Intake>> {
     let own = h.family.as_deref().and_then(family_of);
+    if own == Some(Family::Image) {
+        let paths = paths_of(files, save, Family::Image);
+        return Ok(Some(Intake {
+            family: Family::Image,
+            language: None,
+            paths,
+        })
+        .filter(|i| !i.paths.is_empty())
+        .into_iter()
+        .collect());
+    }
     let video = !is_book(h, media)?;
     if video {
         let paths = paths_of(files, save, Family::Video);
@@ -936,6 +956,27 @@ fn process_one(h: &HistoryRow, t: &Torrent, client: &DownloadClientRow) -> R<()>
             Err(e) => return Err(e.into()),
         };
         let ingested = classify(&result);
+        if family == Family::Image
+            && let Some(item) = h.item_id
+            && !result
+                .imported
+                .iter()
+                .any(|f| f.item_ids.contains(&(item as u32)))
+            && !result.imported.is_empty()
+        {
+            let msg = format!(
+                "Import failed: \"{}\" did not land in the issue it was grabbed for",
+                h.source_title
+            );
+            warn!("Import[{}]: {msg}", h.source_title);
+            history::mark_failed(h.id, &msg)?;
+            auto_blocklist(
+                h,
+                "Auto-blocklist: the file names another issue than the one wanted",
+            );
+            publish_failed(h, &msg);
+            return Ok(());
+        }
         if ingested == Ingested::NothingPlaced {
             warn!(
                 "Import[{}]: no {} file could be placed under the library root",
