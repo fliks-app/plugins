@@ -130,11 +130,13 @@ pub fn search(h: &impl Http, q: &SearchQuery) -> R<String> {
     let lang = filled(&q.language)
         .map(|l| normalize_language_code(Some(l)))
         .filter(|l| l != "und");
+    let by_id = filled(&q.author_id);
     let search = Search {
         title,
-        author: filled(&q.author),
+        author: filled(&q.author).filter(|_| by_id.is_none()),
         isbn: filled(&q.isbn),
-        q: free,
+        q: free.filter(|_| by_id.is_none()),
+        author_key: by_id,
         lang: lang.as_deref(),
         limit: Some(SEARCH_LIMIT),
         page: Some(q.page.max(1)),
@@ -266,6 +268,28 @@ mod tests {
 
     fn json_of(s: String) -> Value {
         serde_json::from_str(&s).unwrap()
+    }
+
+    #[test]
+    fn search_by_author_id_asks_for_that_author_alone() {
+        let mut q = query("Una Roe");
+        q.author = Some("Una Roe".into());
+        q.author_id = Some("OL7A".into());
+        let url = ol::search_url(&Search {
+            author_key: Some("OL7A"),
+            limit: Some(SEARCH_LIMIT),
+            page: Some(1),
+            ..Search::default()
+        })
+        .unwrap();
+        assert!(
+            url.contains("q=author_key%3AOL7A") && !url.contains("author=") && !url.contains("Roe")
+        );
+        let h = Fake::new(vec![(&url[B.len()..], ok(fixture!("search-basic.json")))]);
+        assert_eq!(
+            json_of(search(&h, &q).unwrap()).as_array().unwrap().len(),
+            2
+        );
     }
 
     #[test]

@@ -17,6 +17,8 @@ pub struct Search<'a> {
     pub author: Option<&'a str>,
     pub isbn: Option<&'a str>,
     pub q: Option<&'a str>,
+    /// An author id (`OL…A`): the works credited to it, not a name match.
+    pub author_key: Option<&'a str>,
     /// Prefers editions in this language.
     pub lang: Option<&'a str>,
     pub limit: Option<u32>,
@@ -46,11 +48,15 @@ pub fn search_url(s: &Search) -> Option<String> {
         s.page.map(|n| n.to_string()),
     );
     let mut p = vec![("fields", SEARCH_FIELDS)];
+    let by_author = s
+        .author_key
+        .and_then(|k| olid(k, 'A'))
+        .map(|k| format!("author_key:{k}"));
     let terms = [
         ("title", s.title),
         ("author", s.author),
         ("isbn", s.isbn),
-        ("q", s.q),
+        ("q", s.q.or(by_author.as_deref())),
     ];
     if terms
         .iter()
@@ -62,7 +68,7 @@ pub fn search_url(s: &Search) -> Option<String> {
         ("title", s.title),
         ("author", s.author),
         ("isbn", s.isbn),
-        ("q", s.q),
+        ("q", by_author.as_deref().or(s.q)),
         ("lang", s.lang),
         ("limit", limit.as_deref()),
         ("page", page.as_deref()),
