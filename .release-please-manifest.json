@@ -6,7 +6,7 @@
   "plugins/bnf": "0.3.0",
   "plugins/googlebooks": "0.2.0",
   "plugins/tvdb": "0.3.0",
-  "plugins/audible": "0.2.0",
+  "plugins/audible": "0.3.0",
   "plugins/audnexus": "0.3.0",
   "plugins/gutenberg": "0.1.0",
   "plugins/librivox": "0.1.0",
