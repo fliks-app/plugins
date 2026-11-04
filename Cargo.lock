@@ -1319,7 +1319,7 @@ dependencies = [
 
 [[package]]
 name = "fk-plugin-openlibrary"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "fliks-plugin-sdk",
  "fliks-plugin-sdk-provider",

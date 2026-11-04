@@ -1,7 +1,7 @@
 {
   "plugins/download": "2.0.0",
   "plugins/notify": "2.0.0",
-  "plugins/openlibrary": "0.2.0",
+  "plugins/openlibrary": "0.3.0",
   "plugins/tmdb": "0.3.0",
   "plugins/bnf": "0.3.0",
   "plugins/googlebooks": "0.3.0",
