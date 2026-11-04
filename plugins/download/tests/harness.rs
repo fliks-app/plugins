@@ -2484,6 +2484,49 @@ async fn the_rss_sweep_grabs_a_book_through_its_targets() {
     let _ = std::fs::remove_dir_all(base);
 }
 
+/// A tracker that refuses `t=book` is asked with `t=search` from then on.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_refused_book_search_is_remembered() {
+    let Some((h, base, media, _qbit)) =
+        book_fixture("book-refused", &["text"], false, &["Mirelune.epub"]).await
+    else {
+        return;
+    };
+    let tracker = Stub::start(|_, target, _| {
+        let body = if target.contains("t=book") {
+            r#"<error code="203" description="Function Not Available"/>"#
+        } else {
+            r#"<?xml version="1.0"?><rss><channel></channel></rss>"#
+        };
+        (200, vec![], body.into())
+    });
+    add_book_indexer(&h, &tracker).await;
+    let mut db = plugin_db(&h).await;
+    exec(
+        &mut db,
+        r#"UPDATE "indexers" SET "capsBookSearch" = true WHERE "name" = 'books'"#,
+    )
+    .await;
+
+    let search = json!({ "mediaIds": [media] }).to_string();
+    h.job("SearchMissing", Some(&search)).await.unwrap();
+    h.job("SearchMissing", Some(&search)).await.unwrap();
+    let book = tracker
+        .hits()
+        .into_iter()
+        .filter(|x| x.target.contains("t=book"))
+        .count();
+    assert_eq!(book, 1, "{:?}", tracker.hits());
+    let caps: bool =
+        sqlx::query_scalar(r#"SELECT "capsBookSearch" FROM "indexers" WHERE "name" = 'books'"#)
+            .fetch_one(&mut db)
+            .await
+            .unwrap();
+    assert!(!caps);
+    h.finish().await;
+    let _ = std::fs::remove_dir_all(base);
+}
+
 /// A row grabbed for a language the book has no edition in imports into a new edition of it,
 /// next to the edition of another language.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

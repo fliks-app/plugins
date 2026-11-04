@@ -931,9 +931,21 @@ pub async fn search_book(
                     ..Default::default()
                 })
             );
-            Ok(exec_search(&fb, "book", ix, round)
-                .await?
-                .unwrap_or_default())
+            let Ok(r) = exec_search(&fb, "book", ix, round).await? else {
+                return Ok(vec![]);
+            };
+            info!(
+                "[{}] t=search fallback succeeded, saving capsBookSearch=false",
+                ix.name
+            );
+            if let Err(e) = indexers::mark_no_book_search(ix.id) {
+                warn!(
+                    "[{}] could not persist the book search fallback: {e}",
+                    ix.name
+                );
+            }
+            ix.caps_book_search = false;
+            Ok(r)
         }
         Err(_) => Ok(vec![]),
     }
