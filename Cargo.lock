@@ -1331,7 +1331,7 @@ dependencies = [
 
 [[package]]
 name = "fk-plugin-tmdb"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "fliks-plugin-sdk",
  "fliks-plugin-sdk-provider",
