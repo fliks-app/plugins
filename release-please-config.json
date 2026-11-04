@@ -136,6 +136,17 @@
         }
       ]
     },
+    "plugins/thexem": {
+      "release-type": "rust",
+      "component": "thexem",
+      "extra-files": [
+        {
+          "type": "toml",
+          "path": "/Cargo.lock",
+          "jsonpath": "$.package[?(@.name.value=='fk-plugin-thexem')].version"
+        }
+      ]
+    },
     "plugins/comicvine": {
       "release-type": "rust",
       "component": "comicvine",

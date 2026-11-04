@@ -1,0 +1,86 @@
+{
+  "id": "fliks.thexem",
+  "pluginApi": 3,
+  "name": "TheXEM scene numbering",
+  "fliks": ">=6.0.0 <7.0.0",
+  "author": "Fliks",
+  "description": "Maps the season and episode numbers of release names to the aired ones for series released under another numbering, from TheXEM.",
+  "license": "AGPL-3.0-or-later",
+  "homepage": "https://thexem.info",
+  "logo": "logo.svg",
+  "kind": "process",
+  "runtime": "wasm",
+  "memoryMb": 64,
+  "database": {
+    "schema": false,
+    "coreRefs": []
+  },
+  "scopes": [],
+  "ingestRoots": [],
+  "routes": [],
+  "provider": {
+    "namespaces": [
+      {
+        "name": "fliks.thexem:xem",
+        "label": "TheXEM",
+        "idPattern": "^[1-9][0-9]{0,8}$"
+      }
+    ],
+    "kinds": {
+      "series": [
+        "scene"
+      ]
+    },
+    "sceneNamespaces": [
+      "tvdb"
+    ],
+    "limits": {
+      "ratePerSec": 1,
+      "burst": 1
+    },
+    "requestTimeoutMs": 20000
+  },
+  "ui": {
+    "contributions": [
+      {
+        "id": "fliks-thexem.settings.general",
+        "slot": "settings.page",
+        "weight": 100,
+        "labelKey": "thexem.config.title",
+        "action": {
+          "kind": "route",
+          "path": "/admin/settings/plugins/fliks.thexem/general"
+        }
+      }
+    ],
+    "configPages": [
+      {
+        "id": "general",
+        "labelKey": "thexem.config.title",
+        "subtitleKey": "thexem.config.subtitle",
+        "fields": [
+          {
+            "key": "baseUrl",
+            "type": "text",
+            "labelKey": "thexem.config.baseUrl",
+            "hint": "thexem.config.baseUrl_hint"
+          }
+        ]
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "thexem.config.title": "TheXEM",
+      "thexem.config.subtitle": "Scene numbering of series released under another numbering than the library's.",
+      "thexem.config.baseUrl": "Base URL",
+      "thexem.config.baseUrl_hint": "Leave empty for https://thexem.info."
+    },
+    "fr": {
+      "thexem.config.title": "TheXEM",
+      "thexem.config.subtitle": "Numérotation scene des séries diffusées sous une autre numérotation que celle de la bibliothèque.",
+      "thexem.config.baseUrl": "URL de base",
+      "thexem.config.baseUrl_hint": "Laissez vide pour https://thexem.info."
+    }
+  }
+}
