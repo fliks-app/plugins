@@ -119,10 +119,17 @@ impl MetadataProvider for Provider {
         json_of(d)
     }
 
-    fn fetch_children(_kind: String, id: ExternalId, lang: Lang) -> Res<String> {
-        json_of(block_on(
-            client().seasons(numeric(&id)?, code(&lang.language)),
-        )?)
+    fn fetch_children(
+        _kind: String,
+        id: ExternalId,
+        season: Option<u32>,
+        lang: Lang,
+    ) -> Res<String> {
+        json_of(block_on(client().seasons(
+            numeric(&id)?,
+            season.map(i64::from),
+            code(&lang.language),
+        ))?)
     }
 
     fn child_stubs(_kind: String, id: ExternalId, _lang: Lang) -> Res<String> {

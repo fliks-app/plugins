@@ -163,14 +163,13 @@ impl<H: Http> Tvdb<H> {
     }
 
     /// Every episode, following the 500-per-page cursor (a full page asks for the next).
-    async fn all_episodes(&self, id: i64) -> Result<Vec<Value>> {
+    async fn all_episodes(&self, id: i64, season: Option<i64>) -> Result<Vec<Value>> {
         let mut all = vec![];
         for page in 0..MAX_EPISODE_PAGES {
+            let mut query = vec![("page", page.to_string())];
+            query.extend(season.map(|n| ("season", n.to_string())));
             let d = self
-                .data(
-                    &format!("/series/{id}/episodes/default"),
-                    &[("page", page.to_string())],
-                )
+                .data(&format!("/series/{id}/episodes/default"), &query)
                 .await?;
             let eps = arr(&d, "episodes");
             all.extend(eps.iter().cloned());
@@ -183,7 +182,7 @@ impl<H: Http> Tvdb<H> {
 
     pub async fn season_stubs(&self, id: i64) -> Result<Vec<Value>> {
         let mut counts: BTreeMap<i64, i64> = BTreeMap::new();
-        for ep in self.all_episodes(id).await? {
+        for ep in self.all_episodes(id, None).await? {
             *counts
                 .entry(get(&ep, "seasonNumber").as_i64().unwrap_or_default())
                 .or_default() += 1;
@@ -194,8 +193,12 @@ impl<H: Http> Tvdb<H> {
             .collect())
     }
 
-    pub async fn seasons(&self, id: i64, code: &str) -> Result<Vec<Value>> {
-        let episodes = self.all_episodes(id).await?;
+    /// With `only`, just that season: the episode list is asked for it and its translations alone are read.
+    pub async fn seasons(&self, id: i64, only: Option<i64>, code: &str) -> Result<Vec<Value>> {
+        let mut episodes = self.all_episodes(id, only).await?;
+        if let Some(n) = only {
+            episodes.retain(|e| get(e, "seasonNumber").as_i64() == Some(n));
+        }
         let series = self
             .data(
                 &format!("/series/{id}/extended"),
