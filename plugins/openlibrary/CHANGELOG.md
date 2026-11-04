@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/fliks-app/plugins/compare/openlibrary-v0.3.0...openlibrary-v0.3.1) (2026-11-04)
+
+
+### Bug Fixes
+
+* **openlibrary:** honour the author id in book search ([#82](https://github.com/fliks-app/plugins/issues/82)) ([f11b182](https://github.com/fliks-app/plugins/commit/f11b1824d6cdfc3ddf7d0efe90af8fc53f16e01c))
+
 ## [0.3.0](https://github.com/fliks-app/plugins/compare/openlibrary-v0.2.0...openlibrary-v0.3.0) (2026-11-04)
 
 
