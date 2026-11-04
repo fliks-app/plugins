@@ -5,8 +5,8 @@ use fk_plugin_download::db::{HistoryRow, IndexerRow, MIGRATIONS};
 use fk_plugin_download::{client, grab, poller, routes, throttle, torznab, util};
 use fliks_plugin_route::{Matcher, ParamValue};
 use fliks_plugin_sdk::bindings::fliks::plugin::types::{
-    ExternalId, Family, Rejection, ReleaseCoverage, ScoredRelease, Span, Target, Unit, UnitRef,
-    Want, WantDecision,
+    ExternalId, Family, Rejection, ReleaseCoverage, ReleaseLanguage, ScoredRelease, Span, Target,
+    Unit, UnitRef, Want, WantDecision,
 };
 use serde_json::{Map, Value, json};
 use std::collections::HashSet;
@@ -434,8 +434,7 @@ fn ranked(id: u64, rejections: u64) -> grab::Ranked {
         allowed: true,
         custom_format_score: 0,
         blocklisted: false,
-        language_id: None,
-        language_name: None,
+        languages: vec![],
         language_allowed: true,
         whole_group: false,
         coverage: None,
@@ -708,4 +707,23 @@ fn route_match() {
     for path in ["/1/Releases", "/1/releases", "/queue/", "//releases"] {
         assert!(different.iter().any(|d| d.contains(path)), "{path}");
     }
+}
+
+#[test]
+fn wire_lists_every_release_language() {
+    let mut r = ranked(1, 0);
+    r.scored.languages = vec![
+        ReleaseLanguage {
+            id: 5,
+            name: "Italian".into(),
+        },
+        ReleaseLanguage {
+            id: 2,
+            name: "French".into(),
+        },
+    ];
+    assert_eq!(
+        grab::to_wire(&r)["languages"],
+        json!([{"id": 5, "name": "Italian"}, {"id": 2, "name": "French"}])
+    );
 }
