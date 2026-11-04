@@ -139,6 +139,55 @@ pub fn numbers(t: &Target) -> (Option<u32>, Option<u32>) {
     )
 }
 
+/// One indexer query: the numbers release names use, from `search-units`; none is the whole work.
+fn asks(t: &Target) -> Vec<Piece> {
+    let asks: Vec<Piece> = t
+        .search_units
+        .iter()
+        .filter_map(|u| match (u.group, u.number) {
+            (Some(s), Some(e)) => Some(Piece::Episode(s, e as u32)),
+            (Some(s), None) => Some(Piece::Season(s)),
+            _ => None,
+        })
+        .collect();
+    if asks.is_empty() {
+        vec![Piece::Work]
+    } else {
+        asks
+    }
+}
+
+/// Every query of a target on one indexer, the results merged without repeats.
+async fn search_asks(
+    ix: &mut IndexerRow,
+    kind: Kind,
+    query: &str,
+    asks: &[Piece],
+    ids: &Ids<'_>,
+    round: Round,
+) -> Result<Vec<Release>, throttle::Lapsed> {
+    let mut out: Vec<Release> = vec![];
+    for ask in asks {
+        let found = match *ask {
+            Piece::Episode(s, e) => torznab::search_series(ix, kind, query, s, e, ids, round).await,
+            Piece::Season(s) => torznab::search_season_pack(ix, kind, query, s, ids, round).await,
+            Piece::Work => torznab::search_movie(ix, kind, query, ids, round).await,
+        };
+        // A later query that runs out of budget keeps what the earlier ones found.
+        let found = match found {
+            Err(lapsed) if out.is_empty() => return Err(lapsed),
+            Err(_) => break,
+            Ok(found) => found,
+        };
+        for r in found {
+            if !out.iter().any(|o| o.download_url == r.download_url) {
+                out.push(r);
+            }
+        }
+    }
+    Ok(out)
+}
+
 pub fn piece(t: &Target) -> Piece {
     match numbers(t) {
         (Some(s), Some(e)) => Piece::Episode(s, e),
@@ -484,7 +533,8 @@ pub fn search_scored(
 
     let mut raw: Vec<Release> = vec![];
     let (query, ids) = (&query, &ids);
-    let piece = piece(target);
+    let asks = asks(target);
+    let asks = &asks;
     rt::block_on(async {
         let mut pending: FuturesUnordered<_> = ready
             .iter_mut()
@@ -492,15 +542,7 @@ pub fn search_scored(
                 let out = if book {
                     torznab::search_book(ix, kind, target.family, author, query, round).await
                 } else {
-                    match piece {
-                        Piece::Episode(s, e) => {
-                            torznab::search_series(ix, kind, query, s, e, ids, round).await
-                        }
-                        Piece::Season(s) => {
-                            torznab::search_season_pack(ix, kind, query, s, ids, round).await
-                        }
-                        Piece::Work => torznab::search_movie(ix, kind, query, ids, round).await,
-                    }
+                    search_asks(ix, kind, query, asks, ids, round).await
                 };
                 (ix, out)
             })
