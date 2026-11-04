@@ -6,6 +6,7 @@ origin. `scene-mapped-ids` lists the TVDB ids TheXEM maps (`/map/havemap?origin=
 gives one id's per-episode mapping (`/map/all?origin=tvdb&id=<id>`). An id TheXEM does not map answers
 none; an entry missing its scene or TVDB side is skipped. The core stores the mappings and translates
 the numbers of release and file names (`server/docs/spec/scene-numbering.md`).
+Without a provider declaring `scene`, Fliks reads every release and file number as aired numbering.
 
 The base URL is the plugin's own `baseUrl` setting, TheXEM when empty. The host paces the provider at one
 request a second.
