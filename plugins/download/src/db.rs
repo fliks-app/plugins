@@ -411,6 +411,15 @@ pub mod indexers {
         .map(drop)
     }
 
+    /// Book searches use `t=search` until the caps are probed again.
+    pub fn mark_no_book_search(id: i64) -> R<()> {
+        exec(
+            r#"UPDATE "indexers" SET "capsBookSearch" = false WHERE "id" = $1"#,
+            &[int(id)],
+        )
+        .map(drop)
+    }
+
     pub fn remove(id: i64) -> R<()> {
         exec(r#"DELETE FROM "indexers" WHERE "id" = $1"#, &[int(id)]).map(drop)
     }
