@@ -781,3 +781,24 @@ fn a_comic_pick_keeps_the_allowed_and_unrejected() {
     let sorted = [denied, ranked(2, 1), ranked(3, 0)];
     assert_eq!(grab::pick(&sorted, &issue(Some("3"), 3.0)), [2]);
 }
+
+#[test]
+fn a_comic_match_is_the_issue_with_the_same_decimal_number_and_label() {
+    let m = |label: &str, number: f64| UnitRef {
+        group: None,
+        number: Some(number),
+        end_number: None,
+        label: Some(label.into()),
+        absolute: None,
+    };
+    let t = issue(Some("1.5"), 1.5);
+    assert!(grab::same_issue(&t, &m("1.5", 1.5)));
+    assert!(!grab::same_issue(&t, &m("1", 1.0)), "1.5 is not issue 1");
+    let annual = issue(Some("annual 2"), 2.0);
+    assert!(grab::same_issue(&annual, &m("Annual 2", 2.0)));
+    assert!(
+        !grab::same_issue(&annual, &m("2", 2.0)),
+        "an annual is not issue 2"
+    );
+    assert!(poller::COMIC_EXTS.contains(&".pdf"));
+}

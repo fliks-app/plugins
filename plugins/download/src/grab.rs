@@ -1145,6 +1145,17 @@ fn try_auto_grab(target: &Target, client: &DownloadClientRow) -> R<bool> {
     skip("every eligible release was unobtainable".into())
 }
 
+/// One target's failure is logged and skipped: it must not end the sweep of the rest.
+fn auto_grab_or_skip(target: &Target, client: &DownloadClientRow) -> bool {
+    try_auto_grab(target, client).unwrap_or_else(|e| {
+        warn!(
+            "AutoGrab[{}]: \"{}\" failed, the sweep goes on — {e}",
+            target.kind, target.title
+        );
+        false
+    })
+}
+
 /// Candidates arrive sorted by this tuple; a season pack sorts before its episodes. The last
 /// field is a book want's position among those of its media, the host's order of (family, language).
 pub type Key = (u32, Option<u32>, Option<u32>, u8);
@@ -1214,7 +1225,7 @@ pub fn search_missing(media_ids: Option<Vec<u32>>, resume: Option<Key>) -> R<Opt
             {
                 continue;
             }
-            let grabbed = try_auto_grab(target, &client)?;
+            let grabbed = auto_grab_or_skip(target, &client);
             if grabbed
                 && is_season(target)
                 && let Some(g) = group_id(target)
@@ -1240,6 +1251,8 @@ pub struct Match {
     pub media_id: u32,
     pub season_number: Option<u32>,
     pub episode_number: Option<u32>,
+    /// The unit as the host sent it: a comic issue's number is decimal and its label says its kind.
+    pub unit: Option<UnitRef>,
     pub coverage: Option<ReleaseCoverage>,
 }
 
@@ -1268,11 +1281,39 @@ pub fn identify(titles: &[String]) -> R<HashMap<String, Option<Match>>> {
             media_id,
             season_number: r.unit.as_ref().and_then(|u| u.group),
             episode_number: r.unit.as_ref().and_then(|u| u.number).map(|n| n as u32),
+            unit: r.unit.clone(),
             coverage: r.coverage,
         });
         out.insert(title.clone(), m);
     }
     Ok(out)
+}
+
+/// Whether a comic target is the issue a match names: the same decimal number and printed label.
+pub fn same_issue(t: &Target, u: &UnitRef) -> bool {
+    let Some(r) = unit_of(t).map(|u| &u.ref_) else {
+        return false;
+    };
+    let label = |l: &Option<String>| l.as_deref().map(|l| l.trim().to_lowercase());
+    r.number == u.number && label(&r.label) == label(&u.label)
+}
+
+/// The item of the wanted comic issue a match names, for a torrent the plugin did not grab itself.
+pub fn comic_item(media_id: u32, unit: &UnitRef) -> R<Option<i64>> {
+    let page = host::acquisition_candidates(&CandidatesQuery {
+        kind: Some("comic".into()),
+        family: Some(Family::Image),
+        media_ids: Some(vec![media_id]),
+        available_on: today(),
+        limit: 500,
+        cursor: None,
+    })?;
+    Ok(page
+        .items
+        .iter()
+        .find(|it| same_issue(it, unit))
+        .and_then(item_id)
+        .map(i64::from))
 }
 
 /// Group and item ids for a match carrying only numbers, when core still lists them as open.
@@ -1374,7 +1415,11 @@ pub fn rss_sync() -> R<()> {
             let targets: Vec<&Target> = page
                 .items
                 .iter()
-                .filter(|it| numbers(it) == (m.season_number, m.episode_number))
+                .filter(|it| match (it.kind == "comic", &m.unit) {
+                    (true, Some(u)) => same_issue(it, u),
+                    (true, None) => false,
+                    (false, _) => numbers(it) == (m.season_number, m.episode_number),
+                })
                 .filter(|it| named.is_none_or(|f| it.kind != "book" || it.family == f))
                 .collect();
             if targets.is_empty() && page.cursor.is_some() {
@@ -1388,7 +1433,7 @@ pub fn rss_sync() -> R<()> {
                     .as_ref()
                     .is_some_and(|w| w.decision != WantDecision::Skip)
                 {
-                    try_auto_grab(t, &client)?;
+                    auto_grab_or_skip(t, &client);
                 }
             }
         }
