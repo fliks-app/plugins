@@ -24,6 +24,7 @@ fn openlibrary_reproduces_expected() {
                 author: a.s("author"),
                 isbn: a.s("isbn"),
                 q: a.s("q"),
+                author_key: a.s("author_key"),
                 lang: a.s("lang"),
                 limit: a.n("limit"),
                 page: a.n("page"),
