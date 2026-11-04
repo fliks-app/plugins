@@ -27,6 +27,7 @@ const VIDEO_EXTS: [&str; 14] = [
     ".mpeg", ".ogm", ".mts",
 ];
 pub const AUDIO_EXTS: [&str; 7] = [".m4b", ".m4a", ".mp3", ".flac", ".ogg", ".opus", ".aac"];
+pub const COMIC_EXTS: [&str; 3] = [".cbz", ".cbr", ".cb7"];
 pub const TEXT_EXTS: [&str; 6] = [".epub", ".pdf", ".azw3", ".mobi", ".fb2", ".cbz"];
 /// Media the ingest refuses: a torrent holding them is never taken for a dud.
 const REFUSED_MEDIA_EXTS: [&str; 8] = [
@@ -748,7 +749,8 @@ fn exts_of(f: Family) -> &'static [&'static str] {
     match f {
         Family::Audio => &AUDIO_EXTS,
         Family::Text => &TEXT_EXTS,
-        _ => &VIDEO_EXTS,
+        Family::Image => &COMIC_EXTS,
+        Family::Video => &VIDEO_EXTS,
     }
 }
 
@@ -765,7 +767,7 @@ fn paths_of(files: &[TorrentFile], save: &str, family: Family) -> Vec<String> {
 fn holds_media(files: &[TorrentFile]) -> bool {
     files.iter().any(|f| {
         let e = ext_of(&f.name);
-        [Family::Video, Family::Audio, Family::Text]
+        [Family::Video, Family::Audio, Family::Text, Family::Image]
             .into_iter()
             .any(|fam| exts_of(fam).contains(&e.as_str()))
             || REFUSED_MEDIA_EXTS.contains(&e.as_str())
@@ -804,6 +806,17 @@ fn is_book(h: &HistoryRow, media: u32) -> R<bool> {
 /// files carry; a row without one takes the first family found. Empty when nothing is ingestable.
 fn intake(h: &HistoryRow, media: u32, files: &[TorrentFile], save: &str) -> R<Vec<Intake>> {
     let own = h.family.as_deref().and_then(family_of);
+    if own == Some(Family::Image) {
+        let paths = paths_of(files, save, Family::Image);
+        return Ok(Some(Intake {
+            family: Family::Image,
+            language: None,
+            paths,
+        })
+        .filter(|i| !i.paths.is_empty())
+        .into_iter()
+        .collect());
+    }
     let video = !is_book(h, media)?;
     if video {
         let paths = paths_of(files, save, Family::Video);

@@ -334,7 +334,8 @@ pub fn pick_category(tree: Option<&str>, family: Family) -> Option<u32> {
     let candidates: &[u32] = match family {
         Family::Text => &[7020, 7000],
         Family::Audio => &[3030],
-        _ => return None,
+        Family::Image => &[7030],
+        Family::Video => return None,
     };
     let Some(tree) = tree else {
         return candidates.first().copied();
@@ -345,11 +346,11 @@ pub fn pick_category(tree: Option<&str>, family: Family) -> Option<u32> {
         .find(|c| tree.split(',').any(|id| id.parse() == Ok(*c)))
 }
 
-/// The RSS feed's categories: video, plus each book family the advertised tree carries.
+/// The RSS feed's categories: video, plus each book and comic family the advertised tree carries.
 /// An unprobed tree adds none: an indexer that lacks a category may refuse the feed.
 pub fn rss_categories(tree: Option<&str>) -> String {
     let books = tree.into_iter().flat_map(|t| {
-        [Family::Text, Family::Audio]
+        [Family::Text, Family::Audio, Family::Image]
             .into_iter()
             .filter_map(move |f| pick_category(Some(t), f))
     });
@@ -971,6 +972,45 @@ pub async fn search_book(
     }
 }
 
+/// `t=search` in the comics category with each query in turn (the issue number padded, then bare),
+/// stopping at the first that finds releases. An indexer without the category is skipped.
+pub async fn search_comic(
+    ix: &mut IndexerRow,
+    kind: Kind,
+    queries: &[String],
+    round: Round,
+) -> Result<Vec<Release>, Lapsed> {
+    let Some((base, key)) = search_target(ix, kind) else {
+        return Ok(vec![]);
+    };
+    if !ensure_caps(ix, round).await? {
+        return Ok(vec![]);
+    }
+    let Some(cat) = pick_category(ix.caps_categories.as_deref(), Family::Image) else {
+        info!("[{}] skipped — no comics category", ix.name);
+        return Ok(vec![]);
+    };
+    let cat = cat.to_string();
+    for q in queries {
+        let url = format!(
+            "{base}?{}",
+            build_query(&Query {
+                t: "search",
+                q: Some(q),
+                cat: &cat,
+                api_key: &key,
+                ..Default::default()
+            })
+        );
+        match exec_search(&url, "search", ix, round).await? {
+            Ok(found) if !found.is_empty() => return Ok(found),
+            Ok(_) => {}
+            Err(_) => break,
+        }
+    }
+    Ok(vec![])
+}
+
 #[cfg(test)]
 mod book_tests {
     use super::*;
@@ -999,6 +1039,13 @@ mod book_tests {
         );
         assert_eq!(pick_category(None, Family::Audio), Some(3030));
         assert_eq!(pick_category(None, Family::Video), None);
+        assert_eq!(pick_category(None, Family::Image), Some(7030));
+        assert_eq!(pick_category(Some("7000,7020"), Family::Image), None);
+        assert_eq!(
+            pick_category(Some("7000,7020,7030"), Family::Image),
+            Some(7030)
+        );
+        assert_eq!(rss_categories(Some("7000,7030")), "2000,7000,7030");
         assert_eq!(rss_categories(None), "2000");
         assert_eq!(rss_categories(Some("2000,5000")), "2000");
         assert_eq!(rss_categories(Some("3030,7000,7020")), "2000,7020,3030");

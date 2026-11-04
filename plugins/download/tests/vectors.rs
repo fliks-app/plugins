@@ -728,3 +728,56 @@ fn wire_lists_every_release_language() {
         json!([{"id": 5, "name": "Italian"}, {"id": 2, "name": "French"}])
     );
 }
+
+fn issue(label: Option<&str>, number: f64) -> Target {
+    let mut t = target(Some(WantDecision::Missing));
+    t.kind = "comic".into();
+    t.family = Family::Image;
+    t.search_title = "Star Gardens".into();
+    let mut u = unit(None, Some(number));
+    u.ref_.label = label.map(str::to_owned);
+    t.scope = vec![u];
+    t
+}
+
+#[test]
+fn a_comic_issue_is_searched_padded_then_bare() {
+    let q = |t: &Target, c| grab::issue_queries(t, c);
+    assert_eq!(
+        q(&issue(Some("3"), 3.0), None),
+        ["Star Gardens 003", "Star Gardens 3"]
+    );
+    assert_eq!(
+        q(&issue(Some("1.5"), 1.5), None),
+        ["Star Gardens 001.5", "Star Gardens 1.5"]
+    );
+    assert_eq!(
+        q(&issue(Some("annual 2"), 2.0), None),
+        ["Star Gardens annual 002", "Star Gardens annual 2"]
+    );
+    assert_eq!(q(&issue(Some("-1"), -1.0), None), ["Star Gardens -1"]);
+    assert_eq!(q(&issue(Some("120"), 120.0), None), ["Star Gardens 120"]);
+    assert_eq!(q(&issue(None, 7.0), None)[0], "Star Gardens 007");
+    assert_eq!(q(&issue(Some("3"), 3.0), Some(" my words ")), ["my words"]);
+    let mut volume = issue(None, 0.0);
+    volume.scope.clear();
+    assert_eq!(q(&volume, None), ["Star Gardens"]);
+}
+
+#[test]
+fn a_comic_is_acquired_as_a_comic_in_its_own_category() {
+    assert_eq!(
+        grab::Media::of("comic", Family::Image).map(grab::Media::as_str),
+        Some("comic")
+    );
+    assert!(grab::Media::of("comic", Family::Text).is_none());
+    assert!(grab::Media::of("album", Family::Audio).is_none());
+}
+
+#[test]
+fn a_comic_pick_keeps_the_allowed_and_unrejected() {
+    let mut denied = ranked(1, 0);
+    denied.scored.allowed = false;
+    let sorted = [denied, ranked(2, 1), ranked(3, 0)];
+    assert_eq!(grab::pick(&sorted, &issue(Some("3"), 3.0)), [2]);
+}

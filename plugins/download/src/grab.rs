@@ -25,16 +25,18 @@ pub enum Media {
     Series,
     Ebook,
     Audiobook,
+    Comic,
 }
 
 impl Media {
-    /// `None` for `comic`, `album`, any kind added later and a book of another family.
+    /// `None` for `album`, any kind added later and a book or comic of another family.
     pub fn of(kind: &str, family: Family) -> Option<Self> {
         match (kind, family) {
             ("movie", _) => Some(Self::Movie),
             ("series", _) => Some(Self::Series),
             ("book", Family::Text) => Some(Self::Ebook),
             ("book", Family::Audio) => Some(Self::Audiobook),
+            ("comic", Family::Image) => Some(Self::Comic),
             _ => None,
         }
     }
@@ -45,6 +47,7 @@ impl Media {
             Self::Series => "series",
             Self::Ebook => "ebook",
             Self::Audiobook => "audiobook",
+            Self::Comic => "comic",
         }
     }
 }
@@ -373,11 +376,13 @@ fn rank(target: &Target, indexers: &[IndexerRow], releases: &[Release]) -> R<Vec
 pub fn pick(sorted: &[Ranked], target: &Target) -> Vec<usize> {
     let season_only = is_season(target);
     let book = target.kind == "book";
+    let comic = target.kind == "comic";
     match &target.want {
         Some(w) if w.decision != WantDecision::Skip => sorted
             .iter()
             .enumerate()
             .filter(|(_, r)| r.scored.rejections.is_empty())
+            .filter(|(_, r)| !comic || r.scored.allowed)
             .filter(|(_, r)| {
                 !book
                     || (r.scored.allowed
@@ -427,6 +432,38 @@ pub fn search_query(t: &Target, custom: Option<&str>) -> String {
         return format!("{} {title}", t.search_title);
     }
     t.search_title.clone()
+}
+
+/// The queries that find one comic issue: the series and the number as printed in release names
+/// (`003`), then bare (`3`); an annual or a special keeps its word. A custom query stands alone.
+pub fn issue_queries(t: &Target, custom: Option<&str>) -> Vec<String> {
+    if let Some(c) = custom.map(str::trim).filter(|c| !c.is_empty()) {
+        return vec![c.to_owned()];
+    }
+    let Some(r) = unit_of(t).map(|u| &u.ref_) else {
+        return vec![t.search_title.clone()];
+    };
+    let label = r.label.clone().unwrap_or_else(|| {
+        r.number
+            .map_or_else(String::new, |n| crate::util::num(n).to_string())
+    });
+    let (word, number) = match label.split_once(' ') {
+        Some((w, n)) => (format!("{w} "), n.to_owned()),
+        None => (String::new(), label),
+    };
+    let padded = match number.split_once('.') {
+        Some((i, f)) if i.len() < 3 && !i.starts_with('-') => format!("{i:0>3}.{f}"),
+        None if number.len() < 3 && !number.starts_with('-') => format!("{number:0>3}"),
+        _ => number.clone(),
+    };
+    let mut out = vec![];
+    for n in [padded, number] {
+        let q = format!("{} {word}{n}", t.search_title);
+        if !out.contains(&q) {
+            out.push(q);
+        }
+    }
+    out
 }
 
 /// Who a streamed search reports to.
@@ -493,6 +530,8 @@ pub fn search_scored(
     let ids = Ids::of(&target.external_ids);
     let query = search_query(target, custom);
     let book = target.kind == "book";
+    let comic = target.kind == "comic";
+    let issues = &issue_queries(target, custom);
     let author = author_of(target).filter(|_| custom.is_none_or(|c| c.trim().is_empty()));
 
     if is_special(target) && special_title(target).is_none() {
@@ -541,6 +580,8 @@ pub fn search_scored(
             .map(|ix| async move {
                 let out = if book {
                     torznab::search_book(ix, kind, target.family, author, query, round).await
+                } else if comic {
+                    torznab::search_comic(ix, kind, issues, round).await
                 } else {
                     search_asks(ix, kind, query, asks, ids, round).await
                 };
@@ -646,7 +687,7 @@ fn load_target(
     }
     let Some(media) = Media::of(&target.kind, target.family) else {
         info!(
-            "Media #{media_id} \"{}\" is a {}: this plugin acquires movies, series and books only",
+            "Media #{media_id} \"{}\" is a {}: this plugin acquires movies, series, books and comics only",
             target.title, target.kind
         );
         return Err(Error::grab("download.grab.errors.unsupported_kind"));
@@ -1013,6 +1054,11 @@ fn pending(target: &Target) -> R<Option<String>> {
             episode_number: episode.map(Into::into),
             episode_tag_pattern: episode.map(|e| format!("%S{}E{}%", pad2(s), pad2(e))),
         }),
+        _ if target.kind == "comic" && item_id(target).is_some() => history::find_pending_for_item(
+            target.media_id.into(),
+            item_id(target).unwrap_or(0).into(),
+        )
+        .map(|h| h.map(|h| h.source_title)),
         _ => Ok(history::find_pending_for_media(
             target.media_id.into(),
             family_str(target.family),
@@ -1026,7 +1072,7 @@ fn pending(target: &Target) -> R<Option<String>> {
 fn try_auto_grab(target: &Target, client: &DownloadClientRow) -> R<bool> {
     let Some(media) = Media::of(&target.kind, target.family) else {
         info!(
-            "AutoGrab[{}]: \"{}\" skipped — this plugin acquires movies, series and books only",
+            "AutoGrab[{}]: \"{}\" skipped — this plugin acquires movies, series, books and comics only",
             target.kind, target.title
         );
         return Ok(false);
