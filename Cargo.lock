@@ -1230,6 +1230,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "fk-plugin-comicvine"
+version = "0.1.0"
+dependencies = [
+ "fliks-plugin-sdk",
+ "fliks-plugin-sdk-provider",
+ "provider-common",
+ "serde_json",
+ "url",
+]
+
+[[package]]
 name = "fk-plugin-download"
 version = "2.0.0"
 dependencies = [
@@ -1281,6 +1292,18 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
+ "url",
+]
+
+[[package]]
+name = "fk-plugin-metron"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "fliks-plugin-sdk",
+ "fliks-plugin-sdk-provider",
+ "provider-common",
+ "serde_json",
  "url",
 ]
 

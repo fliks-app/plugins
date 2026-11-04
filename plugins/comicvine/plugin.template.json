@@ -1,0 +1,102 @@
+{
+  "id": "fliks.comicvine",
+  "pluginApi": 3,
+  "name": "ComicVine",
+  "fliks": ">=6.0.0 <7.0.0",
+  "author": "Fliks",
+  "description": "Comic volume and issue metadata from ComicVine, for non-commercial use only. Needs your own API key.",
+  "license": "AGPL-3.0-or-later",
+  "homepage": "https://comicvine.gamespot.com",
+  "logo": "logo.svg",
+  "kind": "process",
+  "runtime": "wasm",
+  "memoryMb": 64,
+  "database": {
+    "schema": false,
+    "coreRefs": []
+  },
+  "scopes": [],
+  "ingestRoots": [],
+  "routes": [],
+  "provider": {
+    "namespaces": [
+      {
+        "name": "fliks.comicvine:comicvine",
+        "label": "ComicVine",
+        "idPattern": "^[0-9]{1,12}$"
+      }
+    ],
+    "kinds": {
+      "comic": [
+        "search",
+        "work",
+        "children"
+      ]
+    },
+    "limits": {
+      "ratePerSec": 0.05,
+      "burst": 5
+    },
+    "requestTimeoutMs": 15000,
+    "snapshotTtlSecs": {
+      "work": 0,
+      "children": 0
+    },
+    "imageHosts": [
+      "comicvine.gamespot.com"
+    ],
+    "requires": [
+      "apiKey"
+    ]
+  },
+  "ui": {
+    "contributions": [
+      {
+        "id": "fliks-comicvine.settings.general",
+        "slot": "settings.page",
+        "weight": 100,
+        "labelKey": "comicvine.config.title",
+        "action": {
+          "kind": "route",
+          "path": "/admin/settings/plugins/fliks.comicvine/general"
+        }
+      }
+    ],
+    "configPages": [
+      {
+        "id": "general",
+        "labelKey": "comicvine.config.title",
+        "subtitleKey": "comicvine.config.subtitle",
+        "fields": [
+          {
+            "key": "apiKey",
+            "type": "text",
+            "labelKey": "comicvine.config.apiKey",
+            "hint": "comicvine.config.apiKey_hint",
+            "secret": true
+          },
+          {
+            "kind": "caption",
+            "textKey": "comicvine.config.attribution"
+          }
+        ]
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "comicvine.config.title": "ComicVine",
+      "comicvine.config.subtitle": "Comic metadata from ComicVine, for non-commercial use only.",
+      "comicvine.config.apiKey": "API key",
+      "comicvine.config.apiKey_hint": "Your own ComicVine API key (comicvine.gamespot.com/api). Fliks ships no key: without one the provider stays inactive. ComicVine allows 200 requests per resource per hour.",
+      "comicvine.config.attribution": "Data and images from ComicVine (https://comicvine.gamespot.com). Use is limited to non-commercial purposes."
+    },
+    "fr": {
+      "comicvine.config.title": "ComicVine",
+      "comicvine.config.subtitle": "Métadonnées de bandes dessinées de ComicVine, pour un usage non commercial uniquement.",
+      "comicvine.config.apiKey": "Clé d'API",
+      "comicvine.config.apiKey_hint": "Votre propre clé d'API ComicVine (comicvine.gamespot.com/api). Fliks n'en fournit aucune : sans clé, le fournisseur reste inactif. ComicVine autorise 200 requêtes par ressource et par heure.",
+      "comicvine.config.attribution": "Données et images de ComicVine (https://comicvine.gamespot.com). Usage limité au non commercial."
+    }
+  }
+}

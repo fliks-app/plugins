@@ -1,0 +1,3 @@
+{"count":4,"next":null,"previous":"https://metron.cloud/api/issue/?series_id=1001","results":[
+{"id":5003,"series":{"id":1001,"name":"Placeholder Series","volume":2,"year_began":2016},"number":"1.5","issue":"Placeholder Series (2016) #1.5","cover_date":"2016-06-01","store_date":null,"image":null},
+{"id":5004,"series":{"id":1001,"name":"Placeholder Series","volume":2,"year_began":2016},"number":"1","issue":"Placeholder Series (2016) #1 variant","cover_date":"2016-06-01","store_date":"2016-05-11","image":null}]}

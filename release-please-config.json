@@ -124,6 +124,28 @@
           "jsonpath": "$.package[?(@.name.value=='fk-plugin-librivox')].version"
         }
       ]
+    },
+    "plugins/metron": {
+      "release-type": "rust",
+      "component": "metron",
+      "extra-files": [
+        {
+          "type": "toml",
+          "path": "/Cargo.lock",
+          "jsonpath": "$.package[?(@.name.value=='fk-plugin-metron')].version"
+        }
+      ]
+    },
+    "plugins/comicvine": {
+      "release-type": "rust",
+      "component": "comicvine",
+      "extra-files": [
+        {
+          "type": "toml",
+          "path": "/Cargo.lock",
+          "jsonpath": "$.package[?(@.name.value=='fk-plugin-comicvine')].version"
+        }
+      ]
     }
   }
 }

@@ -1,0 +1,108 @@
+{
+  "id": "fliks.metron",
+  "pluginApi": 3,
+  "name": "Metron",
+  "fliks": ">=6.0.0 <7.0.0",
+  "author": "Fliks",
+  "description": "Comic series and issue metadata from Metron. Needs your own Metron account.",
+  "license": "AGPL-3.0-or-later",
+  "homepage": "https://metron.cloud",
+  "logo": "logo.svg",
+  "kind": "process",
+  "runtime": "wasm",
+  "memoryMb": 64,
+  "database": {
+    "schema": false,
+    "coreRefs": []
+  },
+  "scopes": [],
+  "ingestRoots": [],
+  "routes": [],
+  "provider": {
+    "namespaces": [
+      {
+        "name": "fliks.metron:metron",
+        "label": "Metron",
+        "idPattern": "^[0-9]{1,12}$"
+      }
+    ],
+    "kinds": {
+      "comic": [
+        "search",
+        "work",
+        "children"
+      ]
+    },
+    "limits": {
+      "ratePerSec": 0.33,
+      "burst": 1,
+      "dailyQuota": 5000
+    },
+    "requestTimeoutMs": 15000,
+    "snapshotTtlSecs": {
+      "work": 0,
+      "children": 0
+    },
+    "imageHosts": [
+      "static.metron.cloud"
+    ],
+    "requires": [
+      "username",
+      "password"
+    ]
+  },
+  "ui": {
+    "contributions": [
+      {
+        "id": "fliks-metron.settings.general",
+        "slot": "settings.page",
+        "weight": 100,
+        "labelKey": "metron.config.title",
+        "action": {
+          "kind": "route",
+          "path": "/admin/settings/plugins/fliks.metron/general"
+        }
+      }
+    ],
+    "configPages": [
+      {
+        "id": "general",
+        "labelKey": "metron.config.title",
+        "subtitleKey": "metron.config.subtitle",
+        "fields": [
+          {
+            "key": "username",
+            "type": "text",
+            "labelKey": "metron.config.username",
+            "hint": "metron.config.username_hint"
+          },
+          {
+            "key": "password",
+            "type": "text",
+            "labelKey": "metron.config.password",
+            "hint": "metron.config.password_hint",
+            "secret": true
+          }
+        ]
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "metron.config.title": "Metron",
+      "metron.config.subtitle": "Comic metadata from Metron.",
+      "metron.config.username": "Username",
+      "metron.config.username_hint": "Your own Metron account (metron.cloud). Fliks ships no account: without one the provider stays inactive. Metron allows 20 requests per minute and 5,000 per day per account.",
+      "metron.config.password": "Password",
+      "metron.config.password_hint": "The password of that account, stored as a secret."
+    },
+    "fr": {
+      "metron.config.title": "Metron",
+      "metron.config.subtitle": "Métadonnées de bandes dessinées de Metron.",
+      "metron.config.username": "Nom d'utilisateur",
+      "metron.config.username_hint": "Votre propre compte Metron (metron.cloud). Fliks n'en fournit aucun : sans compte, le fournisseur reste inactif. Metron autorise 20 requêtes par minute et 5 000 par jour et par compte.",
+      "metron.config.password": "Mot de passe",
+      "metron.config.password_hint": "Le mot de passe de ce compte, stocké comme secret."
+    }
+  }
+}
