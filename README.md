@@ -16,9 +16,11 @@ from the plugin catalogue in **Settings → Advanced → Plugins**.
 | [`plugins/audnexus`](plugins/audnexus/README.md) | `fliks.audnexus`: audiobook metadata and chapters from Audnexus | AGPL-3.0-or-later |
 | [`plugins/gutenberg`](plugins/gutenberg/README.md) | `fliks.gutenberg`: search Project Gutenberg and add its free ebooks | AGPL-3.0-or-later |
 | [`plugins/librivox`](plugins/librivox/README.md) | `fliks.librivox`: search LibriVox and add its free audiobooks | AGPL-3.0-or-later |
+| [`plugins/metron`](plugins/metron/README.md) | `fliks.metron`: comic metadata from Metron (your own account) | AGPL-3.0-or-later |
+| [`plugins/comicvine`](plugins/comicvine/README.md) | `fliks.comicvine`: comic metadata from Comic Vine (your own key, non-commercial use) | AGPL-3.0-or-later |
 
 [`crates/provider-common`](crates/provider-common) holds what several provider plugins share (language
-codes, the HTTP status mapping, the book model and ISBN); it is a library, not a plugin. Each provider
+codes, the HTTP status mapping, the book and comic models and ISBN); it is a library, not a plugin. Each provider
 keeps its own parser and golden fixtures (`src/parse.rs`, `tests/fixtures`).
 [`crates/direct-source`](crates/direct-source) holds what the plugins that add a book from a free source
 share (a redirect-following download, files under `/data`, the resolve and ingest host calls).

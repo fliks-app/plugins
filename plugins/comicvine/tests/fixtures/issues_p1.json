@@ -1,0 +1,62 @@
+{
+ "error": "OK",
+ "limit": 100,
+ "offset": 0,
+ "number_of_page_results": 4,
+ "number_of_total_results": 4,
+ "status_code": 1,
+ "results": [
+  {
+   "id": 9002,
+   "issue_number": "2",
+   "name": "Second",
+   "cover_date": "2016-07-01",
+   "store_date": "2016-06-08",
+   "image": {
+    "super_url": "https://comicvine.gamespot.com/a/uploads/scale_large/0/2/p2.jpg"
+   },
+   "volume": {
+    "id": 4001,
+    "name": "Placeholder Series"
+   }
+  },
+  {
+   "id": 9001,
+   "issue_number": "1",
+   "name": null,
+   "cover_date": "2016-06-00",
+   "store_date": null,
+   "image": {
+    "super_url": "https://comicvine.gamespot.com/a/uploads/scale_large/0/2/p1.jpg"
+   },
+   "volume": {
+    "id": 4001,
+    "name": "Placeholder Series"
+   }
+  },
+  {
+   "id": 9003,
+   "issue_number": "1.5",
+   "name": "Interlude",
+   "cover_date": "2016-06-01",
+   "store_date": "2016-05-25",
+   "image": null,
+   "volume": {
+    "id": 4001,
+    "name": "Placeholder Series"
+   }
+  },
+  {
+   "id": 9004,
+   "issue_number": "1",
+   "name": null,
+   "cover_date": "2016-06-01",
+   "store_date": null,
+   "image": null,
+   "volume": {
+    "id": 4003,
+    "name": "Placeholder Series Annual"
+   }
+  }
+ ]
+}
