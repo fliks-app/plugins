@@ -26,7 +26,7 @@ jobs:
       crates: ${{ steps.affected.outputs.crates }}
       release: ${{ steps.affected.outputs.release }}
       # More than 3 plugins share one runner and one build instead of a matrix of cold ones.
-      bulk: ${{ steps.affected.outputs.plugins != '[]' && length(fromJSON(steps.affected.outputs.plugins)) > 3 }}
+      bulk: ${{ steps.affected.outputs.bulk }}
     steps:
       - uses: actions/checkout@v6
         with:

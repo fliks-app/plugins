@@ -6,8 +6,9 @@ base, head = sys.argv[1], sys.argv[2]
 
 
 def emit(plugins, crates, release=False):
+    bulk = len(plugins) > 3
     with open(os.environ.get("GITHUB_OUTPUT", "/dev/stdout"), "a") as f:
-        f.write(f"plugins={json.dumps(plugins)}\ncrates={str(crates).lower()}\nrelease={str(release).lower()}\n")
+        f.write(f"plugins={json.dumps(plugins)}\ncrates={str(crates).lower()}\nrelease={str(release).lower()}\nbulk={str(bulk).lower()}\n")
 
 
 # A release PR only bumps versions and the changelog; the archive is built at tag time.
