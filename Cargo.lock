@@ -1299,7 +1299,6 @@ dependencies = [
 name = "fk-plugin-metron"
 version = "0.1.0"
 dependencies = [
- "base64 0.22.1",
  "fliks-plugin-sdk",
  "fliks-plugin-sdk-provider",
  "provider-common",

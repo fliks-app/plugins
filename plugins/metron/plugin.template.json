@@ -4,7 +4,7 @@
   "name": "Metron",
   "fliks": ">=6.0.0 <7.0.0",
   "author": "Fliks",
-  "description": "Comic series and issue metadata from Metron. Needs your own Metron account.",
+  "description": "Comic series and issue metadata from Metron (CC BY-SA 4.0). Needs your own Metron API token.",
   "license": "AGPL-3.0-or-later",
   "homepage": "https://metron.cloud",
   "logo": "logo.svg",
@@ -47,8 +47,7 @@
       "static.metron.cloud"
     ],
     "requires": [
-      "username",
-      "password"
+      "apiToken"
     ]
   },
   "ui": {
@@ -71,17 +70,15 @@
         "subtitleKey": "metron.config.subtitle",
         "fields": [
           {
-            "key": "username",
+            "key": "apiToken",
             "type": "text",
-            "labelKey": "metron.config.username",
-            "hint": "metron.config.username_hint"
+            "labelKey": "metron.config.apiToken",
+            "hint": "metron.config.apiToken_hint",
+            "secret": true
           },
           {
-            "key": "password",
-            "type": "text",
-            "labelKey": "metron.config.password",
-            "hint": "metron.config.password_hint",
-            "secret": true
+            "kind": "caption",
+            "textKey": "metron.config.attribution"
           }
         ]
       }
@@ -91,18 +88,16 @@
     "en": {
       "metron.config.title": "Metron",
       "metron.config.subtitle": "Comic metadata from Metron.",
-      "metron.config.username": "Username",
-      "metron.config.username_hint": "Your own Metron account (metron.cloud). Fliks ships no account: without one the provider stays inactive. Metron allows 20 requests per minute and 5,000 per day per account.",
-      "metron.config.password": "Password",
-      "metron.config.password_hint": "The password of that account, stored as a secret."
+      "metron.config.apiToken": "API token",
+      "metron.config.apiToken_hint": "A token from the API Tokens section of your own Metron account page. Fliks ships none: without one the provider stays inactive. Metron allows 20 requests per minute and 5,000 per day per account.",
+      "metron.config.attribution": "Data from Metron (https://metron.cloud), licensed CC BY-SA 4.0. Some series carry their own attribution on Metron."
     },
     "fr": {
       "metron.config.title": "Metron",
       "metron.config.subtitle": "Métadonnées de bandes dessinées de Metron.",
-      "metron.config.username": "Nom d'utilisateur",
-      "metron.config.username_hint": "Votre propre compte Metron (metron.cloud). Fliks n'en fournit aucun : sans compte, le fournisseur reste inactif. Metron autorise 20 requêtes par minute et 5 000 par jour et par compte.",
-      "metron.config.password": "Mot de passe",
-      "metron.config.password_hint": "Le mot de passe de ce compte, stocké comme secret."
+      "metron.config.apiToken": "Jeton d'API",
+      "metron.config.apiToken_hint": "Un jeton de la section « API Tokens » de la page de votre propre compte Metron. Fliks n'en fournit aucun : sans jeton, le fournisseur reste inactif. Metron autorise 20 requêtes par minute et 5 000 par jour et par compte.",
+      "metron.config.attribution": "Données de Metron (https://metron.cloud), sous licence CC BY-SA 4.0. Certaines séries portent leur propre attribution sur Metron."
     }
   }
 }

@@ -5,15 +5,17 @@ Comic metadata from [Metron](https://metron.cloud), a community comic database. 
 publisher, start year, volume, description, cover of its first issue) and its issues (number as
 printed, decimal sort key, `issue` or `annual` kind, cover and store dates, cover).
 
-Fliks ships no account: set **Username** and **Password** of your own Metron account in the plugin's
-settings page (the password is stored as a secret). Until both are set the provider stays inactive.
-Metron authenticates the API with HTTP Basic.
+Fliks ships no account: set **API token** in the plugin's settings page (create one in the API Tokens
+section of your own Metron account page; it is stored as a secret and sent as `Authorization: Bearer`).
+Until it is set the provider stays inactive.
 
-Limits are per account: 20 requests a minute and 5,000 a day. The host paces at 0.33 requests a second
-with a 5,000 daily quota. A 429 maps to `rate-limited` with its `Retry-After`, else `X-RateLimit-Reset`
-(seconds or Unix time); a wait of an hour or more marks the day's quota spent.
+Metron's data is licensed CC BY-SA 4.0; the settings page carries the attribution.
 
-A volume fetch costs 2 requests, an issue list one per 30 issues plus one.
+Limits are per account: 20 requests a minute and 5,000 a day, read by the host from `ratePerSec` 0.33
+and a 5,000 daily quota. A 429 maps to `rate-limited` with its `Retry-After`; Metron's day is a
+sliding window, so a long wait is returned as is and the host decides when to retry.
+
+A volume fetch costs 2 requests, an issue list one per 100 issues plus one.
 
 ## Build and test
 

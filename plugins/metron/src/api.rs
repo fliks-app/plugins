@@ -7,37 +7,16 @@ use serde_json::Value;
 pub type R<T> = Result<T, ProviderError>;
 
 pub const NS: &str = "fliks.metron:metron";
-/// 30 issues a page: a long run is cut here instead of spending the day's quota on one series.
+/// 100 issues a page: a long run is cut at 4,000 issues instead of spending the day's quota on one series.
 const MAX_PAGES: u32 = 40;
 
 pub trait Http {
     fn get(&self, path: &str, query: &[(&str, String)]) -> R<Value>;
 }
 
-/// Seconds to wait: `Retry-After`, else `X-RateLimit-Reset` as seconds or as a Unix time.
-pub fn retry_secs(retry_after: Option<&str>, reset: Option<&str>, now: u64) -> Option<u32> {
-    let secs = |v: &str| v.trim().parse::<u64>().ok();
-    let wait = retry_after.and_then(secs).or_else(|| {
-        let r = secs(reset?)?;
-        Some(if r > 1_000_000_000 {
-            r.saturating_sub(now)
-        } else {
-            r
-        })
-    })?;
-    u32::try_from(wait).ok()
-}
-
-/// A Metron answer as the provider reports it.
-pub fn reply(
-    status: u16,
-    retry_after: Option<&str>,
-    reset: Option<&str>,
-    now: u64,
-    body: &[u8],
-) -> R<Value> {
-    let retry = retry_secs(retry_after, reset, now).map(|s| s.to_string());
-    json_reply(status, retry.as_deref(), body)
+/// A Metron answer as the provider reports it; a 429 always carries `Retry-After`.
+pub fn reply(status: u16, retry_after: Option<&str>, body: &[u8]) -> R<Value> {
+    json_reply(status, retry_after, body)
 }
 
 fn s(v: &Value, k: &str) -> Option<String> {
@@ -67,11 +46,33 @@ fn list(v: &Value) -> &[Value] {
         .map_or(&[], Vec::as_slice)
 }
 
+/// The series name of the list's `Series.__str__`: "Name (1963)", "Name TPB (2011)", "Name (2020) Digital".
+pub fn series_name(shown: &str) -> String {
+    let rest = shown.strip_suffix(" Digital").unwrap_or(shown);
+    let year_at = rest.len().saturating_sub(7);
+    let tail = rest.get(year_at..).unwrap_or("");
+    let is_year = tail.len() == 7
+        && tail.starts_with(" (")
+        && tail.ends_with(')')
+        && tail[2..6].bytes().all(|b| b.is_ascii_digit());
+    if !is_year {
+        return shown.to_owned();
+    }
+    let name = &rest[..year_at];
+    let name = [" TPB", " HC", " GN"]
+        .iter()
+        .find_map(|k| name.strip_suffix(k))
+        .unwrap_or(name);
+    name.to_owned()
+}
+
 fn base(v: &Value, id: String) -> Volume {
     Volume {
         ns: NS,
         id,
-        title: s(v, "name").or_else(|| s(v, "series")).unwrap_or_default(),
+        title: s(v, "name")
+            .or_else(|| s(v, "series").map(|t| series_name(&t)))
+            .unwrap_or_default(),
         overview: s(v, "desc"),
         year: n(v, "year_began"),
         cover: None,
@@ -130,16 +131,14 @@ pub fn children(h: &impl Http, id: &str) -> R<Vec<Value>> {
             "/issue/",
             &[("series_id", id.to_owned()), ("page", page.to_string())],
         )?;
-        raw.extend(list(&body).iter().filter_map(|i| {
-            Some(RawIssue {
-                id: id_of(i),
-                number: s(i, "number")?,
-                annual,
-                title: None,
-                cover_date: date(s(i, "cover_date").as_deref()),
-                store_date: date(s(i, "store_date").as_deref()),
-                cover: cover_of(i),
-            })
+        raw.extend(list(&body).iter().map(|i| RawIssue {
+            id: id_of(i),
+            number: s(i, "number").unwrap_or_default(),
+            annual,
+            title: None,
+            cover_date: date(s(i, "cover_date").as_deref()),
+            store_date: date(s(i, "store_date").as_deref()),
+            cover: cover_of(i),
         }));
         if body.get("next").is_none_or(Value::is_null) {
             return Ok(issues(raw));

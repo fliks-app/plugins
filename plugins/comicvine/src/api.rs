@@ -17,9 +17,10 @@ pub trait Http {
     fn get(&self, path: &str, query: &[(&str, String)]) -> R<Value>;
 }
 
-/// A ComicVine answer as the provider reports it; 420 is its "slow down" and `status_code` 100 a bad key.
+/// A Comic Vine answer as the provider reports it; 420 is its "slow down", `status_code` 100 a bad key
+/// and 107 a rate limit.
 pub fn reply(status: u16, body: &[u8]) -> R<Value> {
-    if status == 420 {
+    if status == 420 || status == 429 {
         return Err(ProviderError::RateLimited(None));
     }
     let v = json_reply(status, None, body)?;
@@ -27,6 +28,7 @@ pub fn reply(status: u16, body: &[u8]) -> R<Value> {
         Some(1) | None => Ok(v),
         Some(100) => Err(ProviderError::Unauthorized),
         Some(101) => Err(ProviderError::NotFound),
+        Some(107) => Err(ProviderError::RateLimited(None)),
         Some(c) => Err(upstream(None, format!("ComicVine status {c}"))),
     }
 }
@@ -71,7 +73,7 @@ fn to_volume(v: &Value, id: String) -> Volume {
         ns: NS,
         id,
         title: s(v, "name").unwrap_or_default(),
-        overview: s(v, "description").or_else(|| s(v, "deck")),
+        overview: s(v, "deck").or_else(|| s(v, "description")),
         year: year(v),
         cover: cover(v),
         publisher: v
@@ -92,7 +94,7 @@ pub fn search(h: &impl Http, query: &str, year_: Option<i32>, page: Option<u32>)
         ("query", query.to_owned()),
         ("resources", "volume".to_owned()),
         ("field_list", VOLUME_FIELDS.to_owned()),
-        ("limit", "20".to_owned()),
+        ("limit", "10".to_owned()),
         ("page", page.unwrap_or(1).max(1).to_string()),
     ];
     let body = h.get("/search/", &q)?;
@@ -118,14 +120,6 @@ pub fn work(h: &impl Http, id: &str) -> R<Value> {
 
 pub fn children(h: &impl Http, id: &str) -> R<Vec<Value>> {
     let id = volume_id(id)?;
-    let named = h.get(
-        &format!("/volume/4050-{id}/"),
-        &[("field_list", "name".to_owned())],
-    )?;
-    let annual = named
-        .pointer("/results/name")
-        .and_then(Value::as_str)
-        .is_some_and(|n| n.to_lowercase().contains("annual"));
     let mut raw = vec![];
     for p in 0..MAX_PAGES {
         let body = h.get(
@@ -134,23 +128,27 @@ pub fn children(h: &impl Http, id: &str) -> R<Vec<Value>> {
                 ("filter", format!("volume:{id}")),
                 (
                     "field_list",
-                    "id,issue_number,name,cover_date,store_date,image".to_owned(),
+                    "id,issue_number,name,cover_date,store_date,image,volume".to_owned(),
                 ),
+                ("sort", "id:asc".to_owned()),
                 ("limit", PAGE.to_string()),
                 ("offset", (p * PAGE).to_string()),
             ],
         )?;
         let page = results(&body);
-        raw.extend(page.iter().filter_map(|i| {
-            Some(RawIssue {
+        raw.extend(page.iter().map(|i| {
+            RawIssue {
                 id: id_of(i),
-                number: s(i, "issue_number")?,
-                annual,
+                number: s(i, "issue_number").unwrap_or_default(),
+                annual: i
+                    .pointer("/volume/name")
+                    .and_then(Value::as_str)
+                    .is_some_and(|n| n.to_lowercase().contains("annual")),
                 title: s(i, "name"),
                 cover_date: date(s(i, "cover_date").as_deref()),
                 store_date: date(s(i, "store_date").as_deref()),
                 cover: cover(i),
-            })
+            }
         }));
         let total = body["number_of_total_results"].as_u64().unwrap_or(0);
         if u64::from((p + 1) * PAGE) >= total || page.is_empty() {

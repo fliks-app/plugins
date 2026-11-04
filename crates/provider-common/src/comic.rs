@@ -2,6 +2,7 @@
 use regex::Regex;
 use serde_json::{Value, json};
 use std::cmp::Ordering;
+use std::collections::HashSet;
 use std::sync::OnceLock;
 
 /// One issue as a provider describes it, before numbering is resolved.
@@ -28,63 +29,79 @@ pub fn https(url: &str) -> Option<String> {
         .or_else(|| url.starts_with("https://").then(|| url.to_owned()))
 }
 
-/// The label as printed, the decimal sort key and the kind; no number leaves the sort `None`.
+/// The numbering of one issue: the label as printed, the decimal sort key (`None` for a special) and the kind.
 fn number(raw: &str, annual: bool) -> (String, Option<f64>, &'static str) {
     static N: OnceLock<Regex> = OnceLock::new();
-    let n = N.get_or_init(|| Regex::new(r"\d+(?:\.\d+)?").unwrap());
-    let label = raw.trim().to_owned();
-    let sort = if label == "½" {
-        Some(0.5)
-    } else {
-        n.find(&label).and_then(|m| m.as_str().parse::<f64>().ok())
+    static A: OnceLock<Regex> = OnceLock::new();
+    let full = N.get_or_init(|| Regex::new(r"^-?\d+(\.\d+)?$").unwrap());
+    let word = A.get_or_init(|| Regex::new(r"(?i)\bannual\b").unwrap());
+    let raw = raw.trim();
+    let annual = annual || word.is_match(raw);
+    let rest = word.replace_all(raw, "");
+    let rest = rest.trim();
+    let sort = match rest {
+        "½" | "1/2" => Some(0.5),
+        r if full.is_match(r) => r.parse::<f64>().ok(),
+        _ => None,
     };
-    let kind = match sort {
-        _ if annual || label.to_lowercase().contains("annual") => "annual",
-        Some(_) => "issue",
-        None => "special",
-    };
-    (label, sort, kind)
+    match sort {
+        Some(n) => (
+            rest.to_owned(),
+            Some(n),
+            if annual { "annual" } else { "issue" },
+        ),
+        None if raw.is_empty() => ("Special".to_owned(), None, "special"),
+        None => (raw.to_owned(), None, "special"),
+    }
 }
 
-/// Issues ordered as the host lists them (issues, then annuals and specials); a repeated
-/// (kind, sort) is a variant of one issue and is dropped.
+/// Issues ordered as the host lists them (issues, then annuals, then specials); an exact repeat of
+/// a kind and printed number is dropped. A special's sort key is its rank by upstream id, so it
+/// does not move when the list order does.
 pub fn issues(raw: Vec<RawIssue>) -> Vec<Value> {
-    let mut specials = 0.0;
-    let mut out: Vec<(&'static str, f64, Value)> = vec![];
+    let mut seen = HashSet::new();
+    let mut rows: Vec<(&'static str, Option<f64>, String, RawIssue)> = vec![];
     for r in raw {
-        let (mut label, sort, kind) = number(&r.number, r.annual);
-        let sort = sort.unwrap_or_else(|| {
-            specials += 1.0;
-            specials
-        });
-        if label.is_empty() {
-            label = sort.to_string();
+        let (label, sort, kind) = number(&r.number, r.annual);
+        if seen.insert((kind, label.clone())) {
+            rows.push((kind, sort, label, r));
         }
-        if out.iter().any(|(k, s, _)| *k == kind && *s == sort) {
-            continue;
-        }
-        let release = r.store_date.clone().or_else(|| r.cover_date.clone());
-        let v = json!({
-            "externalId": r.id,
-            "number": label,
-            "sortNumber": sort,
-            "kind": kind,
-            "title": r.title,
-            "releaseDate": release,
-            "coverDate": r.cover_date,
-            "storeDate": r.store_date,
-            "posterUrl": r.cover,
-        });
-        out.push((kind, sort, v));
     }
-    let rank = |k: &str| u8::from(k != "issue");
-    out.sort_by(|a, b| {
+    let uid = |r: &RawIssue| {
+        r.id.as_deref()
+            .and_then(|i| i.parse::<u64>().ok())
+            .unwrap_or(u64::MAX)
+    };
+    let mut specials: Vec<usize> = (0..rows.len()).filter(|i| rows[*i].1.is_none()).collect();
+    specials.sort_by_key(|i| uid(&rows[*i].3));
+    for (rank, i) in specials.into_iter().enumerate() {
+        rows[i].1 = Some((rank + 1) as f64);
+    }
+    let rank = |k: &str| match k {
+        "issue" => 0,
+        "annual" => 1,
+        _ => 2,
+    };
+    rows.sort_by(|a, b| {
         rank(a.0)
             .cmp(&rank(b.0))
             .then(a.1.partial_cmp(&b.1).unwrap_or(Ordering::Equal))
-            .then(a.0.cmp(b.0))
     });
-    out.into_iter().map(|(_, _, v)| v).collect()
+    rows.into_iter()
+        .map(|(kind, sort, label, r)| {
+            json!({
+                "externalId": r.id,
+                "number": label,
+                "sortNumber": sort,
+                "kind": kind,
+                "title": r.title,
+                "releaseDate": r.store_date,
+                "coverDate": r.cover_date,
+                "storeDate": r.store_date,
+                "posterUrl": r.cover,
+            })
+        })
+        .collect()
 }
 
 /// A volume (search result or work): `ns` is the plugin's id namespace.
@@ -121,9 +138,9 @@ pub fn volume(v: &Volume) -> Value {
 mod tests {
     use super::*;
 
-    fn raw(n: &str, annual: bool) -> RawIssue {
+    fn raw(id: u32, n: &str, annual: bool) -> RawIssue {
         RawIssue {
-            id: None,
+            id: Some(id.to_string()),
             number: n.into(),
             annual,
             title: None,
@@ -133,18 +150,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn numbers_decimal_annual_special_and_variants() {
-        let out = issues(vec![
-            raw("Annual 1", false),
-            raw("2", false),
-            raw("1.5", false),
-            raw("Special", false),
-            raw("2", false),
-            raw("1", true),
-            raw("½", false),
-        ]);
-        let got: Vec<(String, f64, String)> = out
+    fn rows(list: Vec<RawIssue>) -> Vec<(String, f64, String)> {
+        issues(list)
             .iter()
             .map(|v| {
                 (
@@ -153,23 +160,63 @@ mod tests {
                     v["kind"].as_str().unwrap().into(),
                 )
             })
-            .collect();
-        let want = [
-            ("½", 0.5, "issue"),
-            ("1.5", 1.5, "issue"),
-            ("2", 2.0, "issue"),
-            ("Annual 1", 1.0, "annual"),
-            ("Special", 1.0, "special"),
+            .collect()
+    }
+
+    fn row(n: &str, s: f64, k: &str) -> (String, f64, String) {
+        (n.into(), s, k.into())
+    }
+
+    #[test]
+    fn numbers_keep_every_real_issue() {
+        let got = rows(vec![
+            raw(1, "-1", false),
+            raw(2, "1/2", false),
+            raw(3, "1.10", false),
+            raw(4, "1.1", false),
+            raw(5, "Annual 1", false),
+            raw(6, "2", true),
+            raw(7, "1.MU", false),
+            raw(8, "", false),
+            raw(9, "Annual", false),
+            raw(10, "½", false),
+            raw(11, "2", true),
+        ]);
+        let want = vec![
+            row("-1", -1.0, "issue"),
+            row("1/2", 0.5, "issue"),
+            row("½", 0.5, "issue"),
+            row("1.10", 1.1, "issue"),
+            row("1.1", 1.1, "issue"),
+            row("1", 1.0, "annual"),
+            row("2", 2.0, "annual"),
+            row("1.MU", 1.0, "special"),
+            row("Special", 2.0, "special"),
+            row("Annual", 3.0, "special"),
         ];
-        assert_eq!(got.len(), want.len());
-        for (g, w) in got.iter().zip(want) {
-            assert_eq!((g.0.as_str(), g.1, g.2.as_str()), w);
-        }
+        assert_eq!(got, want);
+    }
+
+    #[test]
+    fn a_special_sorts_by_upstream_id_not_list_order() {
+        let a = rows(vec![raw(9, "1AU", false), raw(3, "1.MU", false)]);
+        let b = rows(vec![raw(3, "1.MU", false), raw(9, "1AU", false)]);
+        assert_eq!(a, b);
+        assert_eq!(a[0], row("1.MU", 1.0, "special"));
     }
 
     #[test]
     fn dates_must_be_real() {
         assert_eq!(date(Some("2016-06-01")).as_deref(), Some("2016-06-01"));
         assert_eq!(date(Some("2016-00-00")), None);
+    }
+
+    #[test]
+    fn release_date_is_the_store_date_only() {
+        let mut r = raw(1, "1", false);
+        assert_eq!(issues(vec![r])[0]["releaseDate"], Value::Null);
+        r = raw(1, "1", false);
+        r.store_date = Some("2016-05-11".into());
+        assert_eq!(issues(vec![r])[0]["releaseDate"], "2016-05-11");
     }
 }

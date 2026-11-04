@@ -41,13 +41,15 @@ fn fake(detail: &'static str) -> Fake {
 #[test]
 fn search_maps_series() {
     let out = search(&fake("series_detail.json"), "placeholder", Some(2016), None).unwrap();
-    assert_eq!(out.len(), 2);
+    assert_eq!(out.len(), 3);
+    let titles: Vec<&str> = out.iter().map(|v| v["title"].as_str().unwrap()).collect();
+    assert_eq!(titles, ["Placeholder Series"; 3]);
     assert_eq!(
         out[0],
         json!({
             "ids": {"fliks.metron:metron": "1001"}, "externalId": "1001", "mediaType": "comic",
             "title": "Placeholder Series", "overview": null, "year": 2016, "posterUrl": null,
-            "publisher": null, "volume": 2, "issueCount": 12, "sourceUrl": null,
+            "publisher": "Placeholder Press", "volume": 2, "issueCount": 12, "sourceUrl": null,
         })
     );
 }
@@ -93,12 +95,14 @@ fn children_follow_pages_sort_and_drop_variants() {
         [
             ("1", 1.0, "issue"),
             ("1.5", 1.5, "issue"),
-            ("2", 2.0, "issue")
+            ("2", 2.0, "issue"),
+            ("Special", 1.0, "special")
         ]
     );
     assert_eq!(out[0]["releaseDate"], "2016-05-11");
     assert_eq!(out[0]["coverDate"], "2016-06-01");
-    assert_eq!(out[1]["releaseDate"], "2016-06-01");
+    assert_eq!(out[1]["releaseDate"], Value::Null);
+    assert_eq!(out[1]["coverDate"], "2016-06-01");
     assert_eq!(out[1]["storeDate"], Value::Null);
     assert_eq!(h.seen.borrow().len(), 3);
 }
@@ -106,36 +110,63 @@ fn children_follow_pages_sort_and_drop_variants() {
 #[test]
 fn an_annual_series_gives_annual_issues() {
     let out = children(&fake("series_detail_annual.json"), "1003").unwrap();
-    assert!(out.iter().all(|v| v["kind"] == "annual"));
+    assert!(
+        out.iter()
+            .filter(|v| v["sortNumber"] != 1.0 || v["number"] != "Special")
+            .all(|v| v["kind"] == "annual" || v["kind"] == "special")
+    );
+    assert_eq!(out[0]["kind"], "annual");
 }
 
 #[test]
-fn throttle_waits_for_retry_after_then_reset() {
+fn series_names_lose_the_list_decoration() {
+    for (shown, name) in [
+        ("Name (1963)", "Name"),
+        ("Name TPB (2011)", "Name"),
+        ("Name HC (2011)", "Name"),
+        ("Name GN (2011)", "Name"),
+        ("Name (2020) Digital", "Name"),
+        ("Name (Part 2) (2001)", "Name (Part 2)"),
+        ("No year", "No year"),
+    ] {
+        assert_eq!(series_name(shown), name);
+    }
+}
+
+struct Endless;
+
+impl Http for Endless {
+    fn get(&self, path: &str, _q: &[(&str, String)]) -> R<Value> {
+        Ok(match path {
+            "/issue/" => json!({"next": "https://metron.cloud/api/issue/?page=2", "results": []}),
+            _ => fx("series_detail.json"),
+        })
+    }
+}
+
+#[test]
+fn a_series_past_the_page_cap_is_an_error() {
+    assert!(children(&Endless, "1001").is_err());
+}
+
+#[test]
+fn throttle_waits_for_retry_after() {
     let body = fx("error_throttled.json").to_string();
-    let e = reply(429, Some("42"), None, 0, body.as_bytes()).unwrap_err();
+    let e = reply(429, Some("42"), body.as_bytes()).unwrap_err();
     assert!(matches!(e, ProviderError::RateLimited(Some(42))));
-    let e = reply(
-        429,
-        None,
-        Some("1700000030"),
-        1_700_000_000,
-        body.as_bytes(),
-    )
-    .unwrap_err();
-    assert!(matches!(e, ProviderError::RateLimited(Some(30))));
-    let e = reply(429, None, None, 0, body.as_bytes()).unwrap_err();
-    assert!(matches!(e, ProviderError::RateLimited(None)));
+    let e = reply(429, Some("86400"), body.as_bytes()).unwrap_err();
+    assert!(matches!(e, ProviderError::RateLimited(Some(86400))));
 }
 
 #[test]
 fn status_mapping() {
     assert!(matches!(
-        reply(401, None, None, 0, b"{}"),
+        reply(401, None, b"{}"),
         Err(ProviderError::Unauthorized)
     ));
     assert!(matches!(
-        reply(404, None, None, 0, b"{}"),
+        reply(404, None, b"{}"),
         Err(ProviderError::NotFound)
     ));
-    assert!(reply(200, None, None, 0, b"{}").is_ok());
+    assert!(reply(200, None, b"{}").is_ok());
 }

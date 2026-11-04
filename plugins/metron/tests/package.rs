@@ -17,8 +17,8 @@ fn the_provider_packages_and_verifies() {
     let ns = &i.manifest["provider"]["namespaces"][0];
     assert_eq!(ns["name"], "fliks.metron:metron");
     assert_eq!(
-        i.manifest["provider"]["requires"].as_array().unwrap().len(),
-        2
+        i.manifest["provider"]["requires"],
+        serde_json::json!(["apiToken"])
     );
     let wasm = std::fs::read(c.wasm_path()).unwrap();
     build::check_world(&wasm, true).unwrap();

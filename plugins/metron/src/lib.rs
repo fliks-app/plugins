@@ -5,8 +5,6 @@ mod api;
 mod tests;
 
 use api::{Http, R, reply};
-use base64::Engine;
-use base64::engine::general_purpose::STANDARD;
 use fliks_plugin_sdk::bindings::wasi::http::types::Method;
 use fliks_plugin_sdk::http::Request;
 use fliks_plugin_sdk::rt::Budget;
@@ -16,7 +14,7 @@ use fliks_plugin_sdk_provider::{
 };
 use provider_common::http::upstream;
 use serde_json::Value;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 use url::Url;
 
 const API_URL: &str = "https://metron.cloud/api";
@@ -24,21 +22,16 @@ const USER_AGENT: &str = concat!("Fliks-Metron/", env!("CARGO_PKG_VERSION"));
 
 struct Live;
 
-/// The admin's own account; no account leaves the provider unauthorized.
-fn credentials() -> R<String> {
-    let keys = ["username".to_owned(), "password".to_owned()];
-    let all = host::config_get(Some(&keys))
-        .map_err(|e| upstream(None, format!("{}: {}", e.code, e.message)))?;
-    let get = |k: &str| {
-        all.iter()
-            .find(|(n, _)| n == k)
-            .map(|(_, v)| v.trim().to_owned())
-            .filter(|v| !v.is_empty())
-    };
-    let (user, pass) = get("username")
-        .zip(get("password"))
-        .ok_or(ProviderError::Unauthorized)?;
-    Ok(STANDARD.encode(format!("{user}:{pass}")))
+/// The admin's own API token, as stored; none leaves the provider unauthorized.
+fn token() -> R<String> {
+    let keys = ["apiToken".to_owned()];
+    host::config_get(Some(&keys))
+        .map_err(|e| upstream(None, format!("{}: {}", e.code, e.message)))?
+        .into_iter()
+        .find(|(k, _)| k == "apiToken")
+        .map(|(_, v)| v)
+        .filter(|v| !v.is_empty())
+        .ok_or(ProviderError::Unauthorized)
 }
 
 impl Http for Live {
@@ -46,30 +39,18 @@ impl Http for Live {
         let url = Url::parse_with_params(&format!("{API_URL}{path}"), query)
             .map_err(|_| upstream(None, "not a valid URL"))?;
         let resp = Request::new(Method::Get, url)
-            .header("authorization", &format!("Basic {}", credentials()?))
+            .header("authorization", &format!("Bearer {}", token()?))
             .header("user-agent", USER_AGENT)
             .header("accept", "application/json")
             .timeout(Duration::from_secs(15))
             .budget(&Budget::host())
             .send()
             .map_err(|e| upstream(None, e.to_string()))?;
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_or(0, |d| d.as_secs());
-        let out = reply(
+        reply(
             resp.status,
             resp.header("retry-after").as_deref(),
-            resp.header("x-ratelimit-reset").as_deref(),
-            now,
             &resp.body,
-        );
-        // A wait of an hour or more is the day's quota, not the minute's.
-        if let Err(ProviderError::RateLimited(Some(s))) = &out
-            && *s >= 3600
-        {
-            let _ = host::provider_quota_spent();
-        }
-        out
+        )
     }
 }
 

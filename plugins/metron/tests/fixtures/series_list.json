@@ -1,3 +1,4 @@
-{"count":2,"next":null,"previous":null,"results":[
-{"id":1001,"series":"Placeholder Series","year_began":2016,"volume":2,"cv_id":111111,"issue_count":12,"modified":"2024-01-01T00:00:00Z"},
-{"id":1002,"series":"Placeholder Series","year_began":1998,"volume":1,"cv_id":null,"issue_count":40,"modified":"2024-01-01T00:00:00Z"}]}
+{"count":3,"next":null,"previous":null,"results":[
+{"id":1001,"series":"Placeholder Series (2016)","year_began":2016,"year_end":null,"volume":2,"issue_count":12,"publisher":{"id":7,"name":"Placeholder Press"},"series_type":{"id":1,"name":"Ongoing Series"},"cv_id":111111,"gcd_id":null,"modified":"2024-01-01T00:00:00Z"},
+{"id":1002,"series":"Placeholder Series TPB (1998)","year_began":1998,"year_end":1998,"volume":1,"issue_count":1,"publisher":{"id":7,"name":"Placeholder Press"},"series_type":{"id":10,"name":"Trade Paperback"},"cv_id":null,"gcd_id":null,"modified":"2024-01-01T00:00:00Z"},
+{"id":1004,"series":"Placeholder Series (2020) Digital","year_began":2020,"year_end":null,"volume":1,"issue_count":3,"publisher":null,"series_type":{"id":12,"name":"Digital Series"},"cv_id":null,"gcd_id":null,"modified":"2024-01-01T00:00:00Z"}]}
