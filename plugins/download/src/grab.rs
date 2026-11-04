@@ -213,8 +213,12 @@ pub fn to_wire(r: &Ranked) -> Value {
     o.insert("allowed".into(), json!(s.allowed));
     o.insert("customFormatScore".into(), json!(s.custom_format_score));
     o.insert("blocklisted".into(), json!(s.blocklisted));
-    o.insert("languageId".into(), json!(s.language_id));
-    o.insert("languageName".into(), json!(s.language_name));
+    let languages: Vec<Value> = s
+        .languages
+        .iter()
+        .map(|l| json!({"id": l.id, "name": l.name}))
+        .collect();
+    o.insert("languages".into(), json!(languages));
     o.insert("languageAllowed".into(), json!(s.language_allowed));
     o.insert("isFullSeason".into(), json!(s.whole_group));
     if let Some(c) = &s.coverage {
