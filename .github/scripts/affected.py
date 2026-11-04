@@ -5,6 +5,17 @@ import json, os, subprocess, sys, tomllib
 base, head = sys.argv[1], sys.argv[2]
 
 
+def emit(plugins, crates, release=False):
+    with open(os.environ.get("GITHUB_OUTPUT", "/dev/stdout"), "a") as f:
+        f.write(f"plugins={json.dumps(plugins)}\ncrates={str(crates).lower()}\nrelease={str(release).lower()}\n")
+
+
+# A release PR only bumps versions and the changelog; the archive is built at tag time.
+if os.environ.get("HEAD_REF", "").startswith("release-please--"):
+    emit([], False, True)
+    sys.exit()
+
+
 def git(*args):
     return subprocess.run(["git", *args], capture_output=True, text=True, check=True).stdout
 
@@ -66,5 +77,4 @@ def affected(name):
 
 out = [d for d, n in plugins if everything or affected(n)]
 crates = everything or any(affected(n) for n, d in pkg_dir.items() if d.startswith("crates/"))
-with open(os.environ.get("GITHUB_OUTPUT", "/dev/stdout"), "a") as f:
-    f.write(f"plugins={json.dumps(out)}\ncrates={str(crates).lower()}\n")
+emit(out, crates)
