@@ -478,6 +478,20 @@ pub fn poll() -> R<()> {
                 );
                 history::set_status(&[row.id], "grabbed", Some(&e.to_string()))?;
             }
+            Err(e) if e.is_retry_later() => {
+                if history::retry_later_expired(row.id)? {
+                    let msg = format!(
+                        "Import failed: still refused after {} hours: {e}",
+                        history::RETRY_LATER_CAP_HOURS
+                    );
+                    error!("Import: FAILED for \"{}\": {msg}", row.source_title);
+                    history::set_status(&[row.id], "import_failed", Some(&msg))?;
+                    publish_failed(&row, &msg);
+                } else {
+                    warn!("Import: \"{}\": {e}; will retry", row.source_title);
+                    history::set_status(&[row.id], "grabbed", Some(&e.to_string()))?;
+                }
+            }
             Err(e) => {
                 // Core's own state (a full disk, a missing root), never a verdict on the release.
                 error!("Import: FAILED for \"{}\": {e}", row.source_title);

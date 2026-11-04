@@ -8,7 +8,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value as Json};
 
-pub const MIGRATIONS: [(&str, &str); 14] = [
+pub const MIGRATIONS: [(&str, &str); 15] = [
     (
         "0001_initial_schema",
         include_str!("../migrations/0001_initial_schema.sql"),
@@ -64,6 +64,10 @@ pub const MIGRATIONS: [(&str, &str); 14] = [
     (
         "0014_download_history_family",
         include_str!("../migrations/0014_download_history_family.sql"),
+    ),
+    (
+        "0015_download_history_retry_later",
+        include_str!("../migrations/0015_download_history_retry_later.sql"),
     ),
 ];
 
@@ -986,12 +990,31 @@ pub mod history {
     }
 
     /// The lease outlives the 30 min ingest, so a trapped job cannot strand the row.
+    /// How long an import the host refuses for now is retried before it fails.
+    pub const RETRY_LATER_CAP_HOURS: u32 = 24;
+
     pub fn mark_importing(id: i64) -> R<()> {
         exec(
             r#"UPDATE "download_history" SET "status" = 'importing', "importLeaseUntil" = now() + interval '35 minutes', "updatedAt" = now() WHERE "id" = $1"#,
             &[int(id)],
         )
         .map(drop)
+    }
+
+    /// Notes a refusal to retry later; true once the first one is over `RETRY_LATER_CAP_HOURS` old.
+    pub fn retry_later_expired(id: i64) -> R<bool> {
+        #[derive(Deserialize)]
+        struct T {
+            over: bool,
+        }
+        let row: Option<T> = first(
+            &format!(
+                r#"UPDATE "download_history" SET "retryLaterSince" = COALESCE("retryLaterSince", now())
+                 WHERE "id" = $1 RETURNING (now() - "retryLaterSince" > interval '{RETRY_LATER_CAP_HOURS} hours') AS "over""#
+            ),
+            &[int(id)],
+        )?;
+        Ok(row.is_some_and(|r| r.over))
     }
 
     /// Re-arms `importing` rows whose lease ran out (a trapped job, or a restart).
@@ -1022,7 +1045,7 @@ pub mod history {
     /// Re-arms a refused import; false when the row is gone or no longer `import_failed`.
     pub fn retry_import(id: i64) -> R<bool> {
         exec(
-            r#"UPDATE "download_history" SET "status" = 'grabbed', "statusMessage" = NULL, "updatedAt" = now() WHERE "id" = $1 AND "status" = 'import_failed'"#,
+            r#"UPDATE "download_history" SET "status" = 'grabbed', "statusMessage" = NULL, "retryLaterSince" = NULL, "updatedAt" = now() WHERE "id" = $1 AND "status" = 'import_failed'"#,
             &[int(id)],
         )
         .map(|n| n > 0)

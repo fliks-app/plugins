@@ -390,7 +390,7 @@ async fn start_migrates_and_routes_answer() {
         return;
     };
     let mut db = plugin_db(&h).await;
-    assert_eq!(ledger(&mut db).await.len(), 14);
+    assert_eq!(ledger(&mut db).await.len(), 15);
     assert!(h.health().await.unwrap().ok);
     for p in ["/indexers", "/indexer-sources", "/download-clients"] {
         let r = h.proxy("GET", &format!("{p}/implementations"), None).await;
@@ -532,12 +532,12 @@ async fn an_adopted_ledger_runs_only_the_new_migrations() {
     let ix = add_indexer(&mut db, "old", json!({})).await;
     h.restart().await;
     until("the re-run migrations", MAX, async || {
-        ledger(&mut plugin_db(&h).await).await.len() == 14
+        ledger(&mut plugin_db(&h).await).await.len() == 15
     })
     .await;
     assert!(logged(
         &h,
-        "migrations applied: 0009_indexer_throttle, 0010_poller_state, 0011_download_history_import_lease, 0012_item_history, 0013_indexer_caps_books, 0014_download_history_family"
+        "migrations applied: 0009_indexer_throttle, 0010_poller_state, 0011_download_history_import_lease, 0012_item_history, 0013_indexer_caps_books, 0014_download_history_family, 0015_download_history_retry_later"
     ));
     let backfilled = scalar_i64(
         &mut db,
@@ -895,6 +895,37 @@ async fn two_searches_share_one_slot_per_indexer() {
     h.finish().await;
 }
 
+/// A series whose aired season 1 (10 episodes) is released as scene seasons 1 and 2.
+async fn split_season(h: &Harness) -> (i64, i32) {
+    let media = add_work(h, "Some Show", "series", None).await;
+    let season: i32 = sqlx::query_scalar(
+        r#"INSERT INTO item_groups ("mediaId", "number", monitored) VALUES ($1, 1, true) RETURNING id"#,
+    )
+    .bind(media as i32)
+    .fetch_one(&h.pool)
+    .await
+    .unwrap();
+    sqlx::raw_sql(AssertSqlSafe(format!(
+        r#"INSERT INTO items ("mediaId", "editionId", "groupId", "number", monitored)
+             SELECT {media}, (SELECT id FROM editions WHERE "mediaId" = {media}), {season}, n, true
+             FROM generate_series(1, 10) n;
+           INSERT INTO media_external_ids ("mediaId", kind, provider, value) VALUES ({media}, 'series', 'tvdb', '9');
+           INSERT INTO scene_mappings ("tvdbId", entries) VALUES (9, '{{"entries": [{}]}}')"#,
+        (1..=10)
+            .map(|n| format!(
+                r#"{{"sceneSeason": {}, "sceneEpisode": {}, "season": 1, "episode": {n}}}"#,
+                if n <= 5 { 1 } else { 2 },
+                if n <= 5 { n } else { n - 5 }
+            ))
+            .collect::<Vec<_>>()
+            .join(",")
+    )))
+    .execute(&h.pool)
+    .await
+    .unwrap();
+    (media, season)
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_split_season_issues_one_query_per_scene_season() {
     let Some(h) = Harness::start(setup()).await else {
@@ -928,32 +959,7 @@ async fn a_split_season_issues_one_query_per_scene_season() {
         json!({ "baseUrl": "http://torznab.test/api", "apiKey": "k" }),
     )
     .await;
-    let media = add_work(&h, "Some Show", "series", None).await;
-    let season: i32 = sqlx::query_scalar(
-        r#"INSERT INTO item_groups ("mediaId", "number", monitored) VALUES ($1, 1, true) RETURNING id"#,
-    )
-    .bind(media as i32)
-    .fetch_one(&h.pool)
-    .await
-    .unwrap();
-    sqlx::raw_sql(AssertSqlSafe(format!(
-        r#"INSERT INTO items ("mediaId", "editionId", "groupId", "number", monitored)
-             SELECT {media}, (SELECT id FROM editions WHERE "mediaId" = {media}), {season}, n, true
-             FROM generate_series(1, 10) n;
-           INSERT INTO media_external_ids ("mediaId", kind, provider, value) VALUES ({media}, 'series', 'tvdb', '9');
-           INSERT INTO scene_mappings ("tvdbId", entries) VALUES (9, '{{"entries": [{}]}}')"#,
-        (1..=10)
-            .map(|n| format!(
-                r#"{{"sceneSeason": {}, "sceneEpisode": {}, "season": 1, "episode": {n}}}"#,
-                if n <= 5 { 1 } else { 2 },
-                if n <= 5 { n } else { n - 5 }
-            ))
-            .collect::<Vec<_>>()
-            .join(",")
-    )))
-    .execute(&h.pool)
-    .await
-    .unwrap();
+    let (media, season) = split_season(&h).await;
     let r = h
         .proxy("GET", &format!("/{media}/seasons/{season}/releases"), None)
         .await;
@@ -2348,6 +2354,110 @@ async fn an_import_core_refuses_is_failed_and_announced() {
         std::iter::from_fn(|| rx.try_recv().ok())
             .any(|b| format!("{b:?}").contains("ImportFailed")),
         "no acquisition.failed reached the hub"
+    );
+    h.finish().await;
+    let _ = std::fs::remove_dir_all(base);
+}
+
+/// The second query of a split season runs out of time: the first one's releases are kept.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_later_query_that_lapses_keeps_the_earlier_results() {
+    let Some(h) = Harness::start(setup()).await else {
+        return;
+    };
+    h.set_config("search_budget_seconds", Some("5")).await;
+    let tz = Stub::start(|_, target, _| {
+        if target.contains("Show%20S02") {
+            std::thread::sleep(Duration::from_secs(10));
+        }
+        (200, vec![], one_item_feed("Some.Show.S01.A"))
+    });
+    route(&h, "torznab.test", "10.77.0.1", 80, &tz);
+    let mut db = plugin_db(&h).await;
+    add_indexer(
+        &mut db,
+        "tz",
+        json!({ "baseUrl": "http://torznab.test/api", "apiKey": "k" }),
+    )
+    .await;
+    let (media, season) = split_season(&h).await;
+    let r = h
+        .proxy("GET", &format!("/{media}/seasons/{season}/releases"), None)
+        .await;
+    assert_eq!(r.status, 200, "{:?}", body(&r));
+    assert_eq!(body(&r).as_array().map(Vec::len), Some(1), "{:?}", body(&r));
+    h.finish().await;
+}
+
+/// A series whose scene mapping TheXEM lists but the host does not hold: its imports are refused
+/// for now, retried, and failed once the first refusal is a day old.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn an_import_the_host_refuses_for_now_is_retried_then_failed() {
+    let base = std::path::PathBuf::from("/tmp/fliks-parity/download-port")
+        .join(format!("scene-retry-{}", std::process::id()));
+    let (dl, lib) = (base.join("dl"), base.join("lib"));
+    std::fs::create_dir_all(&dl).unwrap();
+    std::fs::create_dir_all(&lib).unwrap();
+    std::fs::write(dl.join("Some.Show.S04E01.1080p.mkv"), b"not really a video").unwrap();
+    let mut s = setup();
+    s.template["ingestRoots"] = json!([dl.to_string_lossy()]);
+    let Some(h) = Harness::start(s).await else {
+        return;
+    };
+    let qbit = finished_qbit(
+        &dl,
+        "Some.Show.S04E01.1080p",
+        &["Some.Show.S04E01.1080p.mkv"],
+        false,
+    );
+    let client = add_qbit(&h, &qbit).await;
+    let media = add_work(&h, "Some Show", "series", Some(lib.as_path())).await;
+    let season: i32 = sqlx::query_scalar(
+        r#"INSERT INTO item_groups ("mediaId", "number", monitored) VALUES ($1, 3, true) RETURNING id"#,
+    )
+    .bind(media as i32)
+    .fetch_one(&h.pool)
+    .await
+    .unwrap();
+    sqlx::raw_sql(AssertSqlSafe(format!(
+        r#"INSERT INTO items ("mediaId", "editionId", "groupId", "number", monitored)
+             SELECT {media}, (SELECT id FROM editions WHERE "mediaId" = {media}), {season}, n, true
+             FROM generate_series(1, 8) n;
+           INSERT INTO media_external_ids ("mediaId", kind, provider, value) VALUES ({media}, 'series', 'tvdb', '9');
+           INSERT INTO scene_mappings ("tvdbId") VALUES (9)"#
+    )))
+    .execute(&h.pool)
+    .await
+    .unwrap();
+    let mut db = plugin_db(&h).await;
+    let id = scalar_i64(
+        &mut db,
+        &format!(
+            r#"INSERT INTO "download_history" ("sourceTitle", "quality", "status", "torrentHash", "downloadClientId", "mediaId", "grabSource")
+               VALUES ('Some.Show.S04E01.1080p', 'HD', 'grabbed', '{HASH}', {client}, {media}, 'manual') RETURNING "id"::bigint"#
+        ),
+    )
+    .await;
+    h.job("ImportCompleted", None).await.unwrap();
+    let (status, message) = status_of(&mut db, id).await;
+    assert_eq!(status, "grabbed", "{message:?}");
+    assert!(
+        message
+            .as_deref()
+            .is_some_and(|m| m.contains("scene mapping")),
+        "{message:?}"
+    );
+    exec(
+        &mut db,
+        format!(r#"UPDATE "download_history" SET "retryLaterSince" = now() - interval '25 hours' WHERE "id" = {id}"#),
+    )
+    .await;
+    h.job("ImportCompleted", None).await.unwrap();
+    let (status, message) = status_of(&mut db, id).await;
+    assert_eq!(status, "import_failed", "{message:?}");
+    assert!(
+        message.as_deref().is_some_and(|m| m.contains("24 hours")),
+        "{message:?}"
     );
     h.finish().await;
     let _ = std::fs::remove_dir_all(base);
