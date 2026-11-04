@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.2.0](https://github.com/fliks-app/plugins/compare/download-v2.1.0...download-v2.2.0) (2026-11-04)
+
+
+### Features
+
+* **download:** search and grab comic issues ([#60](https://github.com/fliks-app/plugins/issues/60)) ([d3769d5](https://github.com/fliks-app/plugins/commit/d3769d5d5fceb21ccde95a696e4b02c2be897181))
+
 ## [2.1.0](https://github.com/fliks-app/plugins/compare/download-v2.0.0...download-v2.1.0) (2026-11-04)
 
 
