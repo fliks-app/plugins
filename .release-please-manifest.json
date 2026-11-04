@@ -11,5 +11,5 @@
   "plugins/gutenberg": "0.1.0",
   "plugins/librivox": "0.1.0",
   "plugins/metron": "0.3.0",
-  "plugins/comicvine": "0.2.0"
+  "plugins/comicvine": "0.3.0"
 }
