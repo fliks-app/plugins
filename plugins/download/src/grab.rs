@@ -172,7 +172,13 @@ async fn search_asks(
             Piece::Episode(s, e) => torznab::search_series(ix, kind, query, s, e, ids, round).await,
             Piece::Season(s) => torznab::search_season_pack(ix, kind, query, s, ids, round).await,
             Piece::Work => torznab::search_movie(ix, kind, query, ids, round).await,
-        }?;
+        };
+        // A later query that runs out of budget keeps what the earlier ones found.
+        let found = match found {
+            Err(lapsed) if out.is_empty() => return Err(lapsed),
+            Err(_) => break,
+            Ok(found) => found,
+        };
         for r in found {
             if !out.iter().any(|o| o.download_url == r.download_url) {
                 out.push(r);

@@ -900,7 +900,26 @@ async fn a_split_season_issues_one_query_per_scene_season() {
     let Some(h) = Harness::start(setup()).await else {
         return;
     };
-    let tz = Stub::start(|_, _, _| (200, vec![], EMPTY_FEED.as_bytes().to_vec()));
+    let feed = |titles: &[&str]| {
+        let items: String = titles
+            .iter()
+            .map(|t| format!("<item><title>{t}</title><link>http://dl.test/{t}.torrent</link><size>1000</size></item>"))
+            .collect();
+        format!(r#"<?xml version="1.0"?><rss><channel>{items}</channel></rss>"#).into_bytes()
+    };
+    // Both scene seasons list `Some.Show.S02.B`: it must come back once.
+    let (first, second) = (
+        feed(&["Some.Show.S01.A", "Some.Show.S02.B"]),
+        feed(&["Some.Show.S02.B", "Some.Show.S02.C"]),
+    );
+    let tz = Stub::start(move |_, target, _| {
+        let feed = if target.contains("Show%20S01") {
+            &first
+        } else {
+            &second
+        };
+        (200, vec![], feed.clone())
+    });
     route(&h, "torznab.test", "10.77.0.1", 80, &tz);
     let mut db = plugin_db(&h).await;
     add_indexer(
@@ -948,6 +967,13 @@ async fn a_split_season_issues_one_query_per_scene_season() {
     assert_eq!(queries.len(), 2, "{queries:?}");
     assert!(queries.iter().any(|q| q.contains("Some%20Show%20S01")));
     assert!(queries.iter().any(|q| q.contains("Some%20Show%20S02")));
+    let titles: Vec<String> = body(&r)
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|x| x["title"].as_str().unwrap_or_default().to_owned())
+        .collect();
+    assert_eq!(titles.len(), 3, "merged and deduplicated: {titles:?}");
     h.finish().await;
 }
 

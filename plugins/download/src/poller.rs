@@ -549,8 +549,12 @@ fn auto_match(all: &[Held]) -> R<()> {
     for held in to_identify {
         let hash = held.t.hash.to_lowercase();
         let Some(Some(m)) = matches.get(&held.t.name).map(|m| {
-            m.as_ref()
-                .filter(|m| m.skip != Some(SkipReason::NotAvailable))
+            m.as_ref().filter(|m| {
+                !matches!(
+                    m.skip,
+                    Some(SkipReason::NotAvailable | SkipReason::SceneUnresolved)
+                )
+            })
         }) else {
             if !seen(&UNIDENTIFIED, &hash) {
                 info!(
