@@ -49,7 +49,12 @@ impl MetadataProvider for OpenLibrary {
     fn fetch_work(kind: String, id: ExternalId, _lang: Lang) -> Result<String, ProviderError> {
         api::fetch_work(&Live, &kind, &id)
     }
-    fn fetch_children(kind: String, id: ExternalId, _lang: Lang) -> Result<String, ProviderError> {
+    fn fetch_children(
+        kind: String,
+        id: ExternalId,
+        _season: Option<u32>,
+        _lang: Lang,
+    ) -> Result<String, ProviderError> {
         api::fetch_children(&Live, &kind, &id)
     }
     fn child_stubs(_kind: String, _id: ExternalId, _lang: Lang) -> Result<String, ProviderError> {

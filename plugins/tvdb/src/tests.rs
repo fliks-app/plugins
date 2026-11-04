@@ -348,7 +348,7 @@ fn a_full_page_asks_for_the_next() {
 #[test]
 fn seasons_pick_the_translation_and_fall_back_to_the_episode() {
     let t = series_with_episodes();
-    let seasons = run(t.seasons(2000, "fra")).unwrap();
+    let seasons = run(t.seasons(2000, None, "fra")).unwrap();
     assert_eq!(seasons.len(), 2);
     assert_eq!(
         seasons[1],
@@ -369,6 +369,16 @@ fn seasons_pick_the_translation_and_fall_back_to_the_episode() {
 }
 
 #[test]
+fn one_season_asks_for_it_and_keeps_only_its_episodes() {
+    let t = series_with_episodes();
+    let seasons = run(t.seasons(2000, Some(1), "fra")).unwrap();
+    assert_eq!(seasons.len(), 1);
+    assert_eq!(seasons[0]["seasonNumber"], 1);
+    let (_, _, query) = asked(&t, 0);
+    assert!(has(&query, "season", "1"));
+}
+
+#[test]
 fn a_failing_translation_keeps_the_episode_untranslated() {
     let t = tvdb(|p| match p {
         "/login" => ok(LOGIN),
@@ -376,7 +386,7 @@ fn a_failing_translation_keeps_the_episode_untranslated() {
         "/series/2000/extended" => ok(SERIES),
         _ => (500, None, "{}".into()),
     });
-    let seasons = run(t.seasons(2000, "fra")).unwrap();
+    let seasons = run(t.seasons(2000, None, "fra")).unwrap();
     assert_eq!(seasons[1]["episodes"][0]["title"], "Pilot");
 }
 

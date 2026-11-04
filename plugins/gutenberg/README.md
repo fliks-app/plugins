@@ -21,6 +21,8 @@ Requests are anonymous, identified by a `Fliks-Gutenberg/<version>` user agent. 
 paced at one request per second by the host, and file downloads are two seconds apart. A book is
 public domain in the United States; whether it is in yours is up to you.
 
+Requires Fliks 6.0.0 or later.
+
 ## Build and test
 
 ```sh

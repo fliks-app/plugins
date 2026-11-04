@@ -83,7 +83,7 @@ fn seasons_with(second: u16) -> (Tmdb<Fake>, Result<Vec<Value>>) {
         "/tv/1/season/1" => ok(r#"{"season_number":1,"episodes":[]}"#),
         _ => (second, Some("0"), "{}".into()),
     });
-    let r = run(t.seasons(1, &en()));
+    let r = run(t.seasons(1, None, &en()));
     (t, r)
 }
 
@@ -313,7 +313,7 @@ fn seasons_keep_the_stub_order_and_map_the_episodes() {
         "/tv/2000/season/1" => ok(SEASON_1),
         _ => (404, None, "{}".into()),
     });
-    let seasons = run(t.seasons(2000, &en())).unwrap();
+    let seasons = run(t.seasons(2000, None, &en())).unwrap();
     let numbers: Vec<_> = seasons.iter().map(|s| s["seasonNumber"].clone()).collect();
     assert_eq!(numbers, [json!(0), json!(1)]);
     assert_eq!(seasons[1]["episodeCount"], 2);
@@ -332,6 +332,19 @@ fn seasons_keep_the_stub_order_and_map_the_episodes() {
         })
     );
     assert_eq!(seasons[1]["episodes"][1]["stillUrl"], Value::Null);
+}
+
+#[test]
+fn one_season_is_fetched_alone_and_a_missing_one_is_empty() {
+    let t = tmdb(|path| match path {
+        "/tv/2000/season/1" => ok(SEASON_1),
+        _ => (404, None, "{}".into()),
+    });
+    let seasons = run(t.seasons(2000, Some(1), &en())).unwrap();
+    assert_eq!(seasons.len(), 1);
+    assert_eq!(seasons[0]["seasonNumber"], 1);
+    assert_eq!(t.http.seen.borrow().len(), 1);
+    assert!(run(t.seasons(2000, Some(9), &en())).unwrap().is_empty());
 }
 
 #[test]

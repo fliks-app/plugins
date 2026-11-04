@@ -13,6 +13,8 @@ Requests are anonymous, identified by a `Fliks-Audible/<version>` user agent. Th
 undocumented and has no published limit: the host paces them at one per second, lowered on 429.
 This is not an official API and is outside any published terms; covers and text are Audible's.
 
+Requires Fliks 6.0.0 or later.
+
 ## Build and test
 
 ```sh

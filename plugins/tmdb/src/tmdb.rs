@@ -219,7 +219,15 @@ impl<H: Http> Tmdb<H> {
 
     /// Every season, 8 at a time, stub order kept. A failing season is dropped unless the provider
     /// is throttling: a partial list would make identify delete the missing seasons.
-    pub async fn seasons(&self, id: i64, lang: &Resolved) -> Result<Vec<Value>> {
+    /// With `only`, just that season (none when TMDB has no such season).
+    pub async fn seasons(&self, id: i64, only: Option<i64>, lang: &Resolved) -> Result<Vec<Value>> {
+        if let Some(n) = only {
+            return match self.season(id, n, lang).await {
+                Ok(s) => Ok(vec![s]),
+                Err(ProviderError::NotFound) => Ok(vec![]),
+                Err(e) => Err(e),
+            };
+        }
         let stubs = self.season_stubs(id, lang).await?;
         let mut out = Vec::new();
         for chunk in stubs.chunks(SEASON_FETCH_CONCURRENCY) {

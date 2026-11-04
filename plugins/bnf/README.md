@@ -9,6 +9,8 @@ one per second; the BnF publishes no limit, so lower it on 429 or 503. Records c
 
 Data is BnF open data under the Licence Ouverte (Etalab): credit "source: BnF, catalogue general".
 
+Requires Fliks 6.0.0 or later.
+
 ## Build and test
 
 ```sh
