@@ -213,6 +213,21 @@ fn search_maps_the_results_and_passes_the_year() {
 }
 
 #[test]
+fn search_drops_the_missing_artwork_placeholder() {
+    let t = tvdb(|p| {
+        if p == "/login" {
+            ok(LOGIN)
+        } else {
+            ok(
+                r#"{"data":[{"tvdb_id":"7","name":"No Art","image_url":"https://artworks.thetvdb.com/banners/images/missing/series.jpg"}]}"#,
+            )
+        }
+    });
+    let found = run(t.search_titles(true, "x", None, "eng")).unwrap();
+    assert_eq!(found[0]["posterUrl"], Value::Null);
+}
+
+#[test]
 fn series_details_follow_the_server_mapping() {
     let t = tvdb(|p| if p == "/login" { ok(LOGIN) } else { ok(SERIES) });
     let d = run(t.details(true, 2000, "fra")).unwrap();
@@ -237,7 +252,8 @@ fn series_details_follow_the_server_mapping() {
     assert_eq!(d["keywords"], json!(["crime"]));
     assert_eq!(d["alternativeTitles"], json!(["BB"]));
     assert_eq!(d["mediaType"], "series");
-    assert_eq!(d["seasonCount"], 2);
+    // Season 0 and the DVD order's season 1 are not aired seasons.
+    assert_eq!(d["seasonCount"], 1);
     assert_eq!(d["releaseDate"], "2008-01-20");
     assert_eq!(d["status"], "ended");
     assert_eq!(d["productionCountries"], json!(["usa"]));

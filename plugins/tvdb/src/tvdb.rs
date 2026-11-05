@@ -1,5 +1,7 @@
 //! TheTVDB v4 requests and response mapping, over an `Http` that answers parsed JSON.
-use crate::map::{arr, get, js_parse_int, nn, or, pluck, put, score, str_lower_or, text, year_of};
+use crate::map::{
+    arr, get, image, js_parse_int, nn, or, pluck, put, score, str_lower_or, text, year_of,
+};
 use fliks_plugin_sdk::rt::join_all;
 use fliks_plugin_sdk_provider::ProviderError;
 use provider_common::lang::normalize_language_code;
@@ -205,13 +207,7 @@ impl<H: Http> Tvdb<H> {
                 &[("short", "true".into())],
             )
             .await?;
-        let bases: Vec<&Value> = arr(&series, "seasons")
-            .iter()
-            .filter(|s| {
-                get(get(s, "type"), "type") == "official"
-                    || get(get(s, "type"), "name") == "Aired Order"
-            })
-            .collect();
+        let bases = aired_seasons(&series);
         let advertises = |ep: &Value| {
             ["overviewTranslations", "nameTranslations"]
                 .iter()
@@ -262,7 +258,7 @@ impl<H: Http> Tvdb<H> {
                             "overview": pick("overview").map_or(Value::Null, Value::from),
                             "airDate": nn(ep, "aired"),
                             "runtime": nn(ep, "runtime"),
-                            "stillUrl": nn(ep, "image"),
+                            "stillUrl": image(ep, "image"),
                         })
                     })
                     .collect();
@@ -271,7 +267,7 @@ impl<H: Http> Tvdb<H> {
                     "episodeCount": episodes.len(),
                     "overview": null,
                     "airDate": air,
-                    "posterUrl": base.and_then(|b| text(b, "image")).map_or(Value::Null, Value::from),
+                    "posterUrl": base.map_or(Value::Null, |b| image(b, "image")),
                     "episodes": episodes,
                 })
             })
@@ -316,9 +312,9 @@ impl<H: Http> Tvdb<H> {
                 .find(|v| !v.is_null())
                 .cloned()
                 .unwrap_or(json!(0));
-            let poster = match get(work, "image") {
-                Value::Null => nn(c, "image"),
-                i => i.clone(),
+            let poster = match image(work, "image") {
+                Value::Null => image(c, "image"),
+                i => i,
             };
             let mut o = Map::new();
             o.insert("externalId".into(), external);
@@ -424,10 +420,9 @@ pub fn map_search_result(r: &Value, tv: bool, code: &str) -> Value {
         Value::Null => get(r, "id"),
         x => x,
     };
-    let poster = [get(r, "image_url"), get(r, "poster")]
+    let poster = [image(r, "image_url"), image(r, "poster")]
         .into_iter()
         .find(|v| !v.is_null())
-        .cloned()
         .unwrap_or(Value::Null);
     json!({
         "tmdbId": parse_int(&remote_id(ids, "TheMovieDB.com").unwrap_or(json!("0"))),
@@ -618,7 +613,7 @@ pub fn map_details(m: &Value, tv: bool, code: &str) -> Value {
             .into(),
     );
     o.insert("year".into(), year_of(m, "year"));
-    let poster = pick_artwork(art, ART_POSTER, code).map_or_else(|| nn(m, "image"), Value::from);
+    let poster = pick_artwork(art, ART_POSTER, code).map_or_else(|| image(m, "image"), Value::from);
     o.insert("posterUrl".into(), poster);
     o.insert("fanartUrl".into(), opt(fanart.clone()));
     let logo = if tv {
@@ -687,9 +682,20 @@ fn trailers(m: &Value) -> Vec<Value> {
         .collect()
 }
 
-fn series_fields(o: &mut Map<String, Value>, m: &Value) {
-    let count = arr(m, "seasons")
+/// The seasons of the aired order: TVDB lists every order's seasons (DVD, absolute...) side by side.
+fn aired_seasons(series: &Value) -> Vec<&Value> {
+    arr(series, "seasons")
         .iter()
+        .filter(|s| {
+            get(get(s, "type"), "type") == "official"
+                || get(get(s, "type"), "name") == "Aired Order"
+        })
+        .collect()
+}
+
+fn series_fields(o: &mut Map<String, Value>, m: &Value) {
+    let count = aired_seasons(m)
+        .into_iter()
         .filter(|s| get(s, "number") != 0)
         .count();
     o.insert(

@@ -10,6 +10,14 @@ pub fn nn(v: &Value, k: &str) -> Value {
     get(v, k).clone()
 }
 
+/// `v.k` as an image URL: TVDB answers a "missing artwork" placeholder for a work that has none.
+pub fn image(v: &Value, k: &str) -> Value {
+    match get(v, k) {
+        Value::String(s) if s.is_empty() || s.contains("/images/missing/") => Value::Null,
+        x => x.clone(),
+    }
+}
+
 /// `v.k ?? default`.
 pub fn or(v: &Value, k: &str, default: Value) -> Value {
     match get(v, k) {
