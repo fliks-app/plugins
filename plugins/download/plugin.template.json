@@ -39,25 +39,25 @@
     },
     {
       "method": "GET",
-      "path": "/:id/seasons/:seasonId/releases",
+      "path": "/:id/groups/:groupId/releases",
       "policy": "read:plugin:fliks.download:releases",
       "objectGuard": "mediaAccessible:id"
     },
     {
       "method": "POST",
-      "path": "/:id/seasons/:seasonId/grab",
+      "path": "/:id/groups/:groupId/grab",
       "policy": "grab:plugin:fliks.download:releases",
       "objectGuard": "mediaAccessible:id"
     },
     {
       "method": "GET",
-      "path": "/:id/episodes/:episodeId/releases",
+      "path": "/:id/items/:itemId/releases",
       "policy": "read:plugin:fliks.download:releases",
       "objectGuard": "mediaAccessible:id"
     },
     {
       "method": "POST",
-      "path": "/:id/episodes/:episodeId/grab",
+      "path": "/:id/items/:itemId/grab",
       "policy": "grab:plugin:fliks.download:releases",
       "objectGuard": "mediaAccessible:id"
     },
@@ -404,10 +404,10 @@
         ]
       },
       {
-        "id": "fliks-download.season.search-releases",
-        "slot": "media.season.actions",
+        "id": "fliks-download.group.search-releases",
+        "slot": "media.group.actions",
         "weight": 500,
-        "labelKey": "download.season.search_releases",
+        "labelKey": "download.group.search_releases",
         "icon": "package",
         "when": [
           "hasPermission:media.grab",
@@ -415,14 +415,14 @@
         ],
         "action": {
           "kind": "action",
-          "actionId": "season.search-releases"
+          "actionId": "group.search-releases"
         }
       },
       {
-        "id": "fliks-download.season.grab-best",
-        "slot": "media.season.actions",
+        "id": "fliks-download.group.grab-best",
+        "slot": "media.group.actions",
         "weight": 600,
-        "labelKey": "download.season.grab_best",
+        "labelKey": "download.group.grab_best",
         "icon": "download",
         "when": [
           "hasPermission:media.grab",
@@ -430,7 +430,37 @@
         ],
         "action": {
           "kind": "action",
-          "actionId": "season.grab-best"
+          "actionId": "group.grab-best"
+        }
+      },
+      {
+        "id": "fliks-download.item.search-releases",
+        "slot": "media.item.actions",
+        "weight": 500,
+        "labelKey": "download.media.search_releases",
+        "icon": "search",
+        "when": [
+          "hasPermission:media.grab",
+          "hasQualityProfile"
+        ],
+        "action": {
+          "kind": "action",
+          "actionId": "item.search-releases"
+        }
+      },
+      {
+        "id": "fliks-download.item.grab-best",
+        "slot": "media.item.actions",
+        "weight": 600,
+        "labelKey": "download.media.grab_best",
+        "icon": "download",
+        "when": [
+          "hasPermission:media.grab",
+          "hasQualityProfile"
+        ],
+        "action": {
+          "kind": "action",
+          "actionId": "item.grab-best"
         }
       }
     ],
@@ -1076,26 +1106,29 @@
       }
     ],
     "releasePicker": {
-      "movie": {
-        "work": {
-          "search": "/:id/releases",
-          "grab": "/:id/grab"
-        }
-      },
-      "series": {
-        "group": {
-          "search": "/:id/seasons/:seasonId/releases",
-          "grab": "/:id/seasons/:seasonId/grab"
+      "byKind": {
+        "movie": {
+          "work": { "search": "/:id/releases", "grab": "/:id/grab" }
         },
-        "item": {
-          "search": "/:id/episodes/:episodeId/releases",
-          "grab": "/:id/episodes/:episodeId/grab"
-        }
-      },
-      "book": {
-        "work": {
-          "search": "/:id/releases",
-          "grab": "/:id/grab"
+        "series": {
+          "group": {
+            "search": "/:id/groups/:groupId/releases",
+            "grab": "/:id/groups/:groupId/grab"
+          },
+          "item": {
+            "search": "/:id/items/:itemId/releases",
+            "grab": "/:id/items/:itemId/grab"
+          }
+        },
+        "book": {
+          "work": { "search": "/:id/releases", "grab": "/:id/grab" }
+        },
+        "comic": {
+          "work": { "search": "/:id/releases", "grab": "/:id/grab" },
+          "item": {
+            "search": "/:id/items/:itemId/releases",
+            "grab": "/:id/items/:itemId/grab"
+          }
         }
       }
     }
@@ -1133,8 +1166,8 @@
       "download.config.indexers.labels.edit_title": "Edit indexer",
       "download.config.download_clients.labels.create_title": "New download client",
       "download.config.download_clients.labels.edit_title": "Edit download client",
-      "download.season.search_releases": "View packs",
-      "download.season.grab_best": "Download the season",
+      "download.group.search_releases": "View packs",
+      "download.group.grab_best": "Download the season",
       "download.media.group": "Downloads",
       "download.media.grab_best": "Grab the best release",
       "download.media.search_releases": "Search releases",
@@ -1324,8 +1357,8 @@
       "download.config.indexers.labels.edit_title": "Modifier l'indexeur",
       "download.config.download_clients.labels.create_title": "Nouveau client de téléchargement",
       "download.config.download_clients.labels.edit_title": "Modifier le client de téléchargement",
-      "download.season.search_releases": "Voir les packs",
-      "download.season.grab_best": "Télécharger la saison",
+      "download.group.search_releases": "Voir les packs",
+      "download.group.grab_best": "Télécharger la saison",
       "download.media.group": "Téléchargements",
       "download.media.grab_best": "Récupérer la meilleure release",
       "download.media.search_releases": "Rechercher des releases",

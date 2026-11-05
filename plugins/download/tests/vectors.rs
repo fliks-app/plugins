@@ -242,12 +242,24 @@ fn secret_settings() {
 }
 
 /// Every key but the ones the port changes equals the published 0.12.1 manifest, except the
-/// renamed `coreRefs` and the per-kind `releasePicker`; strings may only be added.
+/// renamed `coreRefs`, the per-kind `releasePicker` and the season/episode to group/item
+/// rename; strings may only be added.
 #[test]
 fn template_matches_the_published_manifest() {
-    let mut old: Value =
-        serde_json::from_str(include_str!("vectors/manifest-0.12.1.json")).unwrap();
+    let renamed = include_str!("vectors/manifest-0.12.1.json")
+        .replace("/:id/seasons/:seasonId/", "/:id/groups/:groupId/")
+        .replace("/:id/episodes/:episodeId/", "/:id/items/:itemId/")
+        .replace("media.season.actions", "media.group.actions")
+        .replace("fliks-download.season.", "fliks-download.group.")
+        .replace("download.season.", "download.group.")
+        .replace("\"season.", "\"group.");
+    let mut old: Value = serde_json::from_str(&renamed).unwrap();
     let mut new: Value = serde_json::from_str(include_str!("../plugin.template.json")).unwrap();
+    let contributions = new["ui"]["contributions"].as_array_mut().unwrap();
+    let items: Vec<Value> = contributions
+        .extract_if(.., |c| c["slot"] == "media.item.actions")
+        .collect();
+    assert_eq!(items.len(), 2);
     assert_eq!(
         (
             &new["pluginApi"],
@@ -295,22 +307,25 @@ fn template_matches_the_published_manifest() {
         ])
     );
     let picker = new["ui"].as_object_mut().unwrap().remove("releasePicker");
+    let item = json!({
+        "search": "/:id/items/:itemId/releases",
+        "grab": "/:id/items/:itemId/grab"
+    });
+    let work = json!({ "search": "/:id/releases", "grab": "/:id/grab" });
     assert_eq!(
         picker,
-        Some(json!({
-            "movie": { "work": { "search": "/:id/releases", "grab": "/:id/grab" } },
+        Some(json!({ "byKind": {
+            "movie": { "work": work },
             "series": {
                 "group": {
-                    "search": "/:id/seasons/:seasonId/releases",
-                    "grab": "/:id/seasons/:seasonId/grab"
+                    "search": "/:id/groups/:groupId/releases",
+                    "grab": "/:id/groups/:groupId/grab"
                 },
-                "item": {
-                    "search": "/:id/episodes/:episodeId/releases",
-                    "grab": "/:id/episodes/:episodeId/grab"
-                }
+                "item": item
             },
-            "book": { "work": { "search": "/:id/releases", "grab": "/:id/grab" } }
-        }))
+            "book": { "work": work },
+            "comic": { "work": work, "item": item }
+        } }))
     );
     old["ui"].as_object_mut().unwrap().remove("releasePicker");
     let (old_i18n, new_i18n) = (old["i18n"].clone(), new["i18n"].clone());

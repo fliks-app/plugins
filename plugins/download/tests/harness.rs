@@ -961,7 +961,7 @@ async fn a_split_season_issues_one_query_per_scene_season() {
     .await;
     let (media, season) = split_season(&h).await;
     let r = h
-        .proxy("GET", &format!("/{media}/seasons/{season}/releases"), None)
+        .proxy("GET", &format!("/{media}/groups/{season}/releases"), None)
         .await;
     assert_eq!(r.status, 200, "{:?}", body(&r));
     let queries: Vec<String> = tz
@@ -1588,39 +1588,48 @@ async fn all_39_routes_answer_the_frozen_statuses() {
         ),
         err(
             "GET",
-            "/:id/seasons/:seasonId/releases",
-            "/1/seasons/x/releases",
+            "/:id/groups/:groupId/releases",
+            "/1/groups/x/releases",
             None,
             400,
             BAD_PARAM,
-            Some("seasonId"),
+            Some("groupId"),
         ),
         err(
             "POST",
-            "/:id/seasons/:seasonId/grab",
-            "/1/seasons/0/grab",
+            "/:id/groups/:groupId/grab",
+            "/1/groups/0/grab",
             None,
             400,
             BAD_PARAM,
-            Some("seasonId"),
+            Some("groupId"),
+        ),
+        err(
+            "POST",
+            "/:id/grab",
+            "/1/grab",
+            Some(json!({ "family": "video3" })),
+            400,
+            BAD_PARAM,
+            Some("family"),
         ),
         err(
             "GET",
-            "/:id/episodes/:episodeId/releases",
-            "/1/episodes/-1/releases",
+            "/:id/items/:itemId/releases",
+            "/1/items/-1/releases",
             None,
             400,
             BAD_PARAM,
-            Some("episodeId"),
+            Some("itemId"),
         ),
         err(
             "POST",
-            "/:id/episodes/:episodeId/grab",
-            "/1/episodes/01/grab",
+            "/:id/items/:itemId/grab",
+            "/1/items/01/grab",
             None,
             400,
             BAD_PARAM,
-            Some("episodeId"),
+            Some("itemId"),
         ),
         okc("GET", "/queue", "/queue", None),
         okc("GET", "/history", "/history", None),
@@ -2382,7 +2391,7 @@ async fn a_later_query_that_lapses_keeps_the_earlier_results() {
     .await;
     let (media, season) = split_season(&h).await;
     let r = h
-        .proxy("GET", &format!("/{media}/seasons/{season}/releases"), None)
+        .proxy("GET", &format!("/{media}/groups/{season}/releases"), None)
         .await;
     assert_eq!(r.status, 200, "{:?}", body(&r));
     assert_eq!(body(&r).as_array().map(Vec::len), Some(1), "{:?}", body(&r));

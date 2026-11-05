@@ -35,6 +35,9 @@ season for a season pack and one episode for an episode.
 group of a season pack or of an episode). The routes keep answering `episodeId`, which is the
 `itemId` when the grab has a group and null otherwise, so a movie's own item is never an episode.
 
+The release routes are `/:id`, `/:id/groups/:groupId` and `/:id/items/:itemId` (`releases` to search,
+`grab` to grab). `family` (query on a search, body on a grab) picks the want of a book with several.
+
 ## Outbound requests and budgets
 
 Every export that sends sets its guest budget on entry (`rt::budgets`, `src/lib.rs`), and every
