@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.4.0](https://github.com/fliks-app/plugins/compare/download-v2.3.0...download-v2.4.0) (2026-11-05)
+
+
+### Features
+
+* **download:** seeders/leechers column and release replace in the queue ([#88](https://github.com/fliks-app/plugins/issues/88)) ([0c9dd80](https://github.com/fliks-app/plugins/commit/0c9dd80de28acb5c5f32456d854a1764b1026b82))
+
 ## [2.3.0](https://github.com/fliks-app/plugins/compare/download-v2.2.0...download-v2.3.0) (2026-11-05)
 
 
