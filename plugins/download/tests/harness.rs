@@ -1536,7 +1536,7 @@ const BAD_BODY: &str = "download.http.errors.bad_body";
 const NOT_FOUND: &str = "download.http.errors.not_found";
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn all_39_routes_answer_the_frozen_statuses() {
+async fn all_41_routes_answer_the_frozen_statuses() {
     let Some(h) = Harness::start(setup()).await else {
         return;
     };
@@ -2060,6 +2060,70 @@ async fn all_39_routes_answer_the_frozen_statuses() {
             Some("failed"),
         ),
         err(
+            "GET",
+            "/queue/:id/replace/releases",
+            "/queue/abc/replace/releases",
+            None,
+            400,
+            BAD_PARAM,
+            Some("id"),
+        ),
+        err(
+            "GET",
+            "/queue/:id/replace/releases",
+            "/queue/999/replace/releases",
+            None,
+            404,
+            NOT_FOUND,
+            Some("999"),
+        ),
+        err(
+            "GET",
+            "/queue/:id/replace/releases",
+            &format!("/queue/{completed}/replace/releases"),
+            None,
+            409,
+            "download.queue.errors.not_replaceable",
+            Some("completed"),
+        ),
+        err(
+            "POST",
+            "/queue/:id/replace",
+            "/queue/abc/replace",
+            None,
+            400,
+            BAD_PARAM,
+            Some("id"),
+        ),
+        err(
+            "POST",
+            "/queue/:id/replace",
+            "/queue/999/replace",
+            None,
+            404,
+            NOT_FOUND,
+            Some("999"),
+        ),
+        err(
+            "POST",
+            "/queue/:id/replace",
+            &format!("/queue/{completed}/replace"),
+            None,
+            409,
+            "download.queue.errors.not_replaceable",
+            Some("completed"),
+        ),
+        // No media: nothing to search again.
+        err(
+            "POST",
+            "/queue/:id/replace",
+            &format!("/queue/{grabbed}/replace"),
+            None,
+            409,
+            "download.queue.errors.not_replaceable",
+            Some("grabbed"),
+        ),
+        err(
             "DELETE",
             "/history/:id",
             "/history/abc",
@@ -2145,7 +2209,7 @@ async fn all_39_routes_answer_the_frozen_statuses() {
         .into_iter()
         .map(|(m, p, _)| (m.to_owned(), p.to_owned()))
         .collect();
-    assert_eq!(table.len(), 39);
+    assert_eq!(table.len(), 41);
     for (m, p) in &table {
         assert!(
             cases.iter().any(|c| c.method == m && c.route == p),
