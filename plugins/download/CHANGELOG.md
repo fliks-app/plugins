@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.0](https://github.com/fliks-app/plugins/compare/download-v2.2.0...download-v2.3.0) (2026-11-05)
+
+
+### Features
+
+* **download:** group and item release routes, family on search and grab ([#84](https://github.com/fliks-app/plugins/issues/84)) ([da854e6](https://github.com/fliks-app/plugins/commit/da854e69bfac30d8fc1007020013ed594ff6352c))
+
 ## [2.2.0](https://github.com/fliks-app/plugins/compare/download-v2.1.0...download-v2.2.0) (2026-11-04)
 
 
