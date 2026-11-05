@@ -283,7 +283,8 @@ fn fake_qbit() -> Stub {
                     json!({
                         "hash": HASH, "name": "Some.Movie.2020.1080p", "size": 1000, "downloaded": 500,
                         "progress": 0.5, "dlspeed": 100, "ratio": 0, "eta": 10,
-                        "state": s, "save_path": "/downloads", "added_on": 1
+                        "state": s, "save_path": "/downloads", "added_on": 1,
+                        "num_complete": 12, "num_incomplete": -1
                     })
                 });
                 ok(&json!(t.into_iter().collect::<Vec<_>>()).to_string())
@@ -350,6 +351,10 @@ fn fake_transmission() -> Stub {
                 "downloadedEver": 500, "percentDone": 0.5, "rateDownload": 100, "uploadRatio": -1,
                 "doneDate": 0, "eta": 10, "status": st, "error": 0, "downloadDir": "/downloads",
                 "addedDate": 1, "labels": *labels.lock().unwrap(), "peersSendingToUs": 2,
+                "trackerStats": [
+                    { "seederCount": 3, "leecherCount": -1 },
+                    { "seederCount": 8, "leecherCount": 4 },
+                ],
             })).into_iter().collect::<Vec<_>>() }),
             "torrent-set" => {
                 *labels.lock().unwrap() = req["arguments"]["labels"].clone();
@@ -1257,14 +1262,18 @@ async fn a_manual_grab_reaches_the_client_and_the_queue_drives_it() {
             &item["state"],
             &item["progress"],
             &item["title"],
-            &item["mediaType"]
+            &item["mediaType"],
+            &item["seeders"],
+            &item["leechers"]
         ),
         (
             &json!(row),
             &json!("active"),
             &json!(50),
             &json!("Some Movie"),
-            &json!("movie")
+            &json!("movie"),
+            &json!(12),
+            &Value::Null
         )
     );
     let h1 = body(&h.proxy("GET", "/history", None).await);
@@ -1373,8 +1382,13 @@ async fn a_grab_reaches_transmission_and_the_queue_drives_it() {
     assert_eq!(q["total"], json!(1), "{q}");
     let row = q["data"][0]["id"].as_i64().unwrap();
     assert_eq!(
-        (&q["data"][0]["state"], &q["data"][0]["progress"]),
-        (&json!("active"), &json!(50))
+        (
+            &q["data"][0]["state"],
+            &q["data"][0]["progress"],
+            &q["data"][0]["seeders"],
+            &q["data"][0]["leechers"]
+        ),
+        (&json!("active"), &json!(50), &json!(8), &json!(4))
     );
     assert_eq!(
         h.proxy("POST", &format!("/queue/{row}/pause"), None)

@@ -30,6 +30,9 @@ pub struct Torrent {
     pub state: String,
     pub save_path: Option<String>,
     pub added_on: i64,
+    /// Swarm seeders and leechers as the trackers report them; negative is unknown.
+    pub num_complete: Option<i64>,
+    pub num_incomplete: Option<i64>,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]

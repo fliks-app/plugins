@@ -719,6 +719,12 @@
             "key": "bytesPerSecond",
             "labelKey": "download.config.queue.columns.speed",
             "format": "speed"
+          },
+          {
+            "key": "seeders",
+            "labelKey": "download.config.queue.columns.peers",
+            "format": "peers",
+            "leechersKey": "leechers"
           }
         ],
         "refreshOn": [
@@ -1321,6 +1327,7 @@
       "download.config.history.actions.clear": "Clear history",
       "download.config.history.actions.clear_confirm": "Delete every finished, failed and warned entry? Downloads still running are kept.",
       "download.config.queue.columns.speed": "Speed",
+      "download.config.queue.columns.peers": "Seeders/Leechers",
       "download.config.queue.columns.size": "Size"
     },
     "fr": {
@@ -1512,6 +1519,7 @@
       "download.config.history.actions.clear": "Vider l’historique",
       "download.config.history.actions.clear_confirm": "Supprimer toutes les entrées terminées, échouées et en avertissement ? Les téléchargements en cours sont conservés.",
       "download.config.queue.columns.speed": "Vitesse",
+      "download.config.queue.columns.peers": "Seeders/Leechers",
       "download.config.queue.columns.size": "Taille"
     }
   }

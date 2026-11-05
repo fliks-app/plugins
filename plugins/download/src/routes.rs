@@ -565,6 +565,10 @@ fn size_or_null(s: Option<i64>) -> Value {
     s.filter(|s| *s != 0).map_or(Value::Null, |s| json!(s))
 }
 
+fn count_or_null(n: Option<i64>) -> Value {
+    n.filter(|n| *n >= 0).map_or(Value::Null, |n| json!(n))
+}
+
 fn queue_item(
     row: &HistoryRow,
     idx: &HashMap<i64, ClientIndex>,
@@ -598,6 +602,8 @@ fn queue_item(
             ("state", json!(client::progress_state(&t.state))),
             ("progress", num(t.progress * 100.0)),
             ("bytesPerSecond", num(t.dlspeed)),
+            ("seeders", count_or_null(t.num_complete)),
+            ("leechers", count_or_null(t.num_incomplete)),
             ("size", size_or_null(Some(t.size))),
             ("clientReachable", json!(true)),
         ]);

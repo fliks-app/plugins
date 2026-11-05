@@ -14,7 +14,7 @@ const T15: Duration = Duration::from_secs(15);
 const T60: Duration = Duration::from_secs(60);
 const SESSION_HEADER: &str = "x-transmission-session-id";
 
-const FIELDS: [&str; 15] = [
+const FIELDS: [&str; 16] = [
     "hashString",
     "name",
     "sizeWhenDone",
@@ -30,6 +30,7 @@ const FIELDS: [&str; 15] = [
     "addedDate",
     "labels",
     "peersSendingToUs",
+    "trackerStats",
 ];
 
 #[derive(Deserialize, Default)]
@@ -50,7 +51,15 @@ struct Item {
     added_date: i64,
     labels: Vec<String>,
     peers_sending_to_us: i64,
+    tracker_stats: Vec<TrackerStat>,
     files: Vec<File>,
+}
+
+#[derive(Deserialize, Default)]
+#[serde(default, rename_all = "camelCase")]
+struct TrackerStat {
+    seeder_count: i64,
+    leecher_count: i64,
 }
 
 #[derive(Deserialize, Default)]
@@ -102,6 +111,8 @@ fn torrent(t: Item) -> Torrent {
         eta: t.eta,
         save_path: t.download_dir,
         added_on: t.added_date,
+        num_complete: t.tracker_stats.iter().map(|s| s.seeder_count).max(),
+        num_incomplete: t.tracker_stats.iter().map(|s| s.leecher_count).max(),
     }
 }
 
