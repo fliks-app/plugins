@@ -166,14 +166,6 @@ fn search_releases(r: &Request) -> R<Response> {
         Ok(f) => f,
         Err(resp) => return resp,
     };
-    // Only a delegated viewer with a modal open (`sid`) gets the streamed partial results.
-    let stream = match (&r.principal, r.query("sid")) {
-        (Principal::Delegated(user), Some(sid)) if !sid.is_empty() => Some(Stream {
-            user_id: *user,
-            search_id: sid.to_owned(),
-        }),
-        _ => None,
-    };
     let releases = grab::search_releases(
         media,
         group,
@@ -181,9 +173,20 @@ fn search_releases(r: &Request) -> R<Response> {
         family,
         r.query("language"),
         r.query("q"),
-        stream.as_ref(),
+        stream_of(r).as_ref(),
     )?;
     ok(releases.iter().map(to_wire).collect::<Vec<_>>())
+}
+
+/// Only a delegated viewer with a modal open (`sid`) gets the streamed partial results.
+fn stream_of(r: &Request) -> Option<Stream> {
+    match (&r.principal, r.query("sid")) {
+        (Principal::Delegated(user), Some(sid)) if !sid.is_empty() => Some(Stream {
+            user_id: *user,
+            search_id: sid.to_owned(),
+        }),
+        _ => None,
+    }
 }
 
 /// Only an absolute http(s) URL is kept: it reaches a browser as an anchor.
@@ -208,23 +211,27 @@ fn grab_release(r: &Request) -> R<Response> {
         Ok(f) => f,
         Err(resp) => return resp,
     };
-    let manual = str_field(&b, "downloadUrl")
-        .filter(|u| !u.is_empty())
-        .map(|download_url| Manual {
-            download_url,
-            source_title: str_field(&b, "sourceTitle"),
-            indexer_id: num_field(&b, "sourceId").map(|f| f as i64),
-            info_url: info_url(b.get("infoUrl")),
-            force: b.get("force") == Some(&Value::Bool(true)),
-        });
     ok(grab::grab_release(
         media,
         group,
         item,
         family,
         str_field(&b, "language").as_deref(),
-        manual,
+        manual_of(&b),
     )?)
+}
+
+/// A body without `downloadUrl` asks for an auto-pick.
+fn manual_of(b: &Map<String, Value>) -> Option<Manual> {
+    str_field(b, "downloadUrl")
+        .filter(|u| !u.is_empty())
+        .map(|download_url| Manual {
+            download_url,
+            source_title: str_field(b, "sourceTitle"),
+            indexer_id: num_field(b, "sourceId").map(|f| f as i64),
+            info_url: info_url(b.get("infoUrl")),
+            force: b.get("force") == Some(&Value::Bool(true)),
+        })
 }
 
 // --- indexers ------------------------------------------------------------------------------
@@ -558,11 +565,16 @@ fn base_item(row: &HistoryRow, names: &HashMap<i64, String>) -> Map<String, Valu
     o.insert("episodeId".into(), json!(row.episode_id()));
     o.insert("mediaType".into(), Value::Null);
     o.insert("statusMessage".into(), Value::Null);
+    o.insert("replaceable".into(), json!(replaceable(row)));
     o
 }
 
 fn size_or_null(s: Option<i64>) -> Value {
     s.filter(|s| *s != 0).map_or(Value::Null, |s| json!(s))
+}
+
+fn count_or_null(n: Option<i64>) -> Value {
+    n.filter(|n| *n >= 0).map_or(Value::Null, |n| json!(n))
 }
 
 fn queue_item(
@@ -598,6 +610,8 @@ fn queue_item(
             ("state", json!(client::progress_state(&t.state))),
             ("progress", num(t.progress * 100.0)),
             ("bytesPerSecond", num(t.dlspeed)),
+            ("seeders", count_or_null(t.num_complete)),
+            ("leechers", count_or_null(t.num_incomplete)),
             ("size", size_or_null(Some(t.size))),
             ("clientReachable", json!(true)),
         ]);
@@ -780,11 +794,128 @@ fn history_page(r: &Request) -> R<Response> {
             o.insert("seasonId".into(), json!(row.season_id));
             o.insert("episodeId".into(), json!(row.episode_id()));
             o.insert("mediaType".into(), Value::Null);
+            o.insert("replaceable".into(), json!(replaceable(row)));
             o
         })
         .collect();
     attach_labels(&mut data)?;
     ok(json!({ "data": data, "total": total, "page": page, "pageSize": size }))
+}
+
+// --- replace -------------------------------------------------------------------------------
+
+/// Still downloading or failed; a finished or importing download is kept.
+fn replaceable(row: &HistoryRow) -> bool {
+    row.media_id.is_some()
+        && matches!(
+            row.status.as_str(),
+            "grabbed" | "warning" | "failed" | "import_failed"
+        )
+}
+
+/// The scope the release was searched at: a video item only within its season, since a movie's
+/// own item is the work; a book's or comic's item stands alone.
+struct Scope {
+    media: u32,
+    group: Option<u32>,
+    item: Option<u32>,
+    family: Option<Family>,
+}
+
+fn scope_of(row: &HistoryRow) -> Option<Scope> {
+    let id = |v: Option<i64>| v.and_then(|v| u32::try_from(v).ok());
+    let family = row.family.as_deref().and_then(grab::family_of);
+    let group = id(row.season_id);
+    let item =
+        id(row.item_id).filter(|_| group.is_some() || family.is_some_and(|f| f != Family::Video));
+    Some(Scope {
+        media: id(row.media_id)?,
+        group,
+        item,
+        family,
+    })
+}
+
+fn replace_row(r: &Request) -> Result<(HistoryRow, Scope), R<Response>> {
+    let id = id(r)?;
+    let row = match history::find(id.into()) {
+        Ok(Some(row)) => row,
+        Ok(None) => return Err(not_found(&id.to_string())),
+        Err(e) => return Err(Err(e)),
+    };
+    match scope_of(&row).filter(|_| replaceable(&row)) {
+        Some(scope) => Ok((row, scope)),
+        None => Err(Ok(err_body(
+            409,
+            "download.queue.errors.not_replaceable",
+            Some(&row.status),
+        ))),
+    }
+}
+
+/// Blocklists the release, deletes its torrent and files, and retires the row.
+fn retire_replaced(row: &HistoryRow) -> R<()> {
+    poller::auto_blocklist(row, "Replaced by a user");
+    let (idx, _) = index_clients()?;
+    if let (Some(client), Some(_)) = (row.download_client_id, live(row, &idx))
+        && let Some(hash) = row.torrent_hash.as_deref()
+    {
+        client::delete(&client::drivable(client)?, hash, true)?;
+    }
+    history::mark_failed(row.id, "download.queue.replaced")?;
+    settle(row, "absent");
+    Ok(())
+}
+
+fn replace_releases(r: &Request) -> R<Response> {
+    let (row, s) = match replace_row(r) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    let releases = grab::search_releases(
+        s.media,
+        s.group,
+        s.item,
+        s.family,
+        row.language.as_deref(),
+        r.query("q"),
+        stream_of(r).as_ref(),
+    )?;
+    ok(releases.iter().map(to_wire).collect::<Vec<_>>())
+}
+
+/// A picked release is grabbed before the old one goes, so a failed grab loses nothing; an
+/// auto-pick retires the old one first, or the search would pick it again.
+fn replace(r: &Request) -> R<Response> {
+    let (row, s) = match replace_row(r) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    let grab = |manual| {
+        grab::grab_release(
+            s.media,
+            s.group,
+            s.item,
+            s.family,
+            row.language.as_deref(),
+            manual,
+        )
+    };
+    let Some(manual) = manual_of(&body(r)) else {
+        retire_replaced(&row)?;
+        return ok(grab(None)?);
+    };
+    let out = grab(Some(manual))?;
+    let same = |h: &str| {
+        out["torrentHash"]
+            .as_str()
+            .is_some_and(|n| n.eq_ignore_ascii_case(h))
+    };
+    if row.torrent_hash.as_deref().is_some_and(same) {
+        return Ok(err_body(409, "download.queue.errors.same_release", None));
+    }
+    retire_replaced(&row)?;
+    ok(out)
 }
 
 /// Only a `grabbed` row can be controlled: an importing one's files are being moved.
@@ -1062,6 +1193,8 @@ pub fn table() -> Vec<(&'static str, &'static str, Handler)> {
         ("POST", "/queue/:id/resume", h!(resume)),
         ("DELETE", "/queue/:id", h!(remove_queued)),
         ("POST", "/queue/:id/retry-import", h!(retry_import)),
+        ("GET", "/queue/:id/replace/releases", h!(replace_releases)),
+        ("POST", "/queue/:id/replace", h!(replace)),
         ("DELETE", "/history/all", h!(clear_history)),
         ("DELETE", "/history/:id", h!(delete_history)),
         ("GET", "/blocklist", h!(list_blocklist)),
@@ -1079,6 +1212,59 @@ pub static ROUTER: LazyLock<Router> = LazyLock::new(|| {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn row(status: &str, extra: Value) -> HistoryRow {
+        let mut v = json!({
+            "id": 1, "sourceTitle": "t", "quality": "q", "status": status, "grabSource": "auto",
+            "createdAt": "", "updatedAt": "", "mediaId": 7,
+        });
+        v.as_object_mut()
+            .unwrap()
+            .extend(extra.as_object().unwrap().clone());
+        serde_json::from_value(v).unwrap()
+    }
+
+    #[test]
+    fn replace_offered_while_downloading_or_failed() {
+        for s in ["grabbed", "warning", "failed", "import_failed"] {
+            assert!(replaceable(&row(s, json!({}))), "{s}");
+        }
+        for s in ["importing", "completed"] {
+            assert!(!replaceable(&row(s, json!({}))), "{s}");
+        }
+        assert!(!replaceable(&row("grabbed", json!({ "mediaId": null }))));
+    }
+
+    #[test]
+    fn replace_searches_the_grabbed_scope() {
+        let scope = |extra| {
+            let s = scope_of(&row("grabbed", extra)).unwrap();
+            (s.group, s.item)
+        };
+        assert_eq!(
+            scope(json!({ "itemId": 3 })),
+            (None, None),
+            "a movie's own item"
+        );
+        assert_eq!(
+            scope(json!({ "itemId": 3, "family": "video" })),
+            (None, None)
+        );
+        assert_eq!(
+            scope(json!({ "seasonId": 2 })),
+            (Some(2), None),
+            "season pack"
+        );
+        assert_eq!(
+            scope(json!({ "seasonId": 2, "itemId": 3 })),
+            (Some(2), Some(3))
+        );
+        assert_eq!(
+            scope(json!({ "itemId": 3, "family": "image" })),
+            (None, Some(3)),
+            "a comic issue"
+        );
+    }
 
     #[test]
     fn page_parsing() {
