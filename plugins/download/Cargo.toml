@@ -18,6 +18,7 @@ sha1 = { version = "0.10", default-features = false }
 time = { version = "0.3", default-features = false, features = ["parsing", "std"] }
 
 [dev-dependencies]
+fliks-plugin-manifest = { workspace = true }
 fliks-plugin-route = { workspace = true }
 
 # Component tests of the built plugin under the real host (SDK-11).

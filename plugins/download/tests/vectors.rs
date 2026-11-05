@@ -314,7 +314,7 @@ fn template_matches_the_published_manifest() {
     let work = json!({ "search": "/:id/releases", "grab": "/:id/grab" });
     assert_eq!(
         picker,
-        Some(json!({ "byKind": {
+        Some(json!({
             "movie": { "work": work },
             "series": {
                 "group": {
@@ -325,7 +325,7 @@ fn template_matches_the_published_manifest() {
             },
             "book": { "work": work },
             "comic": { "work": work, "item": item }
-        } }))
+        }))
     );
     old["ui"].as_object_mut().unwrap().remove("releasePicker");
     let (old_i18n, new_i18n) = (old["i18n"].clone(), new["i18n"].clone());
@@ -349,6 +349,28 @@ fn template_matches_the_published_manifest() {
             assert_eq!(&new_i18n[lang][k], v, "{lang} {k}");
         }
     }
+}
+
+/// The host's own manifest validation, so a shape it refuses fails here and not at install.
+#[test]
+fn template_passes_the_host_validation() {
+    let t: Value = serde_json::from_str(include_str!("../plugin.template.json")).unwrap();
+    fliks_plugin_manifest::manifest::validate_shape(&t).unwrap();
+}
+
+#[test]
+fn only_a_book_want_carries_a_language_to_the_host() {
+    assert_eq!(grab::host_language(Some(Family::Image), Some("fr")), None);
+    assert_eq!(grab::host_language(Some(Family::Video), Some("fr")), None);
+    assert_eq!(
+        grab::host_language(Some(Family::Text), Some("fr")),
+        Some("fr")
+    );
+    assert_eq!(
+        grab::host_language(Some(Family::Audio), Some("fr")),
+        Some("fr")
+    );
+    assert_eq!(grab::host_language(None, Some("fr")), Some("fr"));
 }
 
 #[test]

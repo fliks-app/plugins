@@ -1106,29 +1106,27 @@
       }
     ],
     "releasePicker": {
-      "byKind": {
-        "movie": {
-          "work": { "search": "/:id/releases", "grab": "/:id/grab" }
+      "movie": {
+        "work": { "search": "/:id/releases", "grab": "/:id/grab" }
+      },
+      "series": {
+        "group": {
+          "search": "/:id/groups/:groupId/releases",
+          "grab": "/:id/groups/:groupId/grab"
         },
-        "series": {
-          "group": {
-            "search": "/:id/groups/:groupId/releases",
-            "grab": "/:id/groups/:groupId/grab"
-          },
-          "item": {
-            "search": "/:id/items/:itemId/releases",
-            "grab": "/:id/items/:itemId/grab"
-          }
-        },
-        "book": {
-          "work": { "search": "/:id/releases", "grab": "/:id/grab" }
-        },
-        "comic": {
-          "work": { "search": "/:id/releases", "grab": "/:id/grab" },
-          "item": {
-            "search": "/:id/items/:itemId/releases",
-            "grab": "/:id/items/:itemId/grab"
-          }
+        "item": {
+          "search": "/:id/items/:itemId/releases",
+          "grab": "/:id/items/:itemId/grab"
+        }
+      },
+      "book": {
+        "work": { "search": "/:id/releases", "grab": "/:id/grab" }
+      },
+      "comic": {
+        "work": { "search": "/:id/releases", "grab": "/:id/grab" },
+        "item": {
+          "search": "/:id/items/:itemId/releases",
+          "grab": "/:id/items/:itemId/grab"
         }
       }
     }

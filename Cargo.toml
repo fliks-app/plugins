@@ -6,6 +6,7 @@ members = ["plugins/download", "plugins/notify", "plugins/openlibrary", "plugins
 [workspace.dependencies]
 fliks-plugin-sdk = { git = "https://github.com/fliks-app/fliks", rev = "529477fff97400f31a8a5114b349f3129fbb8ff9" }
 fliks-plugin-sdk-provider = { git = "https://github.com/fliks-app/fliks", rev = "529477fff97400f31a8a5114b349f3129fbb8ff9" }
+fliks-plugin-manifest = { git = "https://github.com/fliks-app/fliks", rev = "529477fff97400f31a8a5114b349f3129fbb8ff9" }
 fliks-plugin-route = { git = "https://github.com/fliks-app/fliks", rev = "529477fff97400f31a8a5114b349f3129fbb8ff9" }
 
 [profile.release]

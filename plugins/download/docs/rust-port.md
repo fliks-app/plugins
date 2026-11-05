@@ -73,8 +73,8 @@ equal `ROUTES` of the manifest in both directions (a test pins this today; keep 
 
 | Routes | Permission | Handler [ts:src/seams/http-routes.ts] | Notes |
 |---|---|---|---|
-| `GET /:id/releases`, `GET /:id/seasons/:seasonId/releases`, `GET /:id/episodes/:episodeId/releases` | `read` releases, object guard `mediaAccessible:id` | `handleSearchReleases` :306 | `q` custom query, `sid` search-stream id (only for `delegated` principal); body is a bare array of `toWireRelease` rows |
-| `POST /:id/grab`, `POST /:id/seasons/:seasonId/grab`, `POST /:id/episodes/:episodeId/grab` | `grab` releases, object guard | `handleGrab` :356 | body `downloadUrl, sourceTitle, sourceId, infoUrl, force`; `infoUrl` kept only if absolute http(s) :333 |
+| `GET /:id/releases`, `GET /:id/groups/:groupId/releases`, `GET /:id/items/:itemId/releases` | `read` releases, object guard `mediaAccessible:id` | `handleSearchReleases` :306 | `family`, `language`, `q` custom query, `sid` search-stream id (only for `delegated` principal); body is a bare array of `toWireRelease` rows |
+| `POST /:id/grab`, `POST /:id/groups/:groupId/grab`, `POST /:id/items/:itemId/grab` | `grab` releases, object guard | `handleGrab` :356 | body `family, language, downloadUrl, sourceTitle, sourceId, infoUrl, force`; `infoUrl` kept only if absolute http(s) :333 |
 | `GET /queue`, `GET /history` | `read` queue | `handleQueue` :993, `handleHistory` :933 | `page`, `pageSize` clamped 1..100 :53; `history` also `q`, `status`; `media.resolve` batched to this page's ids :734 |
 | `GET /indexers`, `POST /indexers`, `PUT /indexers/:id`, `DELETE /indexers/:id`, `POST /indexers/test-connection`, `GET /indexers/implementations`, `GET /indexers/:id/stats` | `read`/`manage` indexers | :371 :379 :386 :394 :401 :1150 :409 | create answers 201, `useFor` projected onto three boolean columns :173 |
 | `DELETE /indexers/cooldowns`, `DELETE /indexers/:id/cooldown` | `manage` indexers | :423 :417 | literal route declared before `:id` siblings |
@@ -152,7 +152,7 @@ Parameters used: text, int, bool, float, null, json, text-list (`ANY($1::text[])
 
 - Contributions: `settings.page` x5 (general, indexers, indexer-sources, download-clients,
   history), `nav.acquisition` x1 (queue), `media.actions` group with `grab-best` and
-  `search-releases`, `media.season.actions` x2 [ts:scripts/manifest-template.ts:282-396].
+  `search-releases`, `media.group.actions` x2, `media.item.actions` x2 [ts:scripts/manifest-template.ts:282-396].
 - Config pages: `general` (form, 8 fields, section 1.5), `indexers`, `indexer-sources`,
   `download-clients` (`providers`, list route + `implementations` route, per-row actions),
   `queue`, `history` (`table`, paged, row actions `proxy` to the queue routes)

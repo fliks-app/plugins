@@ -640,6 +640,11 @@ pub fn book_language(t: &Target) -> Option<&str> {
         .flatten()
 }
 
+/// The host refuses a language on a call that is not a book's; no family leaves it to the host.
+pub fn host_language(family: Option<Family>, language: Option<&str>) -> Option<&str> {
+    language.filter(|_| family.is_none_or(|f| matches!(f, Family::Text | Family::Audio)))
+}
+
 /// No family: the host answers the media's first want, whose family the target carries.
 fn fetch_target(
     media_id: u32,
@@ -648,9 +653,14 @@ fn fetch_target(
     group_id: Option<u32>,
     item_id: Option<u32>,
 ) -> R<Target> {
-    host::media_acquisition_context(media_id, family, language, group_id, item_id)?.ok_or_else(
-        || Error::grab_with("download.grab.errors.media_not_found", media_id.to_string()),
-    )
+    host::media_acquisition_context(
+        media_id,
+        family,
+        host_language(family, language),
+        group_id,
+        item_id,
+    )?
+    .ok_or_else(|| Error::grab_with("download.grab.errors.media_not_found", media_id.to_string()))
 }
 
 /// A target of a kind this plugin does not acquire is refused, not searched. `family` and
