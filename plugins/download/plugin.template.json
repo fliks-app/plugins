@@ -202,6 +202,16 @@
       "policy": "manage:plugin:fliks.download:queue-control"
     },
     {
+      "method": "GET",
+      "path": "/queue/:id/replace/releases",
+      "policy": "manage:plugin:fliks.download:queue-control"
+    },
+    {
+      "method": "POST",
+      "path": "/queue/:id/replace",
+      "policy": "manage:plugin:fliks.download:queue-control"
+    },
+    {
       "method": "DELETE",
       "path": "/history/all",
       "policy": "manage:plugin:fliks.download:queue-control"
@@ -846,6 +856,36 @@
                 "paused"
               ]
             }
+          },
+          {
+            "kind": "submenu",
+            "labelKey": "download.config.queue.actions.replace",
+            "when": [
+              "hasPermission:manage:plugin:fliks.download:queue-control"
+            ],
+            "visibleWhen": {
+              "key": "replaceable",
+              "in": [
+                true
+              ]
+            },
+            "children": [
+              {
+                "kind": "proxy",
+                "labelKey": "download.config.queue.actions.replace_auto",
+                "method": "POST",
+                "path": "/queue/:id/replace",
+                "confirmKey": "download.config.queue.actions.replace_auto_confirm",
+                "tone": "danger"
+              },
+              {
+                "kind": "releases",
+                "labelKey": "download.config.queue.actions.replace_manual",
+                "titleKey": "download.config.queue.replace_title",
+                "search": "/queue/:id/replace/releases",
+                "grab": "/queue/:id/replace"
+              }
+            ]
           }
         ]
       },
@@ -1087,6 +1127,36 @@
             }
           },
           {
+            "kind": "submenu",
+            "labelKey": "download.config.queue.actions.replace",
+            "when": [
+              "hasPermission:manage:plugin:fliks.download:queue-control"
+            ],
+            "visibleWhen": {
+              "key": "replaceable",
+              "in": [
+                true
+              ]
+            },
+            "children": [
+              {
+                "kind": "proxy",
+                "labelKey": "download.config.queue.actions.replace_auto",
+                "method": "POST",
+                "path": "/queue/:id/replace",
+                "confirmKey": "download.config.queue.actions.replace_auto_confirm",
+                "tone": "danger"
+              },
+              {
+                "kind": "releases",
+                "labelKey": "download.config.queue.actions.replace_manual",
+                "titleKey": "download.config.queue.replace_title",
+                "search": "/queue/:id/replace/releases",
+                "grab": "/queue/:id/replace"
+              }
+            ]
+          },
+          {
             "kind": "proxy",
             "labelKey": "download.config.history.actions.delete",
             "method": "DELETE",
@@ -1238,6 +1308,14 @@
       "download.grab.errors.unprofiled": "This title has no quality profile — nothing to grab",
       "download.grab.errors.blocklisted": "This release is blocklisted",
       "download.grab.errors.releases_unobtainable": "No release could be fetched. Last reason: {{detail}}",
+      "download.config.queue.actions.replace": "Replace",
+      "download.config.queue.actions.replace_auto": "Search automatically",
+      "download.config.queue.actions.replace_manual": "Manual search",
+      "download.config.queue.actions.replace_auto_confirm": "This release is blocklisted and deleted with its files, then another one is searched for.",
+      "download.config.queue.replace_title": "Replace the release",
+      "download.queue.replaced": "Replaced by another release",
+      "download.queue.errors.not_replaceable": "This download can no longer be replaced",
+      "download.queue.errors.same_release": "This is the release being replaced",
       "download.queue.removed_by_user": "Removed from the queue by a user",
       "download.queue.retired_unverifiable": "Retired from the queue, no download client could confirm it",
       "download.queue.errors.not_controllable": "This download can no longer be controlled",
@@ -1430,6 +1508,14 @@
       "download.grab.errors.unprofiled": "Ce titre n’a pas de profil de qualité — rien à télécharger",
       "download.grab.errors.blocklisted": "Cette release est sur liste de blocage",
       "download.grab.errors.releases_unobtainable": "Aucune release n’a pu être récupérée. Dernière raison : {{detail}}",
+      "download.config.queue.actions.replace": "Remplacer",
+      "download.config.queue.actions.replace_auto": "Chercher automatiquement",
+      "download.config.queue.actions.replace_manual": "Recherche manuelle",
+      "download.config.queue.actions.replace_auto_confirm": "Cette release est bloquée et supprimée avec ses fichiers, puis une autre est recherchée.",
+      "download.config.queue.replace_title": "Remplacer la release",
+      "download.queue.replaced": "Remplacé par une autre release",
+      "download.queue.errors.not_replaceable": "Ce téléchargement ne peut plus être remplacé",
+      "download.queue.errors.same_release": "C'est la release à remplacer",
       "download.queue.removed_by_user": "Retiré de la file d'attente par un utilisateur",
       "download.queue.retired_unverifiable": "Retiré de la file d'attente, aucun client de téléchargement n'a pu le confirmer",
       "download.queue.errors.not_controllable": "Ce téléchargement ne peut plus être piloté",

@@ -722,7 +722,7 @@ fn ext_of(name: &str) -> String {
     }
 }
 
-fn auto_blocklist(h: &HistoryRow, note: &str) {
+pub fn auto_blocklist(h: &HistoryRow, note: &str) {
     let name = h
         .indexer_id
         .and_then(|id| indexers::find(id).ok().flatten())
