@@ -242,8 +242,8 @@ fn secret_settings() {
 }
 
 /// Every key but the ones the port changes equals the published 0.12.1 manifest, except the
-/// renamed `coreRefs`, the per-kind `releasePicker` and the season/episode to group/item
-/// rename; strings may only be added.
+/// renamed `coreRefs`, the per-kind `releasePicker`, the season/episode to group/item rename and
+/// the additions checked below; strings may only be added.
 #[test]
 fn template_matches_the_published_manifest() {
     let renamed = include_str!("vectors/manifest-0.12.1.json")
@@ -328,6 +328,27 @@ fn template_matches_the_published_manifest() {
         }))
     );
     old["ui"].as_object_mut().unwrap().remove("releasePicker");
+    // Added since: the queue's seeders column, and replacing a release from the queue and history.
+    let replace_routes: Vec<Value> = new["routes"]
+        .as_array_mut()
+        .unwrap()
+        .extract_if(.., |r| {
+            r["path"]
+                .as_str()
+                .is_some_and(|p| p.starts_with("/queue/:id/replace"))
+        })
+        .collect();
+    assert_eq!(replace_routes.len(), 2);
+    let (mut peers, mut submenus) = (0, 0);
+    for page in new["ui"]["configPages"].as_array_mut().unwrap() {
+        if let Some(cols) = page.get_mut("columns").and_then(Value::as_array_mut) {
+            peers += cols.extract_if(.., |c| c["format"] == "peers").count();
+        }
+        if let Some(acts) = page.get_mut("rowActions").and_then(Value::as_array_mut) {
+            submenus += acts.extract_if(.., |a| a["kind"] == "submenu").count();
+        }
+    }
+    assert_eq!((peers, submenus), (1, 2));
     let (old_i18n, new_i18n) = (old["i18n"].clone(), new["i18n"].clone());
     for k in [
         "pluginApi",
@@ -391,7 +412,7 @@ fn routes_equal_the_manifest_both_ways() {
         .into_iter()
         .map(|(m, p, _)| (m.to_owned(), p.to_owned()))
         .collect();
-    assert_eq!(table.len(), 39);
+    assert_eq!(table.len(), 41);
     assert_eq!(table, manifest);
 }
 
