@@ -1837,26 +1837,26 @@
     },
     {
       "method": "POST",
-      "path": "/5/seasons/2/grab",
+      "path": "/5/groups/2/grab",
       "output": {
         "id": "5",
-        "seasonId": "2"
+        "groupId": "2"
       }
     },
     {
       "method": "GET",
-      "path": "/1/seasons/../releases",
+      "path": "/1/groups/../releases",
       "output": {
         "id": "1",
-        "seasonId": ".."
+        "groupId": ".."
       }
     },
     {
       "method": "GET",
-      "path": "/1/episodes/9/releases",
+      "path": "/1/items/9/releases",
       "output": {
         "id": "1",
-        "episodeId": "9"
+        "itemId": "9"
       }
     },
     {

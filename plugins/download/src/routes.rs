@@ -5,7 +5,9 @@ use crate::error::{Error, R};
 use crate::grab::{self, Manual, Stream, to_wire};
 use crate::util::{Settings, js_number, num};
 use crate::{client, indexers, poller, sources};
-use fliks_plugin_sdk::bindings::fliks::plugin::types::{AcquisitionEvent, Principal, ResolveQuery};
+use fliks_plugin_sdk::bindings::fliks::plugin::types::{
+    AcquisitionEvent, Family, Principal, ResolveQuery,
+};
 use fliks_plugin_sdk::host;
 use fliks_plugin_sdk::router::{Handler, Request, Response, Router};
 use serde_json::{Map, Value, json};
@@ -134,20 +136,34 @@ fn settings_field(b: &Map<String, Value>) -> Option<Settings> {
 
 fn scope(r: &Request) -> Result<(u32, Option<u32>, Option<u32>), R<Response>> {
     let media = id(r)?;
-    let season = match int_param(r, "seasonId") {
-        Some(None) => return Err(bad_param("seasonId")),
-        s => s.flatten(),
+    let group = match int_param(r, "groupId") {
+        Some(None) => return Err(bad_param("groupId")),
+        g => g.flatten(),
     };
-    let episode = match int_param(r, "episodeId") {
-        Some(None) => return Err(bad_param("episodeId")),
-        e => e.flatten(),
+    let item = match int_param(r, "itemId") {
+        Some(None) => return Err(bad_param("itemId")),
+        i => i.flatten(),
     };
-    Ok((media, season, episode))
+    Ok((media, group, item))
+}
+
+/// An absent family keeps the media's only want; an unknown one is refused.
+fn family_arg(raw: Option<&str>) -> Result<Option<Family>, R<Response>> {
+    match raw.filter(|f| !f.is_empty()) {
+        None => Ok(None),
+        Some(f) => grab::family_of(f)
+            .map(Some)
+            .ok_or_else(|| bad_param("family")),
+    }
 }
 
 fn search_releases(r: &Request) -> R<Response> {
-    let (media, season, episode) = match scope(r) {
+    let (media, group, item) = match scope(r) {
         Ok(s) => s,
+        Err(resp) => return resp,
+    };
+    let family = match family_arg(r.query("family")) {
+        Ok(f) => f,
         Err(resp) => return resp,
     };
     // Only a delegated viewer with a modal open (`sid`) gets the streamed partial results.
@@ -160,8 +176,9 @@ fn search_releases(r: &Request) -> R<Response> {
     };
     let releases = grab::search_releases(
         media,
-        season,
-        episode,
+        group,
+        item,
+        family,
         r.query("language"),
         r.query("q"),
         stream.as_ref(),
@@ -177,7 +194,7 @@ fn info_url(raw: Option<&Value>) -> Option<String> {
 }
 
 fn grab_release(r: &Request) -> R<Response> {
-    let (media, season, episode) = match scope(r) {
+    let (media, group, item) = match scope(r) {
         Ok(s) => s,
         Err(resp) => return resp,
     };
@@ -187,6 +204,10 @@ fn grab_release(r: &Request) -> R<Response> {
     };
     info!("grab http request for media #{media} by {who}");
     let b = body(r);
+    let family = match family_arg(str_field(&b, "family").as_deref()) {
+        Ok(f) => f,
+        Err(resp) => return resp,
+    };
     let manual = str_field(&b, "downloadUrl")
         .filter(|u| !u.is_empty())
         .map(|download_url| Manual {
@@ -198,8 +219,9 @@ fn grab_release(r: &Request) -> R<Response> {
         });
     ok(grab::grab_release(
         media,
-        season,
-        episode,
+        group,
+        item,
+        family,
         str_field(&b, "language").as_deref(),
         manual,
     )?)
@@ -996,18 +1018,10 @@ pub fn table() -> Vec<(&'static str, &'static str, Handler)> {
     vec![
         ("GET", "/:id/releases", h!(search_releases)),
         ("POST", "/:id/grab", h!(grab_release)),
-        (
-            "GET",
-            "/:id/seasons/:seasonId/releases",
-            h!(search_releases),
-        ),
-        ("POST", "/:id/seasons/:seasonId/grab", h!(grab_release)),
-        (
-            "GET",
-            "/:id/episodes/:episodeId/releases",
-            h!(search_releases),
-        ),
-        ("POST", "/:id/episodes/:episodeId/grab", h!(grab_release)),
+        ("GET", "/:id/groups/:groupId/releases", h!(search_releases)),
+        ("POST", "/:id/groups/:groupId/grab", h!(grab_release)),
+        ("GET", "/:id/items/:itemId/releases", h!(search_releases)),
+        ("POST", "/:id/items/:itemId/grab", h!(grab_release)),
         ("GET", "/queue", h!(queue)),
         ("GET", "/history", h!(history_page)),
         ("GET", "/indexers", h!(list_indexers)),

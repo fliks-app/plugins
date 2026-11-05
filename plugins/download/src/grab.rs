@@ -640,6 +640,11 @@ pub fn book_language(t: &Target) -> Option<&str> {
         .flatten()
 }
 
+/// The host refuses a language on a call that is not a book's; no family leaves it to the host.
+pub fn host_language(family: Option<Family>, language: Option<&str>) -> Option<&str> {
+    language.filter(|_| family.is_none_or(|f| matches!(f, Family::Text | Family::Audio)))
+}
+
 /// No family: the host answers the media's first want, whose family the target carries.
 fn fetch_target(
     media_id: u32,
@@ -648,21 +653,28 @@ fn fetch_target(
     group_id: Option<u32>,
     item_id: Option<u32>,
 ) -> R<Target> {
-    host::media_acquisition_context(media_id, family, language, group_id, item_id)?.ok_or_else(
-        || Error::grab_with("download.grab.errors.media_not_found", media_id.to_string()),
-    )
+    host::media_acquisition_context(
+        media_id,
+        family,
+        host_language(family, language),
+        group_id,
+        item_id,
+    )?
+    .ok_or_else(|| Error::grab_with("download.grab.errors.media_not_found", media_id.to_string()))
 }
 
-/// A target of a kind this plugin does not acquire is refused, not searched. `language` picks a
-/// book's want; none takes the first unsatisfied one.
+/// A target of a kind this plugin does not acquire is refused, not searched. `family` and
+/// `language` pick a want; none of both takes the first unsatisfied book want.
 fn load_target(
     media_id: u32,
     group_id: Option<u32>,
     item_id: Option<u32>,
+    family: Option<Family>,
     language: Option<&str>,
 ) -> R<(Target, Media)> {
-    let mut target = fetch_target(media_id, None, language, group_id, item_id)?;
+    let mut target = fetch_target(media_id, family, language, group_id, item_id)?;
     if target.kind == "book"
+        && family.is_none()
         && language.is_none()
         && target
             .want
@@ -699,11 +711,12 @@ pub fn search_releases(
     media_id: u32,
     group_id: Option<u32>,
     item_id: Option<u32>,
+    family: Option<Family>,
     language: Option<&str>,
     custom: Option<&str>,
     stream: Option<&Stream>,
 ) -> R<Vec<Ranked>> {
-    let (target, _) = load_target(media_id, group_id, item_id, language)?;
+    let (target, _) = load_target(media_id, group_id, item_id, family, language)?;
     let Some(want) = &target.want else {
         return Err(Error::grab("download.grab.errors.unprofiled"));
     };
@@ -869,10 +882,11 @@ pub fn grab_release(
     media_id: u32,
     group_id: Option<u32>,
     item_id: Option<u32>,
+    family: Option<Family>,
     language: Option<&str>,
     manual: Option<Manual>,
 ) -> R<Value> {
-    let (target, media) = load_target(media_id, group_id, item_id, language)?;
+    let (target, media) = load_target(media_id, group_id, item_id, family, language)?;
     let client =
         pick_client()?.ok_or_else(|| Error::grab("download.grab.errors.no_download_client"))?;
     if target.want.is_none() {
@@ -886,9 +900,9 @@ pub fn grab_release(
             .map(str::trim)
             .filter(|t| !t.is_empty())
             .map_or_else(|| title_from_url(&m.download_url), str::to_owned);
-        // The route names no family: a book release is grabbed for the family its format names.
+        // Without a family, a book release is grabbed for the family its format names.
         let (target, media) = title_family(&source_title)
-            .filter(|f| target.kind == "book" && *f != target.family)
+            .filter(|f| family.is_none() && target.kind == "book" && *f != target.family)
             .and_then(|f| {
                 let ctx =
                     |l| host::media_acquisition_context(media_id, Some(f), l, group_id, item_id);
@@ -1026,7 +1040,7 @@ fn grab_season_episodes(target: &Target, why: &str) -> R<Value> {
         let (Some(g), Some(i), Some(e)) = (group_id(ep), item_id(ep), numbers(ep).1) else {
             continue;
         };
-        match grab_release(target.media_id, Some(g), Some(i), None, None) {
+        match grab_release(target.media_id, Some(g), Some(i), None, None, None) {
             Ok(v) => hashes.push(v["torrentHash"].clone()),
             Err(err) => warn!(
                 "Grab #{} \"{}\" {season}E{} skipped — {err}",

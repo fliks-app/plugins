@@ -185,8 +185,8 @@ const ladder = (() => {
 const routeTable = createRouteTable({} as RouteDeps);
 const routeCases: [string, string][] = [
   ['GET', '/1/releases'], ['GET', '/1%2F2/releases'], ['GET', '/../releases'], ['GET', '/%2e%2e/releases'], ['GET', '/1/Releases'],
-  ['get', '/1/releases'], ['GET', '/nonexistent'], ['GET', '/delay-profiles'], ['POST', '/5/grab'], ['POST', '/5/seasons/2/grab'],
-  ['GET', '/1/seasons/../releases'], ['GET', '/1/episodes/9/releases'], ['DELETE', '/history/all'], ['DELETE', '/history/7'],
+  ['get', '/1/releases'], ['GET', '/nonexistent'], ['GET', '/delay-profiles'], ['POST', '/5/grab'], ['POST', '/5/groups/2/grab'],
+  ['GET', '/1/groups/../releases'], ['GET', '/1/items/9/releases'], ['DELETE', '/history/all'], ['DELETE', '/history/7'],
   ['DELETE', '/blocklist/all'], ['DELETE', '/blocklist/12'], ['DELETE', '/indexers/cooldowns'], ['DELETE', '/indexers/3'],
   ['DELETE', '/indexers/3/cooldown'], ['GET', '/indexers/implementations'], ['GET', '/indexers/3/stats'], ['PUT', '/indexers/implementations'],
   ['POST', '/indexers/test-connection'], ['POST', '/indexers/3/test-connection'], ['GET', '/queue'], ['GET', '/queue/'], ['GET', '/queue/3'],
