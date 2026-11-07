@@ -860,3 +860,39 @@ fn a_comic_match_is_the_issue_with_the_same_decimal_number_and_label() {
     );
     assert!(poller::COMIC_EXTS.contains(&".pdf"));
 }
+
+#[test]
+fn an_rss_run_searches_each_target_once() {
+    let mut run = grab::Searched::default();
+    let ep = |media: u32, item: u32| {
+        let mut t = target(Some(WantDecision::Missing));
+        t.media_id = media;
+        let mut u = unit(Some(1), Some(f64::from(item)));
+        u.item_id = Some(item);
+        t.scope = vec![u];
+        t
+    };
+    assert!(run.first(&ep(1, 1)));
+    assert!(!run.first(&ep(1, 1)), "same target from a second feed");
+    assert!(run.first(&ep(1, 2)));
+    assert!(run.first(&ep(2, 1)));
+
+    let mut pack = ep(3, 1);
+    pack.scope[0].item_id = None;
+    let mut episode = ep(3, 1);
+    episode.scope[0].group_id = pack.scope[0].group_id;
+    assert!(run.first(&pack), "a season pack");
+    assert!(run.first(&episode), "an episode of the same group");
+
+    let book = |family, language: &str| {
+        let mut t = ep(4, 1);
+        t.kind = "book".into();
+        t.family = family;
+        t.language = Some(language.into());
+        t
+    };
+    assert!(run.first(&book(Family::Text, "fr")));
+    assert!(run.first(&book(Family::Text, "en")));
+    assert!(run.first(&book(Family::Audio, "fr")));
+    assert!(!run.first(&book(Family::Text, "fr")));
+}

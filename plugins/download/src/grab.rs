@@ -1270,6 +1270,25 @@ pub struct Match {
     pub coverage: Option<ReleaseCoverage>,
 }
 
+/// The targets one RSS run has already searched: a feed release only triggers the search.
+#[derive(Default)]
+pub struct Searched(HashSet<SearchedKey>);
+
+type SearchedKey = (u32, Option<u32>, Option<u32>, &'static str, Option<String>);
+
+impl Searched {
+    /// True the first time a target is seen in this run.
+    pub fn first(&mut self, t: &Target) -> bool {
+        self.0.insert((
+            t.media_id,
+            group_id(t),
+            item_id(t),
+            family_str(t.family),
+            book_language(t).map(str::to_owned),
+        ))
+    }
+}
+
 /// One `releases.match` call; `None` for a title core found no media for.
 pub fn identify(titles: &[String]) -> R<HashMap<String, Option<Match>>> {
     let mut out = HashMap::new();
@@ -1385,6 +1404,7 @@ pub fn rss_sync() -> R<()> {
         return Ok(());
     }
     let out_of_time = || net::budget().expired();
+    let mut searched = Searched::default();
     for ix in &ready {
         if out_of_time() {
             info!("RssSync: out of time, the next tick re-reads the feeds");
@@ -1411,6 +1431,9 @@ pub fn rss_sync() -> R<()> {
             let Some(Some(m)) = matched.get(&release.title) else {
                 continue;
             };
+            if m.skip.is_some() {
+                continue;
+            }
             if out_of_time() {
                 info!("RssSync: out of time, the next tick re-reads the feeds");
                 return Ok(());
@@ -1446,6 +1469,7 @@ pub fn rss_sync() -> R<()> {
                 if t.want
                     .as_ref()
                     .is_some_and(|w| w.decision != WantDecision::Skip)
+                    && searched.first(t)
                 {
                     auto_grab_or_skip(t, &client);
                 }
