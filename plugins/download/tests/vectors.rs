@@ -5,8 +5,8 @@ use fk_plugin_download::db::{HistoryRow, IndexerRow, MIGRATIONS};
 use fk_plugin_download::{client, grab, poller, routes, throttle, torznab, util};
 use fliks_plugin_route::{Matcher, ParamValue};
 use fliks_plugin_sdk::bindings::fliks::plugin::types::{
-    ExternalId, Family, Rejection, ReleaseCoverage, ReleaseLanguage, ScoredRelease, Span, Target,
-    Unit, UnitRef, Want, WantDecision,
+    ExternalId, Family, Rejection, ReleaseCoverage, ReleaseLanguage, ScoredRelease, SkipReason,
+    Span, Target, Unit, UnitRef, Want, WantDecision,
 };
 use serde_json::{Map, Value, json};
 use std::collections::HashSet;
@@ -859,4 +859,35 @@ fn a_comic_match_is_the_issue_with_the_same_decimal_number_and_label() {
         "an annual is not issue 2"
     );
     assert!(poller::COMIC_EXTS.contains(&".pdf"));
+}
+
+#[test]
+fn an_rss_run_searches_each_target_once() {
+    let mut run = grab::Searched::default();
+    let ep = |media: u32, item: u32| {
+        let mut t = target(Some(WantDecision::Missing));
+        t.media_id = media;
+        let mut u = unit(Some(1), Some(f64::from(item)));
+        u.item_id = Some(item);
+        t.scope = vec![u];
+        t
+    };
+    assert!(run.first(&ep(1, 1)));
+    assert!(!run.first(&ep(1, 1)), "same target from a second feed");
+    assert!(run.first(&ep(1, 2)));
+    assert!(run.first(&ep(2, 1)));
+}
+
+#[test]
+fn an_rss_match_the_host_flags_is_not_searched() {
+    let m = |skip| grab::Match {
+        skip,
+        media_id: 1,
+        season_number: None,
+        episode_number: None,
+        unit: None,
+        coverage: None,
+    };
+    assert!(m(None).searchable());
+    assert!(!m(Some(SkipReason::NotAvailable)).searchable());
 }
