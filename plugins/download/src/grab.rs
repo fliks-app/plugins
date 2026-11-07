@@ -1272,7 +1272,9 @@ pub struct Match {
 
 /// The targets one RSS run has already searched: a feed release only triggers the search.
 #[derive(Default)]
-pub struct Searched(HashSet<(u32, Option<u32>, Option<u32>, &'static str, Option<String>)>);
+pub struct Searched(HashSet<SearchedKey>);
+
+type SearchedKey = (u32, Option<u32>, Option<u32>, &'static str, Option<String>);
 
 impl Searched {
     /// True the first time a target is seen in this run.
