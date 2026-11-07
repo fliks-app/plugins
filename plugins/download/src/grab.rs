@@ -1270,13 +1270,6 @@ pub struct Match {
     pub coverage: Option<ReleaseCoverage>,
 }
 
-impl Match {
-    /// A match the host flags (not yet available, scene numbering unresolved) is not searched.
-    pub fn searchable(&self) -> bool {
-        self.skip.is_none()
-    }
-}
-
 /// The targets one RSS run has already searched: a feed release only triggers the search.
 #[derive(Default)]
 pub struct Searched(HashSet<(u32, Option<u32>, Option<u32>, &'static str, Option<String>)>);
@@ -1433,12 +1426,12 @@ pub fn rss_sync() -> R<()> {
         }
         let matched = identify(&releases.iter().map(|r| r.title.clone()).collect::<Vec<_>>())?;
         for release in &releases {
-            let Some(Some(m)) = matched
-                .get(&release.title)
-                .filter(|m| m.as_ref().is_none_or(Match::searchable))
-            else {
+            let Some(Some(m)) = matched.get(&release.title) else {
                 continue;
             };
+            if m.skip.is_some() {
+                continue;
+            }
             if out_of_time() {
                 info!("RssSync: out of time, the next tick re-reads the feeds");
                 return Ok(());

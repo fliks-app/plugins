@@ -5,8 +5,8 @@ use fk_plugin_download::db::{HistoryRow, IndexerRow, MIGRATIONS};
 use fk_plugin_download::{client, grab, poller, routes, throttle, torznab, util};
 use fliks_plugin_route::{Matcher, ParamValue};
 use fliks_plugin_sdk::bindings::fliks::plugin::types::{
-    ExternalId, Family, Rejection, ReleaseCoverage, ReleaseLanguage, ScoredRelease, SkipReason,
-    Span, Target, Unit, UnitRef, Want, WantDecision,
+    ExternalId, Family, Rejection, ReleaseCoverage, ReleaseLanguage, ScoredRelease, Span, Target,
+    Unit, UnitRef, Want, WantDecision,
 };
 use serde_json::{Map, Value, json};
 use std::collections::HashSet;
@@ -876,18 +876,23 @@ fn an_rss_run_searches_each_target_once() {
     assert!(!run.first(&ep(1, 1)), "same target from a second feed");
     assert!(run.first(&ep(1, 2)));
     assert!(run.first(&ep(2, 1)));
-}
 
-#[test]
-fn an_rss_match_the_host_flags_is_not_searched() {
-    let m = |skip| grab::Match {
-        skip,
-        media_id: 1,
-        season_number: None,
-        episode_number: None,
-        unit: None,
-        coverage: None,
+    let mut pack = ep(3, 1);
+    pack.scope[0].item_id = None;
+    let mut episode = ep(3, 1);
+    episode.scope[0].group_id = pack.scope[0].group_id;
+    assert!(run.first(&pack), "a season pack");
+    assert!(run.first(&episode), "an episode of the same group");
+
+    let book = |family, language: &str| {
+        let mut t = ep(4, 1);
+        t.kind = "book".into();
+        t.family = family;
+        t.language = Some(language.into());
+        t
     };
-    assert!(m(None).searchable());
-    assert!(!m(Some(SkipReason::NotAvailable)).searchable());
+    assert!(run.first(&book(Family::Text, "fr")));
+    assert!(run.first(&book(Family::Text, "en")));
+    assert!(run.first(&book(Family::Audio, "fr")));
+    assert!(!run.first(&book(Family::Text, "fr")));
 }
