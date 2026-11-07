@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.4.1](https://github.com/fliks-app/plugins/compare/download-v2.4.0...download-v2.4.1) (2026-11-07)
+
+
+### Bug Fixes
+
+* **download:** search each target once per rss run and honour flagged matches ([#91](https://github.com/fliks-app/plugins/issues/91)) ([6e307ad](https://github.com/fliks-app/plugins/commit/6e307ad288f74af6a60b7195aeebcd8286536d51))
+
 ## [2.4.0](https://github.com/fliks-app/plugins/compare/download-v2.3.0...download-v2.4.0) (2026-11-05)
 
 
