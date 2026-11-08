@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/fliks-app/plugins/compare/musicbrainz-v0.3.0...musicbrainz-v0.3.1) (2026-11-08)
+
+
+### Bug Fixes
+
+* **music:** official album for ISRC lookups, owned-only playlist mirror ([#102](https://github.com/fliks-app/plugins/issues/102)) ([1e3a4eb](https://github.com/fliks-app/plugins/commit/1e3a4ebfc7bd427f44c961a41841b3e66ae1686c))
+
 ## [0.3.0](https://github.com/fliks-app/plugins/compare/musicbrainz-v0.2.0...musicbrainz-v0.3.0) (2026-11-08)
 
 
