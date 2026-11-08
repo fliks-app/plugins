@@ -8,7 +8,9 @@ Spotify, Deezer and public MusicBrainz collections. A job reads each enabled lis
 - **tracks**: `music-want-recording` with an ISRC (the album is created, only that track monitored) or a
   recording id (a track the library already holds);
 - **playlist**: the tracks resolved that way, mirrored with `playlist-sync` into a playlist named like the
-  list, owned by the user who saved it. A track not yet in the library is wanted too.
+  list, owned by the user who saved it. Only tracks the library already holds are added (`music-find-recording`);
+  with the **tracks** action, those are wanted too. A track that is not available yet is retried on the next run.
+  The first sync after upgrading from 0.2.0 creates a new playlist: the old one can be deleted.
 
 The plugin never resolves a title itself. Entries without an id the host can resolve (a Last.fm track with
 no recording id, a Spotify track with neither ISRC nor album) are skipped.
