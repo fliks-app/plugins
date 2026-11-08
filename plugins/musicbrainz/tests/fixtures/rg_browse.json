@@ -1,0 +1,4 @@
+{"release-group-count":2,"release-group-offset":0,"release-groups":[
+ {"id":"11111111-1111-4111-8111-111111111111","title":"Placeholder Album","primary-type":"Album","first-release-date":"2004-05-01","artist-credit":[{"name":"Example Artist","joinphrase":"","artist":{"id":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","name":"Example Artist"}}]},
+ {"id":"","title":"Broken entry"}
+]}

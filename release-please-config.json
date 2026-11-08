@@ -157,6 +157,28 @@
           "jsonpath": "$.package[?(@.name.value=='fk-plugin-comicvine')].version"
         }
       ]
+    },
+    "plugins/musicbrainz": {
+      "release-type": "rust",
+      "component": "musicbrainz",
+      "extra-files": [
+        {
+          "type": "toml",
+          "path": "/Cargo.lock",
+          "jsonpath": "$.package[?(@.name.value=='fk-plugin-musicbrainz')].version"
+        }
+      ]
+    },
+    "plugins/fanarttv": {
+      "release-type": "rust",
+      "component": "fanarttv",
+      "extra-files": [
+        {
+          "type": "toml",
+          "path": "/Cargo.lock",
+          "jsonpath": "$.package[?(@.name.value=='fk-plugin-fanarttv')].version"
+        }
+      ]
     }
   }
 }

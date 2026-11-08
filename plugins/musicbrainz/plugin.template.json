@@ -1,0 +1,122 @@
+{
+  "id": "fliks.musicbrainz",
+  "pluginApi": 3,
+  "name": "MusicBrainz",
+  "fliks": ">=6.1.0 <7.0.0",
+  "author": "Fliks",
+  "description": "Album, release and artist metadata from MusicBrainz, with cover art from the Cover Art Archive and optional ListenBrainz popularity.",
+  "license": "AGPL-3.0-or-later",
+  "homepage": "https://musicbrainz.org",
+  "logo": "logo.svg",
+  "kind": "process",
+  "runtime": "wasm",
+  "memoryMb": 64,
+  "database": {
+    "schema": false,
+    "coreRefs": []
+  },
+  "scopes": [],
+  "ingestRoots": [],
+  "routes": [],
+  "provider": {
+    "namespaces": [
+      {
+        "name": "musicbrainz"
+      }
+    ],
+    "kinds": {
+      "album": [
+        "search",
+        "work",
+        "children",
+        "edition",
+        "person",
+        "credits",
+        "findBy"
+      ]
+    },
+    "findBy": [
+      "spotify",
+      "deezer",
+      "isrc"
+    ],
+    "editionNamespaces": [
+      "musicbrainz"
+    ],
+    "limits": {
+      "ratePerSec": 1,
+      "burst": 1
+    },
+    "requestTimeoutMs": 60000,
+    "snapshotTtlSecs": {
+      "work": 2592000,
+      "children": 2592000,
+      "edition": 2592000,
+      "person": 86400
+    },
+    "imageHosts": [
+      "coverartarchive.org",
+      "archive.org"
+    ]
+  },
+  "ui": {
+    "contributions": [
+      {
+        "id": "fliks-musicbrainz.settings.general",
+        "slot": "settings.page",
+        "weight": 100,
+        "labelKey": "musicbrainz.config.title",
+        "action": {
+          "kind": "route",
+          "path": "/admin/settings/plugins/fliks.musicbrainz/general"
+        }
+      }
+    ],
+    "configPages": [
+      {
+        "id": "general",
+        "labelKey": "musicbrainz.config.title",
+        "subtitleKey": "musicbrainz.config.subtitle",
+        "fields": [
+          {
+            "key": "baseUrl",
+            "type": "text",
+            "labelKey": "musicbrainz.config.baseUrl",
+            "hint": "musicbrainz.config.baseUrl_hint"
+          },
+          {
+            "key": "listenbrainzToken",
+            "type": "text",
+            "labelKey": "musicbrainz.config.listenbrainzToken",
+            "hint": "musicbrainz.config.listenbrainzToken_hint",
+            "secret": true
+          },
+          {
+            "kind": "caption",
+            "textKey": "musicbrainz.config.attribution"
+          }
+        ]
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "musicbrainz.config.title": "MusicBrainz",
+      "musicbrainz.config.subtitle": "Music metadata from MusicBrainz and the Cover Art Archive.",
+      "musicbrainz.config.baseUrl": "Base URL",
+      "musicbrainz.config.baseUrl_hint": "Leave empty for https://musicbrainz.org. A mirror must answer on a public address and allow one request a second.",
+      "musicbrainz.config.listenbrainzToken": "ListenBrainz token",
+      "musicbrainz.config.listenbrainzToken_hint": "Optional. Sent to ListenBrainz to rank search results by popularity; without it the ranking uses title, type and release count.",
+      "musicbrainz.config.attribution": "Data from MusicBrainz (https://musicbrainz.org), covers from the Cover Art Archive (https://coverartarchive.org), popularity from ListenBrainz (https://listenbrainz.org)."
+    },
+    "fr": {
+      "musicbrainz.config.title": "MusicBrainz",
+      "musicbrainz.config.subtitle": "Métadonnées musicales de MusicBrainz et du Cover Art Archive.",
+      "musicbrainz.config.baseUrl": "URL de base",
+      "musicbrainz.config.baseUrl_hint": "Laissez vide pour https://musicbrainz.org. Un miroir doit répondre sur une adresse publique et accepter une requête par seconde.",
+      "musicbrainz.config.listenbrainzToken": "Jeton ListenBrainz",
+      "musicbrainz.config.listenbrainzToken_hint": "Facultatif. Envoyé à ListenBrainz pour classer les résultats par popularité; sans lui, le classement repose sur le titre, le type et le nombre de sorties.",
+      "musicbrainz.config.attribution": "Données de MusicBrainz (https://musicbrainz.org), pochettes du Cover Art Archive (https://coverartarchive.org), popularité de ListenBrainz (https://listenbrainz.org)."
+    }
+  }
+}

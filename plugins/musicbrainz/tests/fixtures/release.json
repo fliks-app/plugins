@@ -1,0 +1,21 @@
+{"id":"44444444-4444-4444-8444-444444444444","title":"Placeholder Album","status":"Official","country":"XW","date":"2004-05-01","barcode":"012345678905","text-representation":{"language":"eng","script":"Latn"},"cover-art-archive":{"front":true},
+"artist-credit":[{"name":"Example Artist","joinphrase":"","artist":{"id":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","name":"Example Artist","sort-name":"Artist, Example"}}],
+"label-info":[{"catalog-number":"CAT-1","label":{"name":"Example Label"}}],
+"media":[
+ {"position":1,"title":"First disc","format":"CD","track-count":2,"tracks":[
+  {"id":"66666666-6666-4666-8666-666666666666","position":1,"number":"1","title":"Placeholder Track","length":181000,
+   "artist-credit":[{"name":"Example Artist","joinphrase":"","artist":{"id":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","name":"Example Artist","sort-name":"Artist, Example"}}],
+   "recording":{"id":"77777777-7777-4777-8777-777777777777","title":"Placeholder Track","length":180000,"isrcs":["USAAA2400001"],
+    "relations":[
+     {"type":"instrument","target-type":"artist","attributes":["guitar","bass guitar"],"artist":{"id":"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb","name":"Guest Person","sort-name":"Person, Guest"}},
+     {"type":"vocal","target-type":"artist","attributes":[],"artist":{"id":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","name":"Example Artist"}},
+     {"type":"conductor","target-type":"artist","attributes":[],"artist":{"id":"cccccccc-cccc-4ccc-8ccc-cccccccccccc","name":"Placeholder Conductor"}},
+     {"type":"producer","target-type":"artist","attributes":[],"artist":{"id":"dddddddd-dddd-4ddd-8ddd-dddddddddddd","name":"Placeholder Producer"}},
+     {"type":"performance","target-type":"work","work":{"id":"88888888-8888-4888-8888-888888888888","title":"Placeholder Movement","relations":[
+       {"type":"composer","target-type":"artist","artist":{"id":"eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee","name":"Placeholder Composer"}},
+       {"type":"lyricist","target-type":"artist","artist":{"id":"ffffffff-ffff-4fff-8fff-ffffffffffff","name":"Placeholder Lyricist"}},
+       {"type":"parts","direction":"backward","target-type":"work","work":{"id":"99999999-9999-4999-8999-999999999999","title":"Placeholder Suite"}}]}}]}},
+  {"id":"12121212-1212-4212-8212-121212121212","position":2,"number":"A2","title":"Placeholder Second","recording":{"id":"13131313-1313-4313-8313-131313131313","title":"Placeholder Second","length":0}}]},
+ {"position":2,"format":"CD","track-count":1,"tracks":[
+  {"id":"14141414-1414-4414-8414-141414141414","position":1,"number":"1","title":"Placeholder Third","length":200000,"recording":{"id":"15151515-1515-4515-8515-151515151515","title":"Placeholder Third"}}]}
+]}
