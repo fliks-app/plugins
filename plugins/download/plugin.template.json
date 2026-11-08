@@ -1204,6 +1204,13 @@
           "search": "/:id/items/:itemId/releases",
           "grab": "/:id/items/:itemId/grab"
         }
+      },
+      "album": {
+        "work": { "search": "/:id/releases", "grab": "/:id/grab" },
+        "item": {
+          "search": "/:id/items/:itemId/releases",
+          "grab": "/:id/items/:itemId/grab"
+        }
       }
     }
   },
@@ -1375,6 +1382,7 @@
       "download.config.download_clients.fields.ebook_category": "Ebook category",
       "download.config.download_clients.fields.audiobook_category": "Audiobook category",
       "download.config.download_clients.fields.comic_category": "Comic category",
+      "download.config.download_clients.fields.album_category": "Album category",
       "download.config.download_clients.labels.new": "New download client",
       "download.config.download_clients.labels.empty": "No download clients configured",
       "download.config.download_clients.labels.test": "Test connection",
@@ -1575,6 +1583,7 @@
       "download.config.download_clients.fields.ebook_category": "Catégorie livres",
       "download.config.download_clients.fields.audiobook_category": "Catégorie livres audio",
       "download.config.download_clients.fields.comic_category": "Catégorie bandes dessinées",
+      "download.config.download_clients.fields.album_category": "Catégorie albums",
       "download.config.download_clients.labels.new": "Nouveau client de téléchargement",
       "download.config.download_clients.labels.empty": "Aucun client de téléchargement configuré",
       "download.config.download_clients.labels.test": "Tester la connexion",

@@ -12,6 +12,8 @@ const PAGE: u32 = 100;
 const MAX_RELEASE_PAGES: u32 = 10;
 const MAX_GROUP_PAGES: u32 = 20;
 const HITS: u32 = 25;
+/// ListenBrainz answers at most 100 recordings a call.
+const RECORDINGS_PER_CALL: usize = 100;
 const EDITION_INC: &str = "recordings+artist-credits+media+labels+isrcs+recording-level-rels+work-rels+work-level-rels+artist-rels";
 
 pub trait Http {
@@ -66,7 +68,7 @@ fn popularity(h: &impl Http, ids: &[String]) -> HashMap<String, f64> {
 fn group(h: &impl Http, id: &str) -> R<Value> {
     h.mb(
         &format!("/release-group/{}", id_of(id)?),
-        &q(&[("inc", "artist-credits+releases+annotation")]),
+        &q(&[("inc", "artist-credits+releases+genres")]),
     )
 }
 
@@ -190,12 +192,45 @@ pub fn children(h: &impl Http, id: &str) -> R<Vec<Value>> {
     Ok(out)
 }
 
+/// ListenBrainz listen counts of recordings, by id; empty when it gives none.
+fn recording_popularity(h: &impl Http, ids: &[String]) -> HashMap<String, f64> {
+    ids.chunks(RECORDINGS_PER_CALL)
+        .filter_map(|chunk| {
+            h.lb(
+                "/1/popularity/recording",
+                &json!({ "recording_mbids": chunk }),
+            )
+        })
+        .flat_map(|rows| rows.as_array().cloned().unwrap_or_default())
+        .filter_map(|r| {
+            let id = r["recording_mbid"].as_str()?;
+            Some((id.to_lowercase(), r["total_listen_count"].as_f64()?))
+        })
+        .collect()
+}
+
 pub fn edition(h: &impl Http, id: &str) -> R<Value> {
     let r = h.mb(
         &format!("/release/{}", id_of(id)?),
         &q(&[("inc", EDITION_INC)]),
     )?;
-    map::edition(&r).ok_or(ProviderError::NotFound)
+    let mut e = map::edition(&r).ok_or(ProviderError::NotFound)?;
+    let tracks = e["tracks"].as_array_mut().into_iter().flatten();
+    let tracks: Vec<&mut Value> = tracks.collect();
+    let mut ids: Vec<String> = tracks
+        .iter()
+        .filter_map(|t| t["recordingId"].as_str().map(str::to_owned))
+        .collect();
+    ids.sort_unstable();
+    ids.dedup();
+    let pop = recording_popularity(h, &ids);
+    for t in tracks {
+        let p = t["recordingId"].as_str().and_then(|i| pop.get(i)).copied();
+        if let Some(p) = p {
+            t["popularity"] = json!(p);
+        }
+    }
+    Ok(e)
 }
 
 pub fn person(h: &impl Http, id: &str) -> R<Value> {

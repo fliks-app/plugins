@@ -19,6 +19,10 @@ whole.
   finishes it moves the file into the library and marks the title as available.
 - **Cleans up after itself.** A download that stalls is retried or removed; a torrent that has
   finished seeding to your target ratio is cleared out.
+- **Gets albums too.** An album is searched under the music categories (MP3 3010, lossless 3040) by artist and
+  title, then by title alone. A track you want is found on its album, and a download holding only some of
+  the album's tracks is imported for the ones that match. Set an album category on the download client to
+  file them apart.
 - **Keeps working while you sleep.** Missing episodes and films are searched on a schedule, and
   new releases arrive through your trackers' feeds.
 

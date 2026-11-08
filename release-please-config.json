@@ -179,6 +179,17 @@
           "jsonpath": "$.package[?(@.name.value=='fk-plugin-fanarttv')].version"
         }
       ]
+    },
+    "plugins/music-lists": {
+      "release-type": "rust",
+      "component": "music-lists",
+      "extra-files": [
+        {
+          "type": "toml",
+          "path": "/Cargo.lock",
+          "jsonpath": "$.package[?(@.name.value=='fk-plugin-music-lists')].version"
+        }
+      ]
     }
   }
 }

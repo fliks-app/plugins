@@ -5,8 +5,8 @@ use fk_plugin_download::db::{HistoryRow, IndexerRow, MIGRATIONS};
 use fk_plugin_download::{client, grab, poller, routes, throttle, torznab, util};
 use fliks_plugin_route::{Matcher, ParamValue};
 use fliks_plugin_sdk::bindings::fliks::plugin::types::{
-    ExternalId, Family, Rejection, ReleaseCoverage, ReleaseLanguage, ScoredRelease, Span, Target,
-    Unit, UnitRef, Want, WantDecision,
+    Creator, ExternalId, Family, Rejection, ReleaseCoverage, ReleaseLanguage, ScoredRelease, Span,
+    Target, Unit, UnitRef, Want, WantDecision,
 };
 use serde_json::{Map, Value, json};
 use std::collections::HashSet;
@@ -324,7 +324,8 @@ fn template_matches_the_published_manifest() {
                 "item": item
             },
             "book": { "work": work },
-            "comic": { "work": work, "item": item }
+            "comic": { "work": work, "item": item },
+            "album": { "work": work, "item": item }
         }))
     );
     old["ui"].as_object_mut().unwrap().remove("releasePicker");
@@ -546,11 +547,12 @@ fn movies_series_and_books_of_a_served_family_are_acquired() {
     assert_eq!(Media::of("series", Family::Video), Some(Media::Series));
     assert_eq!(Media::of("book", Family::Text), Some(Media::Ebook));
     assert_eq!(Media::of("book", Family::Audio), Some(Media::Audiobook));
+    assert_eq!(Media::of("album", Family::Audio), Some(Media::Album));
     for (kind, family) in [
         ("book", Family::Video),
         ("book", Family::Image),
         ("comic", Family::Text),
-        ("album", Family::Audio),
+        ("album", Family::Text),
         ("", Family::Video),
     ] {
         assert_eq!(Media::of(kind, family), None, "{kind}");
@@ -829,7 +831,53 @@ fn a_comic_is_acquired_as_a_comic_in_its_own_category() {
         Some("comic")
     );
     assert!(grab::Media::of("comic", Family::Text).is_none());
-    assert!(grab::Media::of("album", Family::Audio).is_none());
+}
+
+fn track(disc: u32, number: f64) -> Target {
+    let mut t = target(Some(WantDecision::Missing));
+    t.kind = "album".into();
+    t.family = Family::Audio;
+    t.search_title = "Night Drive".into();
+    t.creators = vec![Creator {
+        name: " The Fixtures ".into(),
+        role: "artist".into(),
+    }];
+    t.scope = vec![unit(Some(disc), Some(number))];
+    t
+}
+
+#[test]
+fn an_album_is_searched_by_artist_and_title_then_title_alone() {
+    let q = |t: &Target, c| grab::album_queries(t, c);
+    assert_eq!(
+        q(&track(1, 3.0), None),
+        ["The Fixtures Night Drive", "Night Drive"]
+    );
+    assert_eq!(q(&track(1, 3.0), Some(" my words ")), ["my words"]);
+    let mut various = track(1, 3.0);
+    various.creators[0].name = "Various Artists".into();
+    assert_eq!(q(&various, None), ["Night Drive"]);
+}
+
+#[test]
+fn a_track_want_is_the_album_work_not_an_episode() {
+    use grab::Piece;
+    let mut t = track(2, 5.0);
+    assert_eq!(grab::piece(&t), Piece::Work);
+    t.scope = vec![unit(Some(0), Some(1.0))];
+    assert_eq!(grab::piece(&t), Piece::Work);
+    let mut searched = grab::Searched::default();
+    assert!(searched.first(&track(1, 1.0)));
+    assert!(!searched.first(&track(1, 2.0)), "tracks share one search");
+}
+
+#[test]
+fn an_album_pick_keeps_the_allowed_and_unrejected() {
+    let mut denied = ranked(1, 0);
+    denied.scored.allowed = false;
+    let sorted = [denied, ranked(2, 1), ranked(3, 0)];
+    assert_eq!(grab::pick(&sorted, &track(1, 1.0)), [2]);
+    assert!(poller::MUSIC_EXTS.contains(&".wav"));
 }
 
 #[test]

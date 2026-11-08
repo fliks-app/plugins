@@ -10,10 +10,11 @@ the provider of the core namespace `musicbrainz` (`server/docs/spec/music.md` ru
   performer, conductor, composer and lyricist credits and the works a track plays.
 - `person` is an artist, `credits` its discography (`{albums}`), `findBy` resolves a Spotify or Deezer
   album id (through the URL relations) and an ISRC.
+- `work` carries the group's `genres`, most voted first; the annotation (editor notes) is not an overview. `edition` carries each track's ListenBrainz `popularity`, from one batch call per release.
 - Covers are the Cover Art Archive's `front-500` of the group and of the release. A merged id is
   answered under its new id: the record's `externalId` differs from the id asked.
 
-Settings: `baseUrl` (a mirror, MusicBrainz when empty) and the secret `listenbrainzToken`, sent to
+Settings: `baseUrl` (a mirror, on your network or not; MusicBrainz when empty) and the secret `listenbrainzToken`, sent to
 ListenBrainz when set. The host paces the provider at one request a second.
 
 ## Build and test

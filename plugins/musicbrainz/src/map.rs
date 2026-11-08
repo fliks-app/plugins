@@ -120,6 +120,21 @@ pub fn url_of(kind: &str, id: &str) -> String {
     format!("{WEB}/{kind}/{id}")
 }
 
+/// The group's genres, most voted first; a hit or a discography entry carries none.
+fn genres(g: &Value) -> Vec<String> {
+    let mut all: Vec<(u64, String)> = list(g, "genres")
+        .iter()
+        .filter_map(|x| {
+            Some((
+                x.get("count")?.as_u64().unwrap_or(0),
+                s(x, "name")?.to_owned(),
+            ))
+        })
+        .collect();
+    all.sort_by_key(|a| std::cmp::Reverse(a.0));
+    all.into_iter().map(|(_, n)| n).take(20).collect()
+}
+
 /// A release group: a search hit, a work record or a discography entry.
 pub fn album(g: &Value, popularity: Option<f64>) -> Option<Value> {
     let id = s(g, "id").and_then(uuid)?;
@@ -134,7 +149,7 @@ pub fn album(g: &Value, popularity: Option<f64>) -> Option<Value> {
     Some(compact(json!({
         "externalId": id,
         "title": s(g, "title")?,
-        "overview": s(g, "annotation"),
+        "genres": genres(g),
         "primaryType": lower(g, "primary-type"),
         "secondaryTypes": secondary,
         "firstReleaseDate": s(g, "first-release-date"),

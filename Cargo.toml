@@ -1,14 +1,14 @@
 [workspace]
 resolver = "3"
-members = ["plugins/download", "plugins/notify", "plugins/openlibrary", "plugins/tmdb", "plugins/bnf", "plugins/googlebooks", "plugins/tvdb", "plugins/audible", "plugins/audnexus", "xtask", "crates/provider-common", "crates/direct-source", "plugins/gutenberg", "plugins/librivox", "plugins/metron", "plugins/comicvine", "plugins/thexem", "plugins/musicbrainz", "plugins/fanarttv"]
+members = ["plugins/download", "plugins/notify", "plugins/openlibrary", "plugins/tmdb", "plugins/bnf", "plugins/googlebooks", "plugins/tvdb", "plugins/audible", "plugins/audnexus", "xtask", "crates/provider-common", "crates/direct-source", "plugins/gutenberg", "plugins/librivox", "plugins/metron", "plugins/comicvine", "plugins/thexem", "plugins/musicbrainz", "plugins/fanarttv", "plugins/music-lists"]
 
 # One rev of fliks-app/fliks for every plugin; raising it rebuilds them all.
 [workspace.dependencies]
-fliks-plugin-sdk = { git = "https://github.com/fliks-app/fliks", rev = "7ba03e7e6048f778c16765459c4f0861a905638e" }
-fliks-plugin-sdk-provider = { git = "https://github.com/fliks-app/fliks", rev = "7ba03e7e6048f778c16765459c4f0861a905638e" }
-fliks-plugin-manifest = { git = "https://github.com/fliks-app/fliks", rev = "7ba03e7e6048f778c16765459c4f0861a905638e" }
-fliks_domain = { git = "https://github.com/fliks-app/fliks", rev = "7ba03e7e6048f778c16765459c4f0861a905638e" }
-fliks-plugin-route = { git = "https://github.com/fliks-app/fliks", rev = "7ba03e7e6048f778c16765459c4f0861a905638e" }
+fliks-plugin-sdk = { git = "https://github.com/fliks-app/fliks", rev = "ed4a612ad100a525a918b65ffb6c2eacad260b51" }
+fliks-plugin-sdk-provider = { git = "https://github.com/fliks-app/fliks", rev = "ed4a612ad100a525a918b65ffb6c2eacad260b51" }
+fliks-plugin-manifest = { git = "https://github.com/fliks-app/fliks", rev = "ed4a612ad100a525a918b65ffb6c2eacad260b51" }
+fliks_domain = { git = "https://github.com/fliks-app/fliks", rev = "ed4a612ad100a525a918b65ffb6c2eacad260b51" }
+fliks-plugin-route = { git = "https://github.com/fliks-app/fliks", rev = "ed4a612ad100a525a918b65ffb6c2eacad260b51" }
 
 [profile.release]
 opt-level = "z"
