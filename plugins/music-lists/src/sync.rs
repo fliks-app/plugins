@@ -1,5 +1,6 @@
 //! Runs one list: reads its entries, acts on the new ones through the host and mirrors the playlist.
-//! The plugin never resolves a title itself: the host does (`media-resolve-or-create`, `music-want-recording`).
+//! The plugin never resolves a title itself: the host does (`media-resolve-or-create`, `music-want-recording`,
+//! `music-find-recording`).
 use crate::model::{Entry, Rec, Settings, actions, library};
 use std::collections::HashMap;
 
@@ -11,6 +12,8 @@ pub struct HErr {
 pub trait Host {
     fn album(&self, ids: &[(String, String)], library: Option<u32>) -> Result<u32, HErr>;
     fn want(&self, rec: &Rec, library: Option<u32>) -> Result<(u32, u32), HErr>;
+    /// The track the library already owns, without creating or monitoring anything.
+    fn find(&self, rec: &Rec) -> Result<Option<(u32, u32)>, HErr>;
     fn playlist(&self, user: u32, name: &str, items: &[u32]) -> Result<u32, HErr>;
     fn isrc_of(&self, deezer_track: &str) -> Option<String>;
     fn out_of_time(&self) -> bool;
@@ -113,8 +116,14 @@ pub fn run(
                     .map(Rec::Isrc)
             });
             if let Some(r) = rec {
-                match host.want(&r, lib) {
-                    Ok((m, i)) => (media, item, err) = (Some(m), Some(i), None),
+                let found = if tracks {
+                    host.want(&r, lib).map(Some)
+                } else {
+                    host.find(&r)
+                };
+                match found {
+                    Ok(Some((m, i))) => (media, item, err) = (Some(m), Some(i), None),
+                    Ok(None) => err = None,
                     Err(x) => err = Some(x),
                 }
             }
@@ -153,6 +162,7 @@ mod tests {
     struct Fake {
         albums: RefCell<Vec<String>>,
         wants: RefCell<Vec<Rec>>,
+        owned: Vec<Rec>,
         playlists: RefCell<Vec<Vec<u32>>>,
         fail_not_found: bool,
         fail_down: bool,
@@ -176,11 +186,21 @@ mod tests {
             Ok(10)
         }
         fn want(&self, r: &Rec, _: Option<u32>) -> Result<(u32, u32), HErr> {
+            if self.fail_down {
+                return Err(e("unavailable"));
+            }
             if self.fail_not_found {
                 return Err(e("ERR_NOT_FOUND"));
             }
             self.wants.borrow_mut().push(r.clone());
             Ok((10, 100 + self.wants.borrow().len() as u32))
+        }
+        fn find(&self, r: &Rec) -> Result<Option<(u32, u32)>, HErr> {
+            Ok(self
+                .owned
+                .iter()
+                .position(|o| o == r)
+                .map(|p| (10, 200 + p as u32)))
         }
         fn playlist(&self, _: u32, _: &str, items: &[u32]) -> Result<u32, HErr> {
             self.playlists.borrow_mut().push(items.to_vec());
@@ -258,6 +278,39 @@ mod tests {
             [101],
             "the playlist is rebuilt from what is known"
         );
+    }
+
+    #[test]
+    fn a_playlist_keeps_only_owned_tracks_and_wants_nothing() {
+        let (host, store, s) = (
+            Fake {
+                owned: vec![Rec::Mbid("b".into())],
+                ..Fake::default()
+            },
+            Mem::default(),
+            settings(&["playlist"]),
+        );
+        let list = [
+            Entry::track(Rec::Mbid("a".into()), None),
+            Entry::track(Rec::Mbid("b".into()), None),
+        ];
+        let sum = run(&ctx(&s), &list, &host, &store).unwrap();
+        assert_eq!((sum.done, sum.unresolved, sum.errors), (2, 1, 0));
+        assert!(host.wants.borrow().is_empty());
+        assert_eq!(host.playlists.borrow()[0], [200]);
+    }
+
+    #[test]
+    fn an_unavailable_want_is_retried_not_saved() {
+        let s = settings(&["tracks"]);
+        let store = Mem::default();
+        let host = Fake {
+            fail_down: true,
+            ..Fake::default()
+        };
+        let list = [Entry::track(Rec::Mbid("m".into()), None)];
+        let sum = run(&ctx(&s), &list, &host, &store).unwrap();
+        assert_eq!((sum.errors, store.0.borrow().len()), (1, 0));
     }
 
     #[test]

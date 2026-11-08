@@ -17,6 +17,13 @@ fn herr(e: HostError) -> HErr {
     }
 }
 
+fn recording(rec: &Rec) -> RecordingRef {
+    match rec {
+        Rec::Isrc(i) => RecordingRef::Isrc(i.clone()),
+        Rec::Mbid(m) => RecordingRef::Mbid(m.clone()),
+    }
+}
+
 pub struct LiveHost;
 
 impl Host for LiveHost {
@@ -32,12 +39,14 @@ impl Host for LiveHost {
     }
 
     fn want(&self, rec: &Rec, library: Option<u32>) -> Result<(u32, u32), HErr> {
-        let r = match rec {
-            Rec::Isrc(i) => RecordingRef::Isrc(i.clone()),
-            Rec::Mbid(m) => RecordingRef::Mbid(m.clone()),
-        };
-        host::music_want_recording(&r, library)
+        host::music_want_recording(&recording(rec), library)
             .map(|w| (w.media_id, w.item_id))
+            .map_err(herr)
+    }
+
+    fn find(&self, rec: &Rec) -> Result<Option<(u32, u32)>, HErr> {
+        host::music_find_recording(&recording(rec))
+            .map(|o| o.map(|w| (w.media_id, w.item_id)))
             .map_err(herr)
     }
 
