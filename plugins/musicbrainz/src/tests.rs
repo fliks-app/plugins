@@ -206,12 +206,31 @@ fn a_group_url_a_release_url_and_a_bare_id_resolve() {
 fn work_maps_the_group() {
     let a = work(&Fake::default(), GROUP).unwrap();
     assert_eq!(a["secondaryTypes"], json!(["compilation"]));
-    assert_eq!(a["overview"], "A placeholder annotation.");
+    assert!(
+        a.get("overview").is_none(),
+        "the annotation is editor notes"
+    );
+    assert_eq!(a["genres"], json!(["electronic", "ambient", "idm"]));
     assert_eq!(a["releaseCount"], 2);
     assert!(matches!(
         work(&Fake::default(), "nope"),
         Err(ProviderError::NotFound)
     ));
+}
+
+#[test]
+fn track_popularity_comes_from_one_recording_batch() {
+    let h = Fake {
+        popularity: Some(json!([
+            {"recording_mbid": "77777777-7777-4777-8777-777777777777", "total_listen_count": 1234.0},
+        ])),
+        ..Fake::default()
+    };
+    let t = edition(&h, RELEASE).unwrap()["tracks"].clone();
+    assert_eq!(t[0]["popularity"], 1234.0);
+    assert!(t[1].get("popularity").is_none());
+    let none = edition(&Fake::default(), RELEASE).unwrap();
+    assert!(none["tracks"][0].get("popularity").is_none());
 }
 
 #[test]

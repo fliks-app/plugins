@@ -1,0 +1,261 @@
+{
+  "id": "fliks.musiclists",
+  "pluginApi": 3,
+  "name": "Music lists",
+  "fliks": ">=6.1.0 <7.0.0",
+  "author": "Fliks",
+  "description": "Follow the albums and tracks of ListenBrainz, Last.fm, Spotify, Deezer and MusicBrainz lists.",
+  "license": "AGPL-3.0-or-later",
+  "logo": "logo.svg",
+  "kind": "process",
+  "runtime": "wasm",
+  "memoryMb": 64,
+  "database": {
+    "schema": true,
+    "coreRefs": [],
+    "secrets": [
+      {
+        "table": "lists",
+        "column": "settings",
+        "jsonPath": "token"
+      },
+      {
+        "table": "lists",
+        "column": "settings",
+        "jsonPath": "apiKey"
+      },
+      {
+        "table": "lists",
+        "column": "settings",
+        "jsonPath": "clientSecret"
+      },
+      {
+        "table": "list_secrets",
+        "column": "data",
+        "jsonPath": "refreshToken"
+      }
+    ]
+  },
+  "scopes": [
+    "media:read",
+    "media:create",
+    "playlists:write"
+  ],
+  "ingestRoots": [],
+  "permissions": [
+    "lists"
+  ],
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/lists",
+      "policy": "read:plugin:fliks.musiclists:lists"
+    },
+    {
+      "method": "GET",
+      "path": "/lists/implementations",
+      "policy": "read:plugin:fliks.musiclists:lists"
+    },
+    {
+      "method": "POST",
+      "path": "/lists",
+      "policy": "manage:plugin:fliks.musiclists:lists"
+    },
+    {
+      "method": "POST",
+      "path": "/lists/test-connection",
+      "policy": "manage:plugin:fliks.musiclists:lists"
+    },
+    {
+      "method": "PUT",
+      "path": "/lists/:id",
+      "policy": "manage:plugin:fliks.musiclists:lists"
+    },
+    {
+      "method": "DELETE",
+      "path": "/lists/:id",
+      "policy": "manage:plugin:fliks.musiclists:lists"
+    },
+    {
+      "method": "POST",
+      "path": "/lists/:id/sync",
+      "policy": "manage:plugin:fliks.musiclists:lists"
+    },
+    {
+      "method": "GET",
+      "path": "/spotify/callback",
+      "policy": "manage:plugin:fliks.musiclists:lists"
+    },
+    {
+      "method": "GET",
+      "path": "/spotify/:id/authorize",
+      "policy": "manage:plugin:fliks.musiclists:lists"
+    }
+  ],
+  "jobs": [
+    {
+      "name": "SyncLists",
+      "cron": "0 */6 * * *",
+      "triggerable": true,
+      "labelKey": "musiclists.jobs.sync"
+    }
+  ],
+  "ui": {
+    "contributions": [
+      {
+        "id": "fliks-musiclists.settings.lists",
+        "slot": "settings.page",
+        "weight": 100,
+        "labelKey": "musiclists.config.title",
+        "action": {
+          "kind": "route",
+          "path": "/admin/settings/plugins/fliks.musiclists/lists"
+        }
+      }
+    ],
+    "configPages": [
+      {
+        "id": "lists",
+        "kind": "providers",
+        "labelKey": "musiclists.config.title",
+        "subtitleKey": "musiclists.config.subtitle",
+        "icon": "list",
+        "list": "/lists",
+        "implementations": "/lists/implementations",
+        "testConnection": {
+          "route": "/lists/test-connection"
+        },
+        "showPriority": false,
+        "labels": {
+          "newKey": "musiclists.labels.new",
+          "emptyKey": "musiclists.labels.empty",
+          "testKey": "musiclists.labels.test",
+          "deleteConfirmKey": "musiclists.labels.delete_confirm",
+          "createTitleKey": "musiclists.labels.create_title",
+          "editTitleKey": "musiclists.labels.edit_title"
+        },
+        "actions": [
+          {
+            "id": "sync",
+            "labelKey": "musiclists.actions.sync",
+            "method": "POST",
+            "route": "/lists/:id/sync",
+            "scope": "row",
+            "successKey": "musiclists.actions.sync_done",
+            "afterSave": true
+          }
+        ]
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "musiclists.config.title": "Music lists",
+      "musiclists.config.subtitle": "Follow the albums and tracks of your ListenBrainz, Last.fm, Spotify, Deezer and MusicBrainz lists.",
+      "musiclists.labels.new": "New list",
+      "musiclists.labels.empty": "No list configured",
+      "musiclists.labels.test": "Test",
+      "musiclists.labels.delete_confirm": "Delete this list?",
+      "musiclists.labels.create_title": "New list",
+      "musiclists.labels.edit_title": "Edit list",
+      "musiclists.actions.sync": "Sync now",
+      "musiclists.actions.sync_done": "Sync done",
+      "musiclists.actions.albums": "Want the albums",
+      "musiclists.actions.tracks": "Want the tracks",
+      "musiclists.actions.playlist": "Mirror into a playlist",
+      "musiclists.test.ok": "The list answers",
+      "musiclists.test.failed": "The list could not be read",
+      "musiclists.implementations.listenbrainz": "ListenBrainz",
+      "musiclists.implementations.lastfm": "Last.fm",
+      "musiclists.implementations.spotify": "Spotify",
+      "musiclists.implementations.deezer": "Deezer",
+      "musiclists.implementations.musicbrainz": "MusicBrainz collection",
+      "musiclists.fields.username": "User name",
+      "musiclists.fields.token": "User token",
+      "musiclists.fields.token_hint": "Optional for public data; needed for private playlists.",
+      "musiclists.fields.apiKey": "API key",
+      "musiclists.fields.source": "List",
+      "musiclists.fields.entity": "Collection holds",
+      "musiclists.fields.playlistId": "Playlist",
+      "musiclists.fields.playlistId_hint": "Playlist id or URL, for the playlist source.",
+      "musiclists.fields.clientId": "Client id",
+      "musiclists.fields.clientSecret": "Client secret",
+      "musiclists.fields.redirectUri": "Redirect URI",
+      "musiclists.fields.redirectUri_hint": "Register https://YOUR-FLIKS/api/plugins/fliks.musiclists/spotify/callback in your Spotify app, then open https://YOUR-FLIKS/api/plugins/fliks.musiclists/spotify/LIST-ID/authorize once to connect.",
+      "musiclists.fields.id": "Playlist or user",
+      "musiclists.fields.id_hint": "Deezer id or URL.",
+      "musiclists.fields.collectionId": "Collection",
+      "musiclists.fields.collectionId_hint": "Id or URL of a public MusicBrainz collection.",
+      "musiclists.fields.actions": "Actions",
+      "musiclists.fields.actions_hint": "Albums and tracks are wanted; the playlist mirror also wants the tracks it adds. A track without an ISRC or a recording id in the library is skipped.",
+      "musiclists.fields.libraryId": "Library",
+      "musiclists.fields.libraryId_hint": "Library id; empty when only one library holds albums.",
+      "musiclists.sources.playlist": "A playlist",
+      "musiclists.sources.created-for-you": "Playlists made for you",
+      "musiclists.sources.top-albums": "Top albums",
+      "musiclists.sources.top-tracks": "Top tracks",
+      "musiclists.sources.loved-tracks": "Loved tracks",
+      "musiclists.sources.saved-albums": "Saved albums",
+      "musiclists.sources.saved-tracks": "Saved tracks",
+      "musiclists.sources.user-albums": "Favourite albums",
+      "musiclists.sources.release-group": "Albums",
+      "musiclists.sources.recording": "Tracks",
+      "musiclists.jobs.sync": "Sync the music lists",
+      "musiclists.attribution": "Lists from ListenBrainz, Last.fm, Spotify, Deezer and MusicBrainz."
+    },
+    "fr": {
+      "musiclists.config.title": "Listes musicales",
+      "musiclists.config.subtitle": "Suivez les albums et titres de vos listes ListenBrainz, Last.fm, Spotify, Deezer et MusicBrainz.",
+      "musiclists.labels.new": "Nouvelle liste",
+      "musiclists.labels.empty": "Aucune liste configurée",
+      "musiclists.labels.test": "Tester",
+      "musiclists.labels.delete_confirm": "Supprimer cette liste ?",
+      "musiclists.labels.create_title": "Nouvelle liste",
+      "musiclists.labels.edit_title": "Modifier la liste",
+      "musiclists.actions.sync": "Synchroniser",
+      "musiclists.actions.sync_done": "Synchronisation terminée",
+      "musiclists.actions.albums": "Souhaiter les albums",
+      "musiclists.actions.tracks": "Souhaiter les titres",
+      "musiclists.actions.playlist": "Refléter dans une playlist",
+      "musiclists.test.ok": "La liste répond",
+      "musiclists.test.failed": "La liste n'a pas pu être lue",
+      "musiclists.implementations.listenbrainz": "ListenBrainz",
+      "musiclists.implementations.lastfm": "Last.fm",
+      "musiclists.implementations.spotify": "Spotify",
+      "musiclists.implementations.deezer": "Deezer",
+      "musiclists.implementations.musicbrainz": "Collection MusicBrainz",
+      "musiclists.fields.username": "Nom d'utilisateur",
+      "musiclists.fields.token": "Jeton utilisateur",
+      "musiclists.fields.token_hint": "Facultatif pour les données publiques; requis pour les playlists privées.",
+      "musiclists.fields.apiKey": "Clé d'API",
+      "musiclists.fields.source": "Liste",
+      "musiclists.fields.entity": "La collection contient",
+      "musiclists.fields.playlistId": "Playlist",
+      "musiclists.fields.playlistId_hint": "Identifiant ou URL de la playlist, pour la source playlist.",
+      "musiclists.fields.clientId": "Identifiant client",
+      "musiclists.fields.clientSecret": "Secret client",
+      "musiclists.fields.redirectUri": "URI de redirection",
+      "musiclists.fields.redirectUri_hint": "Déclarez https://VOTRE-FLIKS/api/plugins/fliks.musiclists/spotify/callback dans votre application Spotify, puis ouvrez une fois https://VOTRE-FLIKS/api/plugins/fliks.musiclists/spotify/ID-LISTE/authorize pour vous connecter.",
+      "musiclists.fields.id": "Playlist ou utilisateur",
+      "musiclists.fields.id_hint": "Identifiant ou URL Deezer.",
+      "musiclists.fields.collectionId": "Collection",
+      "musiclists.fields.collectionId_hint": "Identifiant ou URL d'une collection MusicBrainz publique.",
+      "musiclists.fields.actions": "Actions",
+      "musiclists.fields.actions_hint": "Les albums et titres sont souhaités; le miroir de playlist souhaite aussi les titres qu'il ajoute. Un titre sans ISRC ni identifiant d'enregistrement dans la bibliothèque est ignoré.",
+      "musiclists.fields.libraryId": "Bibliothèque",
+      "musiclists.fields.libraryId_hint": "Identifiant de bibliothèque; vide quand une seule bibliothèque accepte les albums.",
+      "musiclists.sources.playlist": "Une playlist",
+      "musiclists.sources.created-for-you": "Playlists créées pour vous",
+      "musiclists.sources.top-albums": "Albums les plus écoutés",
+      "musiclists.sources.top-tracks": "Titres les plus écoutés",
+      "musiclists.sources.loved-tracks": "Titres aimés",
+      "musiclists.sources.saved-albums": "Albums enregistrés",
+      "musiclists.sources.saved-tracks": "Titres enregistrés",
+      "musiclists.sources.user-albums": "Albums favoris",
+      "musiclists.sources.release-group": "Albums",
+      "musiclists.sources.recording": "Titres",
+      "musiclists.jobs.sync": "Synchroniser les listes musicales",
+      "musiclists.attribution": "Listes de ListenBrainz, Last.fm, Spotify, Deezer et MusicBrainz."
+    }
+  }
+}

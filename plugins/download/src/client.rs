@@ -288,12 +288,13 @@ pub fn delete(c: &DownloadClientRow, hash: &str, delete_files: bool) -> R<()> {
     }
 }
 
-const TYPE_CATEGORIES: [(&str, &str); 5] = [
+const TYPE_CATEGORIES: [(&str, &str); 6] = [
     ("movie", "movieCategory"),
     ("series", "seriesCategory"),
     ("ebook", "ebookCategory"),
     ("audiobook", "audiobookCategory"),
     ("comic", "comicCategory"),
+    ("album", "albumCategory"),
 ];
 
 /// The category a grab of `media_type` is filed under: its per-type one, else the base one.

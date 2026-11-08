@@ -1110,6 +1110,7 @@ static CLIENT_IMPLEMENTATIONS: LazyLock<Value> = LazyLock::new(|| {
             json!({ "key": "ebookCategory", "type": "text", "labelKey": format!("{f}.ebook_category") }),
             json!({ "key": "audiobookCategory", "type": "text", "labelKey": format!("{f}.audiobook_category") }),
             json!({ "key": "comicCategory", "type": "text", "labelKey": format!("{f}.comic_category") }),
+            json!({ "key": "albumCategory", "type": "text", "labelKey": format!("{f}.album_category") }),
         ]);
         json!({
             "implementation": imp,

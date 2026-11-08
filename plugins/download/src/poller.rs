@@ -27,6 +27,11 @@ const VIDEO_EXTS: [&str; 14] = [
     ".mpeg", ".ogm", ".mts",
 ];
 pub const AUDIO_EXTS: [&str; 7] = [".m4b", ".m4a", ".mp3", ".flac", ".ogg", ".opus", ".aac"];
+/// An album's tracks: the books' audio plus the lossless and uncompressed containers (`domain::media`).
+pub const MUSIC_EXTS: [&str; 13] = [
+    ".m4b", ".m4a", ".mp3", ".flac", ".ogg", ".opus", ".aac", ".wav", ".aiff", ".aif", ".ape",
+    ".wv", ".dsf",
+];
 pub const COMIC_EXTS: [&str; 4] = [".cbz", ".cbr", ".cb7", ".pdf"];
 pub const TEXT_EXTS: [&str; 6] = [".epub", ".pdf", ".azw3", ".mobi", ".fb2", ".cbz"];
 /// Media the ingest refuses: a torrent holding them is never taken for a dud.
@@ -777,6 +782,7 @@ fn holds_media(files: &[TorrentFile]) -> bool {
         [Family::Video, Family::Audio, Family::Text, Family::Image]
             .into_iter()
             .any(|fam| exts_of(fam).contains(&e.as_str()))
+            || MUSIC_EXTS.contains(&e.as_str())
             || REFUSED_MEDIA_EXTS.contains(&e.as_str())
     })
 }
@@ -793,6 +799,21 @@ struct Intake {
     family: Family,
     language: Option<String>,
     paths: Vec<String>,
+}
+
+/// Whether a row is an album: its family says audio, then the host says album or book. A row with
+/// video ids is never one.
+fn is_album(h: &HistoryRow, media: u32) -> R<bool> {
+    let family = h.family.as_deref().and_then(family_of);
+    if family.is_some_and(|f| f != Family::Audio)
+        || (family.is_none() && (h.season_id.is_some() || h.item_id.is_some()))
+    {
+        return Ok(false);
+    }
+    Ok(
+        host::media_acquisition_context(media, family, None, None, None)?
+            .is_some_and(|t| t.kind == "album"),
+    )
 }
 
 /// Series rows carry their ids; a movie or a book row without a family asks the host once.
@@ -817,6 +838,24 @@ fn intake(h: &HistoryRow, media: u32, files: &[TorrentFile], save: &str) -> R<Ve
         let paths = paths_of(files, save, Family::Image);
         return Ok(Some(Intake {
             family: Family::Image,
+            language: None,
+            paths,
+        })
+        .filter(|i| !i.paths.is_empty())
+        .into_iter()
+        .collect());
+    }
+    if is_album(h, media)? {
+        if own.is_none() {
+            history::set_family(h.id, family_str(Family::Audio))?;
+        }
+        let paths: Vec<String> = files
+            .iter()
+            .filter(|f| f.progress >= 1.0 && MUSIC_EXTS.contains(&ext_of(&f.name).as_str()))
+            .map(|f| join_path(save, &f.name))
+            .collect();
+        return Ok(Some(Intake {
+            family: Family::Audio,
             language: None,
             paths,
         })

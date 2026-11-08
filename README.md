@@ -21,6 +21,7 @@ from the plugin catalogue in **Settings → Advanced → Plugins**.
 | [`plugins/thexem`](plugins/thexem/README.md) | `fliks.thexem`: scene to aired numbering of series from TheXEM | AGPL-3.0-or-later |
 | [`plugins/musicbrainz`](plugins/musicbrainz/README.md) | `fliks.musicbrainz`: album, release and artist metadata from MusicBrainz | AGPL-3.0-or-later |
 | [`plugins/fanarttv`](plugins/fanarttv/README.md) | `fliks.fanarttv`: artist images and album covers from Fanart.tv | AGPL-3.0-or-later |
+| [`plugins/music-lists`](plugins/music-lists/README.md) | `fliks.musiclists`: follow the albums and tracks of ListenBrainz, Last.fm, Spotify, Deezer and MusicBrainz lists | AGPL-3.0-or-later |
 
 [`crates/provider-common`](crates/provider-common) holds what several provider plugins share (language
 codes, the HTTP status mapping, the book and comic models and ISBN); it is a library, not a plugin. Each provider

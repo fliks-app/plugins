@@ -26,10 +26,11 @@ pub enum Media {
     Ebook,
     Audiobook,
     Comic,
+    Album,
 }
 
 impl Media {
-    /// `None` for `album`, any kind added later and a book or comic of another family.
+    /// `None` for any kind added later and a book, comic or album of another family.
     pub fn of(kind: &str, family: Family) -> Option<Self> {
         match (kind, family) {
             ("movie", _) => Some(Self::Movie),
@@ -37,6 +38,7 @@ impl Media {
             ("book", Family::Text) => Some(Self::Ebook),
             ("book", Family::Audio) => Some(Self::Audiobook),
             ("comic", Family::Image) => Some(Self::Comic),
+            ("album", Family::Audio) => Some(Self::Album),
             _ => None,
         }
     }
@@ -48,6 +50,7 @@ impl Media {
             Self::Ebook => "ebook",
             Self::Audiobook => "audiobook",
             Self::Comic => "comic",
+            Self::Album => "album",
         }
     }
 }
@@ -192,6 +195,9 @@ async fn search_asks(
 }
 
 pub fn piece(t: &Target) -> Piece {
+    if t.kind == "album" {
+        return Piece::Work;
+    }
     match numbers(t) {
         (Some(s), Some(e)) => Piece::Episode(s, e),
         (Some(s), None) => Piece::Season(s),
@@ -376,13 +382,13 @@ fn rank(target: &Target, indexers: &[IndexerRow], releases: &[Release]) -> R<Vec
 pub fn pick(sorted: &[Ranked], target: &Target) -> Vec<usize> {
     let season_only = is_season(target);
     let book = target.kind == "book";
-    let comic = target.kind == "comic";
+    let strict = matches!(target.kind.as_str(), "comic" | "album");
     match &target.want {
         Some(w) if w.decision != WantDecision::Skip => sorted
             .iter()
             .enumerate()
             .filter(|(_, r)| r.scored.rejections.is_empty())
-            .filter(|(_, r)| !comic || r.scored.allowed)
+            .filter(|(_, r)| !strict || r.scored.allowed)
             .filter(|(_, r)| {
                 !book
                     || (r.scored.allowed
@@ -403,7 +409,7 @@ fn is_season(t: &Target) -> bool {
 }
 
 fn is_special(t: &Target) -> bool {
-    numbers(t).0 == Some(0)
+    t.kind != "album" && numbers(t).0 == Some(0)
 }
 
 /// The episode title of a special, the only thing to search it by.
@@ -464,6 +470,25 @@ pub fn issue_queries(t: &Target, custom: Option<&str>) -> Vec<String> {
         }
     }
     out
+}
+
+/// The queries that find an album: artist and album, then the album alone. A track want searches
+/// its album too. A custom query stands alone.
+pub fn album_queries(t: &Target, custom: Option<&str>) -> Vec<String> {
+    if let Some(c) = custom.map(str::trim).filter(|c| !c.is_empty()) {
+        return vec![c.to_owned()];
+    }
+    let artist = t
+        .creators
+        .iter()
+        .find(|c| c.role == "artist")
+        .map(|c| c.name.trim())
+        .filter(|n| !n.is_empty() && !n.eq_ignore_ascii_case("various artists"));
+    artist
+        .map(|a| format!("{a} {}", t.search_title))
+        .into_iter()
+        .chain([t.search_title.clone()])
+        .collect()
 }
 
 /// Who a streamed search reports to.
@@ -531,7 +556,9 @@ pub fn search_scored(
     let query = search_query(target, custom);
     let book = target.kind == "book";
     let comic = target.kind == "comic";
+    let album = target.kind == "album";
     let issues = &issue_queries(target, custom);
+    let albums = &album_queries(target, custom);
     let author = author_of(target).filter(|_| custom.is_none_or(|c| c.trim().is_empty()));
 
     if is_special(target) && special_title(target).is_none() {
@@ -582,6 +609,8 @@ pub fn search_scored(
                     torznab::search_book(ix, kind, target.family, author, query, round).await
                 } else if comic {
                     torznab::search_comic(ix, kind, issues, round).await
+                } else if album {
+                    torznab::search_album(ix, kind, albums, round).await
                 } else {
                     search_asks(ix, kind, query, asks, ids, round).await
                 };
@@ -699,7 +728,7 @@ fn load_target(
     }
     let Some(media) = Media::of(&target.kind, target.family) else {
         info!(
-            "Media #{media_id} \"{}\" is a {}: this plugin acquires movies, series, books and comics only",
+            "Media #{media_id} \"{}\" is a {}: this plugin acquires movies, series, books, comics and albums only",
             target.title, target.kind
         );
         return Err(Error::grab("download.grab.errors.unsupported_kind"));
@@ -1060,7 +1089,7 @@ fn grab_season_episodes(target: &Target, why: &str) -> R<Value> {
 /// pending grab of the media.
 fn pending(target: &Target) -> R<Option<String>> {
     let (season, episode) = numbers(target);
-    match (season, group_id(target)) {
+    match (season, group_id(target).filter(|_| target.kind != "album")) {
         (Some(s), Some(season_id)) => history::find_pending_covering(&history::Covering {
             media_id: target.media_id.into(),
             season_id: season_id.into(),
@@ -1086,7 +1115,7 @@ fn pending(target: &Target) -> R<Option<String>> {
 fn try_auto_grab(target: &Target, client: &DownloadClientRow) -> R<bool> {
     let Some(media) = Media::of(&target.kind, target.family) else {
         info!(
-            "AutoGrab[{}]: \"{}\" skipped — this plugin acquires movies, series, books and comics only",
+            "AutoGrab[{}]: \"{}\" skipped — this plugin acquires movies, series, books, comics and albums only",
             target.kind, target.title
         );
         return Ok(false);
@@ -1279,10 +1308,12 @@ type SearchedKey = (u32, Option<u32>, Option<u32>, &'static str, Option<String>)
 impl Searched {
     /// True the first time a target is seen in this run.
     pub fn first(&mut self, t: &Target) -> bool {
+        // The tracks of an album share one search.
+        let own = t.kind != "album";
         self.0.insert((
             t.media_id,
-            group_id(t),
-            item_id(t),
+            group_id(t).filter(|_| own),
+            item_id(t).filter(|_| own),
             family_str(t.family),
             book_language(t).map(str::to_owned),
         ))
