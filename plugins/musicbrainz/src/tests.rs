@@ -340,7 +340,7 @@ fn find_by_resolves_urls_and_isrc() {
         Some(GROUP)
     );
     assert_eq!(find_by(&h, "deezer", "42").unwrap(), None);
-    // The official release wins over the first one.
+    // The official plain album wins over a single, a compilation and a bootleg album.
     assert_eq!(
         find_by(&h, "isrc", "US-AAA-24-00001").unwrap().as_deref(),
         Some(GROUP)

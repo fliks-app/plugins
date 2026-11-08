@@ -298,9 +298,13 @@ fn by_url(h: &impl Http, resource: &str) -> R<Option<String>> {
     }
 }
 
-/// The album of a recording code: the group of its first official release.
+/// The album of a recording code: the group of its earliest official plain album, else of an official
+/// release; a group in no release is read from the first official release.
 fn by_isrc(h: &impl Http, isrc: &str) -> R<Option<String>> {
-    let body = match h.mb(&format!("/isrc/{isrc}"), &q(&[("inc", "releases")])) {
+    let body = match h.mb(
+        &format!("/isrc/{isrc}"),
+        &q(&[("inc", "releases+release-groups")]),
+    ) {
         Err(ProviderError::NotFound) => return Ok(None),
         r => r?,
     };
@@ -308,12 +312,35 @@ fn by_isrc(h: &impl Http, isrc: &str) -> R<Option<String>> {
         .iter()
         .flat_map(|r| array(r, "releases"))
         .collect();
-    let official = releases.iter().find(|r| {
+    let official = |r: &Value| {
         r["status"]
             .as_str()
             .is_some_and(|s| s.eq_ignore_ascii_case("official"))
-    });
-    match official.or(releases.first()).and_then(|r| r["id"].as_str()) {
+    };
+    let plain_album = |g: &Value| {
+        g["primary-type"].as_str() == Some("Album")
+            && g["secondary-types"].as_array().is_none_or(Vec::is_empty)
+    };
+    let best = releases
+        .iter()
+        .filter_map(|r| {
+            let g = r.get("release-group")?;
+            let id = map::uuid(g["id"].as_str()?)?;
+            let date = g["first-release-date"].as_str().filter(|d| !d.is_empty());
+            let rank = (
+                !(official(r) && plain_album(g)),
+                !official(r),
+                date.is_none(),
+                date.unwrap_or_default().to_owned(),
+            );
+            Some((rank, id))
+        })
+        .min_by(|a, b| a.0.cmp(&b.0));
+    if let Some((_, id)) = best {
+        return Ok(Some(id));
+    }
+    let first = releases.iter().find(|r| official(r)).or(releases.first());
+    match first.and_then(|r| r["id"].as_str()) {
         Some(id) => group_of_release(h, id),
         None => Ok(None),
     }
