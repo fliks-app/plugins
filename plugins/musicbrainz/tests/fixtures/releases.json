@@ -1,0 +1,5 @@
+{"release-count":3,"release-offset":0,"releases":[
+ {"id":"44444444-4444-4444-8444-444444444444","title":"Placeholder Album","status":"Official","country":"XW","date":"2004-05-01","barcode":"012345678905","label-info":[{"catalog-number":"CAT-1","label":{"name":"Example Label"}}],"media":[{"position":1,"format":"CD","track-count":2},{"position":2,"format":"CD","track-count":1}]},
+ {"id":"55555555-5555-4555-8555-555555555555","title":"Placeholder Album (deluxe)","status":"Pseudo-Release","release-events":[{"date":"2005","area":{"iso-3166-1-codes":["FR"]}}],"date":"2005","barcode":"","media":[{"position":1,"format":"12\" Vinyl","track-count":9}]},
+ {"id":"44444444-4444-4444-8444-444444444444","title":"Placeholder Album duplicate","media":[]}
+]}
