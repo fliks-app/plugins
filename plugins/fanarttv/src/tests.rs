@@ -80,6 +80,7 @@ fn replies_map_to_provider_errors() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn records_pass_the_host_checks() {
     use fliks_domain::music::provider as host;
     let h = Fake("artist.json", "album.json");

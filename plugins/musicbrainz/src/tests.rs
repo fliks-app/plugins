@@ -16,32 +16,25 @@ fn fx(name: &str) -> Value {
 
 #[derive(Default)]
 struct Fake {
-    /// Every `(path, query)` asked of MusicBrainz.
-    calls: RefCell<Vec<(String, Vec<(String, String)>)>>,
+    /// Every `query` text asked of MusicBrainz.
+    queries: RefCell<Vec<String>>,
     popularity: Option<Value>,
 }
 
 impl Fake {
     fn queries(&self) -> Vec<String> {
-        self.calls
-            .borrow()
-            .iter()
-            .flat_map(|(_, q)| {
-                q.iter()
-                    .filter(|(k, _)| k == "query")
-                    .map(|(_, v)| v.clone())
-            })
-            .collect()
+        self.queries.borrow().clone()
     }
 }
 
 impl Http for Fake {
     fn mb(&self, path: &str, query: &[(&str, String)]) -> R<Value> {
-        let owned = query
-            .iter()
-            .map(|(k, v)| ((*k).to_owned(), v.clone()))
-            .collect();
-        self.calls.borrow_mut().push((path.to_owned(), owned));
+        self.queries.borrow_mut().extend(
+            query
+                .iter()
+                .filter(|(k, _)| *k == "query")
+                .map(|(_, v)| v.clone()),
+        );
         let has = |k: &str| query.iter().any(|(n, _)| *n == k);
         Ok(match path {
             "/release-group" if has("query") => fx("search.json"),
@@ -355,6 +348,7 @@ fn replies_map_to_provider_errors() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
 fn every_record_passes_the_host_checks() {
     use fliks_domain::music::provider as host;
     let h = Fake::default();

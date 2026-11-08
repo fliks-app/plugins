@@ -73,7 +73,7 @@ fn group(h: &impl Http, id: &str) -> R<Value> {
 fn hits(groups: &[Value], text: &str, h: &impl Http) -> Vec<Value> {
     let ids: Vec<String> = groups
         .iter()
-        .filter_map(|g| Some(map::uuid(g["id"].as_str()?)?))
+        .filter_map(|g| map::uuid(g["id"].as_str()?))
         .collect();
     let pop = popularity(h, &ids);
     let mut ranked: Vec<(f64, Value)> = groups
