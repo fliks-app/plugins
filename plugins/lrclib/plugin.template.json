@@ -1,0 +1,77 @@
+{
+  "id": "fliks.lrclib",
+  "pluginApi": 3,
+  "name": "LRCLIB",
+  "fliks": ">=6.1.0 <7.0.0",
+  "author": "Fliks",
+  "description": "Synced and plain lyrics from LRCLIB, matched on title, artist, album and duration.",
+  "license": "AGPL-3.0-or-later",
+  "homepage": "https://lrclib.net",
+  "logo": "logo.svg",
+  "kind": "process",
+  "runtime": "wasm",
+  "memoryMb": 64,
+  "database": {
+    "schema": false,
+    "coreRefs": []
+  },
+  "scopes": [],
+  "ingestRoots": [],
+  "routes": [],
+  "provider": {
+    "namespaces": [
+      {
+        "name": "lrclib"
+      }
+    ],
+    "kinds": {
+      "album": [
+        "lyrics"
+      ]
+    },
+    "limits": {
+      "ratePerSec": 1.5,
+      "burst": 2
+    },
+    "requestTimeoutMs": 15000
+  },
+  "ui": {
+    "contributions": [
+      {
+        "id": "fliks-lrclib.settings.general",
+        "slot": "settings.page",
+        "weight": 100,
+        "labelKey": "lrclib.config.title",
+        "action": {
+          "kind": "route",
+          "path": "/admin/settings/plugins/fliks.lrclib/general"
+        }
+      }
+    ],
+    "configPages": [
+      {
+        "id": "general",
+        "labelKey": "lrclib.config.title",
+        "subtitleKey": "lrclib.config.subtitle",
+        "fields": [
+          {
+            "kind": "caption",
+            "textKey": "lrclib.config.attribution"
+          }
+        ]
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "lrclib.config.title": "LRCLIB",
+      "lrclib.config.subtitle": "Synced and plain lyrics from LRCLIB. No account or key needed.",
+      "lrclib.config.attribution": "Lyrics from LRCLIB (https://lrclib.net)."
+    },
+    "fr": {
+      "lrclib.config.title": "LRCLIB",
+      "lrclib.config.subtitle": "Paroles synchronisées et simples de LRCLIB. Aucun compte ni clé nécessaire.",
+      "lrclib.config.attribution": "Paroles de LRCLIB (https://lrclib.net)."
+    }
+  }
+}

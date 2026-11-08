@@ -190,6 +190,17 @@
           "jsonpath": "$.package[?(@.name.value=='fk-plugin-music-lists')].version"
         }
       ]
+    },
+    "plugins/lrclib": {
+      "release-type": "rust",
+      "component": "lrclib",
+      "extra-files": [
+        {
+          "type": "toml",
+          "path": "/Cargo.lock",
+          "jsonpath": "$.package[?(@.name.value=='fk-plugin-lrclib')].version"
+        }
+      ]
     }
   }
 }
