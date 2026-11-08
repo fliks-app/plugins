@@ -16,5 +16,5 @@
   "plugins/musicbrainz": "0.3.0",
   "plugins/fanarttv": "0.2.0",
   "plugins/music-lists": "0.2.0",
-  "plugins/lrclib": "0.1.0"
+  "plugins/lrclib": "0.2.0"
 }
