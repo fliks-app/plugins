@@ -15,7 +15,7 @@ fn the_provider_packages_and_verifies() {
     );
     let i = build::verify(&archive, vec![], build::MAX_WASM).unwrap();
     let p = &i.manifest["provider"];
-    assert_eq!(p["namespaces"][0]["name"], "lrclib");
+    assert_eq!(p["namespaces"][0]["name"], "fliks.lrclib:lrclib");
     assert_eq!(p["kinds"]["album"], serde_json::json!(["lyrics"]));
     let wasm = std::fs::read(c.wasm_path()).unwrap();
     build::check_world(&wasm, true).unwrap();
