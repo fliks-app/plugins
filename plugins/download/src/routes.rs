@@ -166,15 +166,20 @@ fn search_releases(r: &Request) -> R<Response> {
         Ok(f) => f,
         Err(resp) => return resp,
     };
-    let releases = grab::search_releases(
-        media,
-        group,
-        item,
-        family,
-        r.query("language"),
-        r.query("q"),
-        stream_of(r).as_ref(),
-    )?;
+    // The core's sweep (no user): what this provider would grab, from the auto-search indexers.
+    let releases = if matches!(r.principal, Principal::System) {
+        grab::search_auto(media, group, item, family, r.query("language"))?
+    } else {
+        grab::search_releases(
+            media,
+            group,
+            item,
+            family,
+            r.query("language"),
+            r.query("q"),
+            stream_of(r).as_ref(),
+        )?
+    };
     ok(releases.iter().map(to_wire).collect::<Vec<_>>())
 }
 
@@ -217,15 +222,16 @@ fn grab_release(r: &Request) -> R<Response> {
         item,
         family,
         str_field(&b, "language").as_deref(),
-        manual_of(&b),
+        manual_of(&b, matches!(r.principal, Principal::System)),
     )?)
 }
 
 /// A body without `downloadUrl` asks for an auto-pick.
-fn manual_of(b: &Map<String, Value>) -> Option<Manual> {
+fn manual_of(b: &Map<String, Value>, auto: bool) -> Option<Manual> {
     str_field(b, "downloadUrl")
         .filter(|u| !u.is_empty())
         .map(|download_url| Manual {
+            auto,
             download_url,
             source_title: str_field(b, "sourceTitle"),
             indexer_id: num_field(b, "sourceId").map(|f| f as i64),
@@ -901,7 +907,7 @@ fn replace(r: &Request) -> R<Response> {
             manual,
         )
     };
-    let Some(manual) = manual_of(&body(r)) else {
+    let Some(manual) = manual_of(&body(r), false) else {
         retire_replaced(&row)?;
         return ok(grab(None)?);
     };

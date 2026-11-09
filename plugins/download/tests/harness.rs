@@ -758,54 +758,6 @@ async fn import_leases_rearm_only_expired_rows() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn an_acquisition_request_schedules_one_search_per_media() {
-    let Some(h) = Harness::start(setup()).await else {
-        return;
-    };
-    h.event(
-        "media.acquisition.requested",
-        &json!({ "provider": "fliks.download", "mediaIds": [3, 3, 4.5, "x", 9] }),
-    );
-    // Addressed to another provider, or to none: ignored.
-    h.event(
-        "media.acquisition.requested",
-        &json!({ "provider": "fliks.other", "mediaIds": [5] }),
-    );
-    h.event("media.acquisition.requested", &json!({ "mediaIds": [6] }));
-    until("the event", MAX, async || {
-        logged(&h, "searching for media 3, 9")
-    })
-    .await;
-    // The log precedes the scheduling, so wait for both handlers to have run.
-    until("both searches", MAX, async || {
-        let ran = h
-            .logs()
-            .iter()
-            .filter(|l| l.contains("no enabled download client"))
-            .count();
-        ran == 2 && h.scheduled_calls().await.is_empty()
-    })
-    .await;
-
-    h.set_config("requestsAutoGrabOnApproval", Some("false"))
-        .await;
-    h.event(
-        "media.acquisition.requested",
-        &json!({ "provider": "fliks.download", "mediaIds": [4] }),
-    );
-    until("the refusal", MAX, async || {
-        logged(&h, "immediate search is off")
-    })
-    .await;
-    assert!(h.scheduled_calls().await.is_empty());
-    assert!(
-        h.scheduled("nope:1", "{}", 1).await.is_ok(),
-        "an unknown key is dropped"
-    );
-    h.finish().await;
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn an_indexer_save_probes_its_caps_once() {
     let Some(h) = Harness::start(setup()).await else {
         return;
@@ -2686,6 +2638,70 @@ async fn book_fixture_with(
     Some((h, base, media, qbit))
 }
 
+/// What the core's sweep does for `media`: for each of its wanted candidates, the System search of
+/// this provider, then a grab of the first release it offers.
+async fn core_sweep(h: &Harness, media: i64) {
+    use fliks_plugin_sdk::harness::fliks_server::plugins::Principal;
+    use fliks_plugin_sdk::harness::fliks_server::plugins::acquisition::candidates;
+    use fliks_plugin_sdk::harness::fliks_server::plugins::runtime::fliks::plugin::types::{
+        CandidatesQuery, Family, WantDecision,
+    };
+    let family_str = |f: Family| match f {
+        Family::Video => "video",
+        Family::Audio => "audio",
+        Family::Text => "text",
+        Family::Image => "image",
+    };
+    let today = chrono::Local::now().date_naive();
+    let q = CandidatesQuery {
+        kind: None,
+        family: None,
+        media_ids: Some(vec![media as u32]),
+        available_on: today.to_string(),
+        limit: 200,
+        cursor: None,
+    };
+    let page = candidates(&h.st.db, q, today).await.unwrap();
+    for t in page.items {
+        if t.want
+            .as_ref()
+            .is_none_or(|w| w.decision == WantDecision::Skip)
+        {
+            continue;
+        }
+        let unit = t.scope.first();
+        let at = match (unit.and_then(|u| u.group_id), unit.and_then(|u| u.item_id)) {
+            (_, Some(i)) => format!("/{}/items/{i}", t.media_id),
+            (Some(g), None) => format!("/{}/groups/{g}", t.media_id),
+            _ => format!("/{}", t.media_id),
+        };
+        let mut query = vec![("family", family_str(t.family))];
+        if let Some(l) = t.language.as_deref() {
+            query.push(("language", l));
+        }
+        let mut search = request("GET", &format!("{at}/releases"), &query, b"");
+        search.principal = Principal::System;
+        let res = h.http(search).await.unwrap();
+        assert_eq!(res.status, 200, "{}", String::from_utf8_lossy(&res.body));
+        let found: Vec<Value> = serde_json::from_slice(&res.body).unwrap();
+        let Some(best) = found.first() else { continue };
+        let body = json!({
+            "downloadUrl": best["downloadUrl"], "sourceTitle": best["title"],
+            "sourceId": best["sourceId"], "infoUrl": best["infoUrl"],
+            "family": family_str(t.family), "language": t.language,
+        });
+        let mut grab = request(
+            "POST",
+            &format!("{at}/grab"),
+            &[],
+            body.to_string().as_bytes(),
+        );
+        grab.principal = Principal::System;
+        let res = h.http(grab).await.unwrap();
+        assert_eq!(res.status, 200, "{}", String::from_utf8_lossy(&res.body));
+    }
+}
+
 fn hub_saw(events: &mut tokio::sync::broadcast::Receiver<Arc<Bus>>, what: &[&str]) -> bool {
     std::iter::from_fn(|| events.try_recv().ok()).any(|b| {
         let d = format!("{b:?}");
@@ -2706,12 +2722,7 @@ async fn a_book_is_acquired_from_want_to_import() {
     add_book_indexer(&h, &tracker).await;
     let mut events = h.st.hub.subscribe();
 
-    h.job(
-        "SearchMissing",
-        Some(&json!({ "mediaIds": [media] }).to_string()),
-    )
-    .await
-    .unwrap();
+    core_sweep(&h, media).await;
     let searched: Vec<String> = tracker.hits().into_iter().map(|x| x.target).collect();
     for cat in ["cat=7020", "cat=3030"] {
         assert!(
@@ -2725,8 +2736,8 @@ async fn a_book_is_acquired_from_want_to_import() {
     assert!(hub_saw(&mut events, &["AcquisitionGrabbed", "Text"]));
 
     let mut db = plugin_db(&h).await;
-    let (family, language): (Option<String>, Option<String>) = sqlx::query_as(
-        r#"SELECT "family", "language" FROM "download_history" WHERE "torrentHash" = $1 AND "mediaId" = $2"#,
+    let (family, language, source): (Option<String>, Option<String>, String) = sqlx::query_as(
+        r#"SELECT "family", "language", "grabSource" FROM "download_history" WHERE "torrentHash" = $1 AND "mediaId" = $2"#,
     )
     .bind(HASH)
     .bind(media as i32)
@@ -2734,6 +2745,7 @@ async fn a_book_is_acquired_from_want_to_import() {
     .await
     .unwrap();
     assert_eq!((family.as_deref(), language), (Some("text"), None));
+    assert_eq!(source, "auto", "the core's grab is an automatic one");
 
     h.job("ImportCompleted", None).await.unwrap();
     let done: i64 = scalar_i64(
@@ -2786,7 +2798,7 @@ async fn the_rss_sweep_grabs_a_book_through_its_targets() {
     let _ = std::fs::remove_dir_all(base);
 }
 
-/// Another provider's download of the media stops the sweep's auto-grab; once it is gone the sweep grabs.
+/// Another provider's download of the media stops the RSS auto-grab; once it is gone the sync grabs.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_download_in_flight_at_another_provider_blocks_the_auto_grab() {
     use fliks_plugin_sdk::harness::fliks_server::plugins::events::progress_gates;
@@ -2819,8 +2831,7 @@ async fn a_download_in_flight_at_another_provider_blocks_the_auto_grab() {
         .await
         .unwrap();
 
-    let sweep = json!({ "mediaIds": [media] }).to_string();
-    h.job("SearchMissing", Some(&sweep)).await.unwrap();
+    h.job("RssSync", None).await.unwrap();
     assert!(logged(&h, "a grab is in flight at other.provider"));
     assert!(qbit.hits_to("/api/v2/torrents/add").is_empty());
 
@@ -2828,7 +2839,7 @@ async fn a_download_in_flight_at_another_provider_blocks_the_auto_grab() {
         .set(&h.st, "other.provider", media as i32, &[])
         .await
         .unwrap();
-    h.job("SearchMissing", Some(&sweep)).await.unwrap();
+    h.job("RssSync", None).await.unwrap();
     assert_eq!(qbit.hits_to("/api/v2/torrents/add").len(), 1);
     h.finish().await;
     let _ = std::fs::remove_dir_all(base);
@@ -2858,9 +2869,8 @@ async fn a_refused_book_search_is_remembered() {
     )
     .await;
 
-    let search = json!({ "mediaIds": [media] }).to_string();
-    h.job("SearchMissing", Some(&search)).await.unwrap();
-    h.job("SearchMissing", Some(&search)).await.unwrap();
+    core_sweep(&h, media).await;
+    core_sweep(&h, media).await;
     let book = tracker
         .hits()
         .into_iter()
@@ -2894,8 +2904,7 @@ async fn a_failed_book_search_is_not_a_refusal() {
     )
     .await;
 
-    let search = json!({ "mediaIds": [media] }).to_string();
-    h.job("SearchMissing", Some(&search)).await.unwrap();
+    core_sweep(&h, media).await;
     let targets: Vec<String> = tracker.hits().into_iter().map(|x| x.target).collect();
     assert!(targets.iter().any(|t| t.contains("t=book")), "{targets:?}");
     assert!(
@@ -3054,14 +3063,13 @@ async fn a_book_wished_in_two_languages_is_grabbed_and_ingested_per_language() {
     let tracker = Stub::start(move |_, _, _| (200, vec![], feed.clone()));
     add_book_indexer(&h, &tracker).await;
 
-    let sweep = json!({ "mediaIds": [media] }).to_string();
-    h.job("SearchMissing", Some(&sweep)).await.unwrap();
+    core_sweep(&h, media).await;
     assert_eq!(
         qbit.hits_to("/api/v2/torrents/add").len(),
         2,
         "one grab per language"
     );
-    h.job("SearchMissing", Some(&sweep)).await.unwrap();
+    core_sweep(&h, media).await;
     assert_eq!(
         qbit.hits_to("/api/v2/torrents/add").len(),
         2,

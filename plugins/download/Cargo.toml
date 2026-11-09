@@ -24,5 +24,6 @@ fliks-plugin-route = { workspace = true }
 # Component tests of the built plugin under the real host (SDK-11).
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 fliks-plugin-sdk = { workspace = true, features = ["harness"] }
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
 sqlx = { version = "0.9", default-features = false, features = ["postgres", "runtime-tokio"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "time", "net", "io-util"] }
