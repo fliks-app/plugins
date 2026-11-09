@@ -276,7 +276,10 @@ pub fn queue_ref(row: &HistoryRow) -> String {
 /// Matches the client's torrents to the rows now and returns the row as it stands after.
 pub fn match_now(row: HistoryRow) -> R<HistoryRow> {
     let (all, _) = fetch_all()?;
-    auto_match(&all)?;
+    let mut rows = history::by_statuses(&["grabbed"])?;
+    for h in &all {
+        match_and_heal(&h.t, &mut rows)?;
+    }
     Ok(history::find(row.id)?.unwrap_or(row))
 }
 

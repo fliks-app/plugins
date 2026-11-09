@@ -264,4 +264,37 @@ mod tests {
         assert_eq!(kinds(Some("7020,7030")), ["book", "comic"]);
         assert!(kinds(Some("1000,4000")).is_empty());
     }
+
+    fn indexer(id: i64, name: &str) -> IndexerRow {
+        serde_json::from_value(json!({
+            "id": id, "name": name, "implementation": "torznab", "settings": {},
+            "enableRss": true, "enableSearch": true, "enableInteractiveSearch": true,
+            "priority": 25, "enabled": true, "capsSearchFallback": false, "capsMovieSearch": true,
+            "capsTvSearch": false, "capsMovieSearchParams": null, "capsTvSearchParams": null,
+            "capsBookSearch": false, "capsBookSearchParams": null, "capsCategories": "2000",
+            "capsProbedAt": null, "requestDelay": 2, "createdAt": "", "updatedAt": "",
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn sources_stay_inside_the_host_contract() {
+        let long = "n".repeat(300);
+        let rows = [indexer(1, &long), indexer(2, "  "), indexer(3, " Tracker ")];
+        let names: Vec<String> = sources_of(&rows).into_iter().map(|s| s.name).collect();
+        assert_eq!(
+            names,
+            [
+                "n".repeat(200),
+                "Indexer 2".to_owned(),
+                "Tracker".to_owned()
+            ]
+        );
+        let many: Vec<IndexerRow> = (0..250).map(|i| indexer(i, "t")).collect();
+        let ids: Vec<String> = sources_of(&many).into_iter().map(|s| s.id).collect();
+        assert_eq!(
+            (ids.len(), ids[0].as_str(), ids[199].as_str()),
+            (200, "0", "199")
+        );
+    }
 }
