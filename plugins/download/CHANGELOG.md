@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.8.0](https://github.com/fliks-app/plugins/compare/download-v2.7.0...download-v2.8.0) (2026-11-09)
+
+
+### Features
+
+* **download:** let the core run automatic acquisition ([#116](https://github.com/fliks-app/plugins/issues/116)) ([60062c6](https://github.com/fliks-app/plugins/commit/60062c62bee4bdb3fc41c987ce0461d46f70f22b))
+
 ## [2.7.0](https://github.com/fliks-app/plugins/compare/download-v2.6.0...download-v2.7.0) (2026-11-09)
 
 
