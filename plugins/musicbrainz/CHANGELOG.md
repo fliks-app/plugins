@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.2](https://github.com/fliks-app/plugins/compare/musicbrainz-v0.3.1...musicbrainz-v0.3.2) (2026-11-09)
+
+
+### Bug Fixes
+
+* **musicbrainz:** drop the wildcard of the album year filter ([#105](https://github.com/fliks-app/plugins/issues/105)) ([8f9bd23](https://github.com/fliks-app/plugins/commit/8f9bd230483d2e4f73afb128da2064fe38f8d2d4))
+
 ## [0.3.1](https://github.com/fliks-app/plugins/compare/musicbrainz-v0.3.0...musicbrainz-v0.3.1) (2026-11-08)
 
 
