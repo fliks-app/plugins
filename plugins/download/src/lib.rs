@@ -22,7 +22,7 @@ pub mod util;
 
 use fliks_plugin_sdk::rt::{self, Budget, budgets};
 use fliks_plugin_sdk::{HealthReport, HttpRequest, HttpResponse, Plugin, host};
-use serde_json::{Value, json};
+use serde_json::Value;
 use std::time::Duration;
 
 /// The guest budget of the export just entered, never past the host's own deadline.
@@ -74,8 +74,7 @@ impl Plugin for Download {
             warn!("Import: {swept} importing entries outlived their lease — re-armed as grabbed");
         }
         indexers::publish_sources();
-        // Viewers may hold a snapshot from before the restart: the next tick states every set.
-        db::state::set("progressResync", &json!(true)).map_err(text)
+        Ok(())
     }
 
     fn job(name: String, _job_id: String, args: Option<String>) -> Result<(), String> {

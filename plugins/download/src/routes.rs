@@ -1,17 +1,14 @@
-//! The 39 proxied routes. Bodies and statuses are the TypeScript plugin's, frozen by its tests.
+//! The proxied routes. Bodies and statuses are the TypeScript plugin's, frozen by its tests.
 
 use crate::db::{HistoryRow, blocklist, clients, history, indexer_stats};
 use crate::error::{Error, R};
 use crate::grab::{self, Manual, Stream, to_wire};
-use crate::util::{Settings, js_number, num};
+use crate::util::{Settings, js_number};
 use crate::{client, indexers, poller, sources};
-use fliks_plugin_sdk::bindings::fliks::plugin::types::{
-    AcquisitionEvent, Family, Principal, ResolveQuery,
-};
+use fliks_plugin_sdk::bindings::fliks::plugin::types::{AcquisitionEvent, Family, Principal};
 use fliks_plugin_sdk::host;
 use fliks_plugin_sdk::router::{Handler, Request, Response, Router};
 use serde_json::{Map, Value, json};
-use std::collections::HashMap;
 use std::sync::LazyLock;
 
 fn ok(v: impl serde::Serialize) -> R<Response> {
@@ -482,457 +479,40 @@ fn remove_blocklist(r: &Request) -> R<Response> {
     ok(json!({}))
 }
 
-// --- queue and history ---------------------------------------------------------------------
+// --- queue ---------------------------------------------------------------------
 
-struct ClientIndex {
-    consulted: bool,
-    ok: bool,
-    by_hash: HashMap<String, client::Torrent>,
+/// Whether the client can be asked: enabled, of a known kind and drivable.
+fn client_usable(id: i64) -> R<bool> {
+    Ok(clients::list_all()?.iter().any(|c| {
+        c.id == id
+            && c.enabled
+            && client::IMPLEMENTATIONS.contains(&c.implementation.as_str())
+            && client::supports(c)
+    }))
 }
 
-/// One entry per known client, enabled or not, so "never asked" reads apart from "no answer".
-fn index_clients() -> R<(HashMap<i64, ClientIndex>, bool)> {
-    let mut out = HashMap::new();
-    let mut unreachable = false;
-    for c in clients::list_all()? {
-        if !c.enabled
-            || !client::IMPLEMENTATIONS.contains(&c.implementation.as_str())
-            || !client::supports(&c)
-        {
-            out.insert(
-                c.id,
-                ClientIndex {
-                    consulted: false,
-                    ok: false,
-                    by_hash: HashMap::new(),
-                },
-            );
-            continue;
-        }
-        let (ok, ts) = client::torrents(&c);
-        unreachable |= !ok;
-        out.insert(
-            c.id,
-            ClientIndex {
-                consulted: true,
-                ok,
-                by_hash: ts.into_iter().map(|t| (t.hash.to_lowercase(), t)).collect(),
-            },
-        );
-    }
-    Ok((out, unreachable))
-}
+// --- queue actions -------------------------------------------------------------------------
 
-fn live<'a>(row: &HistoryRow, idx: &'a HashMap<i64, ClientIndex>) -> Option<&'a client::Torrent> {
-    let i = idx.get(&row.download_client_id?)?;
-    i.by_hash.get(&row.torrent_hash.as_ref()?.to_lowercase())
-}
-
-fn unverifiable(row: &HistoryRow, idx: &HashMap<i64, ClientIndex>) -> bool {
-    if row.status == "importing" || row.status == "import_failed" {
-        return false;
-    }
-    let (Some(c), Some(_)) = (
-        row.download_client_id,
-        row.torrent_hash.as_ref().filter(|h| !h.is_empty()),
-    ) else {
-        return false;
+/// The history row a queue action names: `{ref}` is the id the snapshot reported (`poller`).
+fn target(r: &Request) -> Result<HistoryRow, R<Response>> {
+    let id = body(r)
+        .get("ref")
+        .and_then(Value::as_str)
+        .and_then(|s| s.parse::<i64>().ok());
+    let Some(id) = id else {
+        return Err(bad_param("ref"));
     };
-    idx.get(&c).is_none_or(|i| !i.consulted || !i.ok)
-}
-
-fn indexer_names() -> R<HashMap<i64, String>> {
-    Ok(crate::db::indexers::list_all()?
-        .into_iter()
-        .map(|ix| (ix.id, ix.name))
-        .collect())
-}
-
-fn base_item(row: &HistoryRow, names: &HashMap<i64, String>) -> Map<String, Value> {
-    let mut o = Map::new();
-    o.insert("id".into(), json!(row.id));
-    o.insert("title".into(), json!(row.source_title));
-    o.insert("sourceTitle".into(), json!(row.source_title));
-    o.insert("quality".into(), json!(row.quality));
-    o.insert("grabSource".into(), json!(row.grab_source));
-    o.insert("date".into(), json!(row.created_at));
-    o.insert("infoUrl".into(), json!(row.info_url));
-    o.insert(
-        "source".into(),
-        json!(
-            row.indexer_id
-                .and_then(|i| names.get(&i))
-                .cloned()
-                .unwrap_or_default()
-        ),
-    );
-    o.insert("mediaId".into(), json!(row.media_id));
-    o.insert("seasonId".into(), json!(row.season_id));
-    o.insert("episodeId".into(), json!(row.episode_id()));
-    o.insert("mediaType".into(), Value::Null);
-    o.insert("statusMessage".into(), Value::Null);
-    o.insert("replaceable".into(), json!(replaceable(row)));
-    o
-}
-
-fn size_or_null(s: Option<i64>) -> Value {
-    s.filter(|s| *s != 0).map_or(Value::Null, |s| json!(s))
-}
-
-fn count_or_null(n: Option<i64>) -> Value {
-    n.filter(|n| *n >= 0).map_or(Value::Null, |n| json!(n))
-}
-
-fn queue_item(
-    row: &HistoryRow,
-    idx: &HashMap<i64, ClientIndex>,
-    names: &HashMap<i64, String>,
-) -> Option<Map<String, Value>> {
-    let mut o = base_item(row, names);
-    let mut set = |vals: &[(&str, Value)]| {
-        for (k, v) in vals {
-            o.insert((*k).into(), v.clone());
-        }
-    };
-    if row.status == "import_failed" {
-        set(&[
-            ("state", json!("import_failed")),
-            ("statusMessage", json!(row.status_message)),
-            ("progress", json!(100)),
-            ("bytesPerSecond", Value::Null),
-            ("size", size_or_null(row.size)),
-            ("clientReachable", json!(true)),
-        ]);
-    } else if row.status == "importing" {
-        set(&[
-            ("state", json!("importing")),
-            ("progress", json!(100)),
-            ("bytesPerSecond", Value::Null),
-            ("size", Value::Null),
-            ("clientReachable", json!(true)),
-        ]);
-    } else if let Some(t) = live(row, idx) {
-        set(&[
-            ("state", json!(client::progress_state(&t.state))),
-            ("progress", num(t.progress * 100.0)),
-            ("bytesPerSecond", num(t.dlspeed)),
-            ("seeders", count_or_null(t.num_complete)),
-            ("leechers", count_or_null(t.num_incomplete)),
-            ("size", size_or_null(Some(t.size))),
-            ("clientReachable", json!(true)),
-        ]);
-    } else if row.download_client_id.is_none()
-        || row.torrent_hash.as_deref().is_none_or(str::is_empty)
-    {
-        // Never reached a client: that is what queued means.
-        set(&[
-            ("state", json!("queued")),
-            ("progress", Value::Null),
-            ("bytesPerSecond", Value::Null),
-            ("size", Value::Null),
-            ("clientReachable", json!(true)),
-        ]);
-    } else {
-        return None;
-    }
-    Some(o)
-}
-
-/// A film's title, or "Show - S01E02", from one id per row (within `media.resolve`'s 100).
-fn attach_labels(items: &mut [Map<String, Value>]) -> R<()> {
-    let key = |o: &Map<String, Value>| -> Option<(&'static str, u32)> {
-        for (field, kind) in [
-            ("episodeId", "item"),
-            ("seasonId", "group"),
-            ("mediaId", "media"),
-        ] {
-            if let Some(i) = o
-                .get(field)
-                .and_then(Value::as_u64)
-                .and_then(|i| u32::try_from(i).ok())
-            {
-                return Some((kind, i));
-            }
-        }
-        None
-    };
-    let keys: Vec<Option<(&str, u32)>> = items.iter().map(key).collect();
-    let mut q = ResolveQuery {
-        media_ids: vec![],
-        group_ids: vec![],
-        item_ids: vec![],
-    };
-    for (kind, i) in keys.iter().flatten() {
-        let list = match *kind {
-            "item" => &mut q.item_ids,
-            "group" => &mut q.group_ids,
-            _ => &mut q.media_ids,
-        };
-        if !list.contains(i) {
-            list.push(*i);
-        }
-    }
-    if q.media_ids.is_empty() && q.group_ids.is_empty() && q.item_ids.is_empty() {
-        return Ok(());
-    }
-    let resolved: HashMap<String, _> = host::media_resolve(&q)?.into_iter().collect();
-    for (item, k) in items.iter_mut().zip(keys) {
-        let Some(hit) = k.and_then(|(kind, i)| resolved.get(&format!("{kind}:{i}"))) else {
-            continue;
-        };
-        let (season, episode) = hit
-            .unit
-            .as_ref()
-            .map_or((None, None), |u| (u.group, u.number.map(|n| n as u32)));
-        let suffix = match (season, episode) {
-            (None, _) => String::new(),
-            (Some(s), None) => format!("S{s:02}"),
-            (Some(s), Some(e)) => format!("S{s:02}E{e:02}"),
-        };
-        let title = if suffix.is_empty() {
-            hit.title.clone()
-        } else {
-            format!("{} - {suffix}", hit.title)
-        };
-        item.insert("title".into(), json!(title));
-        item.insert("mediaType".into(), json!(hit.kind));
-    }
-    Ok(())
-}
-
-const HISTORY_STATUSES: [&str; 6] = [
-    "grabbed",
-    "importing",
-    "completed",
-    "failed",
-    "import_failed",
-    "warning",
-];
-
-fn queue(r: &Request) -> R<Response> {
-    let page = page_number(r.query("page"), 1);
-    let size = page_size(r.query("pageSize"));
-    let rows = history::by_statuses(&["grabbed", "importing", "import_failed"])?;
-    let (idx, unreachable) = index_clients()?;
-    let names = indexer_names()?;
-    let mut items: Vec<Map<String, Value>> = rows
-        .iter()
-        .filter_map(|row| queue_item(row, &idx, &names))
-        .collect();
-    items.sort_by_key(|o| std::cmp::Reverse(o["id"].as_i64().unwrap_or(0)));
-    let unverifiable = rows.iter().filter(|row| unverifiable(row, &idx)).count();
-    let total = items.len();
-    let start = ((page - 1) * size) as usize;
-    let mut data: Vec<Map<String, Value>> =
-        items.into_iter().skip(start).take(size as usize).collect();
-    attach_labels(&mut data)?;
-    ok(
-        json!({ "data": data, "total": total, "page": page, "pageSize": size, "clientsUnreachable": unreachable || unverifiable > 0 }),
-    )
-}
-
-/// A live row reads as its client reports it; `missing` when every client answered without it.
-fn display_status(row: &HistoryRow, t: Option<&client::Torrent>, unreachable: bool) -> String {
-    if row.status == "importing" {
-        return "importing".into();
-    }
-    if let Some(t) = t {
-        return client::progress_state(&t.state).into();
-    }
-    if !row.is_live() {
-        return row.status.clone();
-    }
-    if !unreachable && row.torrent_hash.as_deref().is_some_and(|h| !h.is_empty()) {
-        "missing".into()
-    } else {
-        row.status.clone()
+    match history::find(id) {
+        Ok(Some(row)) => Ok(row),
+        Ok(None) => Err(not_found(&id.to_string())),
+        Err(e) => Err(Err(e)),
     }
 }
 
-fn history_page(r: &Request) -> R<Response> {
-    let page = page_number(r.query("page"), 1);
-    let size = page_size(r.query("pageSize"));
-    let q = r.query("q").map(str::trim).filter(|q| !q.is_empty());
-    let status = r.query("status").filter(|s| HISTORY_STATUSES.contains(s));
-    let (rows, total) = history::page(size, (page - 1) * size, q, status)?;
-    let names = indexer_names()?;
-    let (idx, unreachable) = index_clients()?;
-    let mut data: Vec<Map<String, Value>> = rows
-        .iter()
-        .map(|row| {
-            let t = if row.is_live() { live(row, &idx) } else { None };
-            let state = match row.status.as_str() {
-                s @ ("importing" | "import_failed") => json!(s),
-                _ => t.map_or(Value::Null, |t| json!(client::progress_state(&t.state))),
-            };
-            let progress = if row.status == "importing" {
-                json!(100)
-            } else {
-                t.map_or(Value::Null, |t| num(t.progress * 100.0))
-            };
-            let mut o = Map::new();
-            o.insert("id".into(), json!(row.id));
-            o.insert("date".into(), json!(row.created_at));
-            o.insert("title".into(), json!(row.source_title));
-            o.insert("sourceTitle".into(), json!(row.source_title));
-            o.insert("quality".into(), json!(row.quality));
-            o.insert("size".into(), size_or_null(row.size));
-            o.insert("status".into(), json!(row.status));
-            o.insert(
-                "displayStatus".into(),
-                json!(display_status(row, t, unreachable)),
-            );
-            o.insert("statusMessage".into(), json!(row.status_message));
-            o.insert("grabSource".into(), json!(row.grab_source));
-            o.insert(
-                "source".into(),
-                json!(
-                    row.indexer_id
-                        .and_then(|i| names.get(&i))
-                        .cloned()
-                        .unwrap_or_default()
-                ),
-            );
-            o.insert("infoUrl".into(), json!(row.info_url));
-            o.insert("state".into(), state);
-            o.insert("progress".into(), progress);
-            o.insert("mediaId".into(), json!(row.media_id));
-            o.insert("seasonId".into(), json!(row.season_id));
-            o.insert("episodeId".into(), json!(row.episode_id()));
-            o.insert("mediaType".into(), Value::Null);
-            o.insert("replaceable".into(), json!(replaceable(row)));
-            o
-        })
-        .collect();
-    attach_labels(&mut data)?;
-    ok(json!({ "data": data, "total": total, "page": page, "pageSize": size }))
-}
-
-// --- replace -------------------------------------------------------------------------------
-
-/// Still downloading or failed; a finished or importing download is kept.
-fn replaceable(row: &HistoryRow) -> bool {
-    row.media_id.is_some()
-        && matches!(
-            row.status.as_str(),
-            "grabbed" | "warning" | "failed" | "import_failed"
-        )
-}
-
-/// The scope the release was searched at: a video item only within its season, since a movie's
-/// own item is the work; a book's or comic's item stands alone.
-struct Scope {
-    media: u32,
-    group: Option<u32>,
-    item: Option<u32>,
-    family: Option<Family>,
-}
-
-fn scope_of(row: &HistoryRow) -> Option<Scope> {
-    let id = |v: Option<i64>| v.and_then(|v| u32::try_from(v).ok());
-    let family = row.family.as_deref().and_then(grab::family_of);
-    let group = id(row.season_id);
-    let item =
-        id(row.item_id).filter(|_| group.is_some() || family.is_some_and(|f| f != Family::Video));
-    Some(Scope {
-        media: id(row.media_id)?,
-        group,
-        item,
-        family,
-    })
-}
-
-fn replace_row(r: &Request) -> Result<(HistoryRow, Scope), R<Response>> {
-    let id = id(r)?;
-    let row = match history::find(id.into()) {
-        Ok(Some(row)) => row,
-        Ok(None) => return Err(not_found(&id.to_string())),
-        Err(e) => return Err(Err(e)),
-    };
-    match scope_of(&row).filter(|_| replaceable(&row)) {
-        Some(scope) => Ok((row, scope)),
-        None => Err(Ok(err_body(
-            409,
-            "download.queue.errors.not_replaceable",
-            Some(&row.status),
-        ))),
-    }
-}
-
-/// Blocklists the release, deletes its torrent and files, and retires the row.
-fn retire_replaced(row: &HistoryRow) -> R<()> {
-    poller::auto_blocklist(row, "Replaced by a user");
-    let (idx, _) = index_clients()?;
-    if let (Some(client), Some(_)) = (row.download_client_id, live(row, &idx))
-        && let Some(hash) = row.torrent_hash.as_deref()
-    {
-        client::delete(&client::drivable(client)?, hash, true)?;
-    }
-    history::mark_failed(row.id, "download.queue.replaced")?;
-    settle(row, "absent");
-    Ok(())
-}
-
-fn replace_releases(r: &Request) -> R<Response> {
-    let (row, s) = match replace_row(r) {
-        Ok(v) => v,
-        Err(resp) => return resp,
-    };
-    let releases = grab::search_releases(
-        s.media,
-        s.group,
-        s.item,
-        s.family,
-        row.language.as_deref(),
-        r.query("q"),
-        stream_of(r).as_ref(),
-    )?;
-    ok(releases.iter().map(to_wire).collect::<Vec<_>>())
-}
-
-/// A picked release is grabbed before the old one goes, so a failed grab loses nothing; an
-/// auto-pick retires the old one first, or the search would pick it again.
-fn replace(r: &Request) -> R<Response> {
-    let (row, s) = match replace_row(r) {
-        Ok(v) => v,
-        Err(resp) => return resp,
-    };
-    let grab = |manual| {
-        grab::grab_release(
-            s.media,
-            s.group,
-            s.item,
-            s.family,
-            row.language.as_deref(),
-            manual,
-        )
-    };
-    let Some(manual) = manual_of(&body(r), false) else {
-        retire_replaced(&row)?;
-        return ok(grab(None)?);
-    };
-    let out = grab(Some(manual))?;
-    let same = |h: &str| {
-        out["torrentHash"]
-            .as_str()
-            .is_some_and(|n| n.eq_ignore_ascii_case(h))
-    };
-    if row.torrent_hash.as_deref().is_some_and(same) {
-        return Ok(err_body(409, "download.queue.errors.same_release", None));
-    }
-    retire_replaced(&row)?;
-    ok(out)
-}
-
-/// Only a `grabbed` row can be controlled: an importing one's files are being moved.
-fn controllable(r: &Request) -> Result<HistoryRow, R<Response>> {
-    let id = id(r)?;
-    let row = match history::find(id.into()) {
-        Ok(Some(row)) => row,
-        Ok(None) => return Err(not_found(&id.to_string())),
-        Err(e) => return Err(Err(e)),
-    };
-    if row.status != "grabbed" {
+/// Only a row in one of `states` can be acted on: an importing one's files are being moved.
+fn controllable(r: &Request, states: &[&str]) -> Result<HistoryRow, R<Response>> {
+    let row = target(r)?;
+    if !states.contains(&row.status.as_str()) {
         return Err(Ok(err_body(
             409,
             "download.queue.errors.not_controllable",
@@ -944,12 +524,12 @@ fn controllable(r: &Request) -> Result<HistoryRow, R<Response>> {
 
 fn settle(row: &HistoryRow, expect: poller::Outcome) {
     if let Err(e) = poller::settle_and_publish(row, expect) {
-        warn!("progress publish failed: {e}");
+        warn!("queue publish failed: {e}");
     }
 }
 
 fn control(r: &Request, pause: bool) -> R<Response> {
-    let row = match controllable(r) {
+    let row = match controllable(r, &["grabbed"]) {
         Ok(row) => row,
         Err(resp) => return resp,
     };
@@ -981,31 +561,30 @@ fn resume(r: &Request) -> R<Response> {
     control(r, false)
 }
 
-/// Removes the torrent when its client can be asked, and retires the row either way.
+/// Removes the torrent and its files when its client can be asked, retires the row either way, and
+/// blocklists the release when the core says so.
 fn remove_queued(r: &Request) -> R<Response> {
-    let row = match controllable(r) {
+    let row = match controllable(r, &["grabbed", "import_failed"]) {
         Ok(row) => row,
         Err(resp) => return resp,
     };
-    let (idx, _) = index_clients()?;
-    let consulted = row
-        .download_client_id
-        .and_then(|c| idx.get(&c))
-        .is_some_and(|i| i.consulted);
+    let consulted = match row.download_client_id {
+        Some(c) => client_usable(c)?,
+        None => false,
+    };
     match (
         consulted,
         row.download_client_id,
         row.torrent_hash.as_deref().filter(|h| !h.is_empty()),
     ) {
         (true, Some(client), Some(hash)) => {
-            client::delete(
-                &client::drivable(client)?,
-                hash,
-                r.query("deleteFiles") == Some("true"),
-            )?;
+            client::delete(&client::drivable(client)?, hash, true)?;
             history::mark_failed(row.id, "download.queue.removed_by_user")?;
         }
         _ => history::mark_failed(row.id, "download.queue.retired_unverifiable")?,
+    }
+    if body(r).get("blocklist") == Some(&json!(true)) {
+        poller::auto_blocklist(&row, "Blocklisted when removed from the queue");
     }
     settle(&row, "absent");
     ok(json!({}))
@@ -1013,7 +592,10 @@ fn remove_queued(r: &Request) -> R<Response> {
 
 /// Hands a refused import back to the next `ImportCompleted` tick.
 fn retry_import(r: &Request) -> R<Response> {
-    let id = need_id!(r);
+    let id = match target(r) {
+        Ok(row) => row.id,
+        Err(resp) => return resp,
+    };
     if !history::retry_import(id)? {
         return match history::find(id)? {
             None => not_found(&id.to_string()),
@@ -1028,30 +610,6 @@ fn retry_import(r: &Request) -> R<Response> {
         warn!("queue-changed publish failed: {}", e.message);
     }
     ok(json!({}))
-}
-
-/// Refused while a client still holds the torrent: the row is its only link to the media.
-fn delete_history(r: &Request) -> R<Response> {
-    let id = need_id!(r);
-    let Some(row) = history::find(id)? else {
-        return not_found(&id.to_string());
-    };
-    if row.torrent_hash.as_deref().is_some_and(|h| !h.is_empty()) {
-        let (idx, _) = index_clients()?;
-        if live(&row, &idx).is_some() {
-            return Ok(err_body(
-                409,
-                "download.config.history.errors.still_running",
-                Some(&row.status),
-            ));
-        }
-    }
-    history::remove(id)?;
-    ok(json!({}))
-}
-
-fn clear_history(_: &Request) -> R<Response> {
-    ok(json!({ "removed": history::clear_terminal()? }))
 }
 
 // --- implementations -----------------------------------------------------------------------
@@ -1160,8 +718,6 @@ pub fn table() -> Vec<(&'static str, &'static str, Handler)> {
         ("POST", "/:id/groups/:groupId/grab", h!(grab_release)),
         ("GET", "/:id/items/:itemId/releases", h!(search_releases)),
         ("POST", "/:id/items/:itemId/grab", h!(grab_release)),
-        ("GET", "/queue", h!(queue)),
-        ("GET", "/history", h!(history_page)),
         ("GET", "/indexers", h!(list_indexers)),
         ("POST", "/indexers", h!(create_indexer)),
         ("POST", "/indexers/test-connection", h!(test_indexer)),
@@ -1196,17 +752,13 @@ pub fn table() -> Vec<(&'static str, &'static str, Handler)> {
         ),
         ("PUT", "/download-clients/:id", h!(update_client)),
         ("DELETE", "/download-clients/:id", h!(delete_client)),
-        ("POST", "/queue/:id/pause", h!(pause)),
-        ("POST", "/queue/:id/resume", h!(resume)),
-        ("DELETE", "/queue/:id", h!(remove_queued)),
-        ("POST", "/queue/:id/retry-import", h!(retry_import)),
-        ("GET", "/queue/:id/replace/releases", h!(replace_releases)),
-        ("POST", "/queue/:id/replace", h!(replace)),
-        ("DELETE", "/history/all", h!(clear_history)),
-        ("DELETE", "/history/:id", h!(delete_history)),
         ("GET", "/blocklist", h!(list_blocklist)),
         ("DELETE", "/blocklist/all", h!(clear_blocklist)),
         ("DELETE", "/blocklist/:id", h!(remove_blocklist)),
+        ("POST", "/queue/pause", h!(pause)),
+        ("POST", "/queue/resume", h!(resume)),
+        ("POST", "/queue/remove", h!(remove_queued)),
+        ("POST", "/queue/retry-import", h!(retry_import)),
     ]
 }
 
@@ -1219,59 +771,6 @@ pub static ROUTER: LazyLock<Router> = LazyLock::new(|| {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn row(status: &str, extra: Value) -> HistoryRow {
-        let mut v = json!({
-            "id": 1, "sourceTitle": "t", "quality": "q", "status": status, "grabSource": "auto",
-            "createdAt": "", "updatedAt": "", "mediaId": 7,
-        });
-        v.as_object_mut()
-            .unwrap()
-            .extend(extra.as_object().unwrap().clone());
-        serde_json::from_value(v).unwrap()
-    }
-
-    #[test]
-    fn replace_offered_while_downloading_or_failed() {
-        for s in ["grabbed", "warning", "failed", "import_failed"] {
-            assert!(replaceable(&row(s, json!({}))), "{s}");
-        }
-        for s in ["importing", "completed"] {
-            assert!(!replaceable(&row(s, json!({}))), "{s}");
-        }
-        assert!(!replaceable(&row("grabbed", json!({ "mediaId": null }))));
-    }
-
-    #[test]
-    fn replace_searches_the_grabbed_scope() {
-        let scope = |extra| {
-            let s = scope_of(&row("grabbed", extra)).unwrap();
-            (s.group, s.item)
-        };
-        assert_eq!(
-            scope(json!({ "itemId": 3 })),
-            (None, None),
-            "a movie's own item"
-        );
-        assert_eq!(
-            scope(json!({ "itemId": 3, "family": "video" })),
-            (None, None)
-        );
-        assert_eq!(
-            scope(json!({ "seasonId": 2 })),
-            (Some(2), None),
-            "season pack"
-        );
-        assert_eq!(
-            scope(json!({ "seasonId": 2, "itemId": 3 })),
-            (Some(2), Some(3))
-        );
-        assert_eq!(
-            scope(json!({ "itemId": 3, "family": "image" })),
-            (None, Some(3)),
-            "a comic issue"
-        );
-    }
 
     #[test]
     fn page_parsing() {

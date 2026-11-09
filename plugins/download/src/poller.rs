@@ -1,18 +1,17 @@
-//! `ImportCompleted`, `CleanStalled`, `CleanSeeded` and the progress sets they publish.
+//! `ImportCompleted`, `CleanStalled`, `CleanSeeded` and the queue snapshot they report to the core.
 
 use crate::client::{self, Torrent, TorrentFile};
 use crate::config;
-use crate::db::{
-    DownloadClientRow, HistoryRow, blocklist, clients, history, indexers, stalled, state,
-};
+use crate::db::{DownloadClientRow, HistoryRow, blocklist, clients, history, indexers, stalled};
 use crate::error::{Error, R};
 use crate::grab::{
     comic_item, coverage_columns, family_of, family_str, group_item_ids, identify, title_formats,
 };
 use crate::util::{decode_html_entities, js_number, now_ms, parse_date_ms};
 use fliks_plugin_sdk::bindings::fliks::plugin::types::{
-    AcquisitionEvent, DownloadProgress, DownloadState, Failed, Family, Imported, IngestRequest,
-    IngestResult, ResolveQuery, SkipReason, StalledRemoved, TransferMode, UnitRef, WantDecision,
+    AcquisitionEvent, Failed, Family, GrabMethod, Imported, IngestRequest, IngestResult,
+    QueueEntry, QueueState, ResolveQuery, SkipReason, StalledRemoved, TransferMode, UnitRef,
+    WantDecision,
 };
 use fliks_plugin_sdk::host;
 use regex::Regex;
@@ -193,13 +192,13 @@ fn match_and_heal(t: &Torrent, rows: &mut [HistoryRow]) -> R<Option<HistoryRow>>
 
 // --- progress ------------------------------------------------------------------------------
 
-fn download_state(s: &str) -> DownloadState {
+fn queue_state(s: &str) -> QueueState {
     match s {
-        "queued" => DownloadState::Queued,
-        "stalled" => DownloadState::Stalled,
-        "paused" => DownloadState::Paused,
-        "importing" => DownloadState::Importing,
-        _ => DownloadState::Active,
+        "queued" => QueueState::Queued,
+        "stalled" => QueueState::Stalled,
+        "paused" => QueueState::Paused,
+        "importing" => QueueState::Importing,
+        _ => QueueState::Active,
     }
 }
 
@@ -247,113 +246,133 @@ fn dedup(it: impl Iterator<Item = u32>) -> Vec<u32> {
     it.filter(|x| seen.insert(*x)).collect()
 }
 
-/// Each media's downloads, the media in first-seen order, and the in-flight rows.
-struct Sets {
-    by_media: HashMap<i64, Vec<DownloadProgress>>,
-    order: Vec<i64>,
-    rows: Vec<HistoryRow>,
+/// How long a finished row stays in the snapshot; the core closes it once, however often it is listed.
+const FINISHED_WINDOW_MIN: i64 = 10;
+/// A row retired on purpose leaves no history entry: the core records it as removed.
+const WITHDRAWN: [&str; 2] = [
+    "download.queue.removed_by_user",
+    "download.queue.retired_unverifiable",
+];
+
+fn method_of(s: &str) -> GrabMethod {
+    match s {
+        "manual" => GrabMethod::Manual,
+        "rss" => GrabMethod::Rss,
+        _ => GrabMethod::Auto,
+    }
 }
 
-fn build_sets(all: &[Held]) -> R<Sets> {
-    let mut rows = history::by_statuses(&["grabbed", "importing"])?;
-    let importing: HashSet<String> = rows
-        .iter()
-        .filter(|r| r.status == "importing")
-        .filter_map(|r| r.torrent_hash.as_ref())
-        .map(|h| h.to_lowercase())
-        .collect();
-    let mut matched: Vec<(&Torrent, HistoryRow)> = vec![];
-    for h in all
-        .iter()
-        .filter(|h| h.t.progress < 1.0 || importing.contains(&h.t.hash.to_lowercase()))
-    {
-        if let Some(row) = match_and_heal(&h.t, &mut rows)?
-            && row.media_id.is_some_and(|m| m != 0)
-        {
-            matched.push((&h.t, row));
-        }
-    }
-    let units = row_units(&matched.iter().map(|(_, r)| r).collect::<Vec<_>>());
-    let mut by_media: HashMap<i64, Vec<DownloadProgress>> = HashMap::new();
-    let mut order = vec![];
-    for (t, row) in &matched {
-        let media = row.media_id.unwrap_or_default();
-        let unit = units.get(&row.id).cloned();
-        let state = if row.status == "importing" {
-            "importing"
+fn queue_entry(
+    row: &HistoryRow,
+    unit: Option<UnitRef>,
+    names: &HashMap<i64, String>,
+    state: QueueState,
+    t: Option<&Torrent>,
+) -> Option<QueueEntry> {
+    let finished = matches!(state, QueueState::Imported | QueueState::Failed);
+    Some(QueueEntry {
+        ref_: row.id.to_string(),
+        media_id: u32::try_from(row.media_id.filter(|m| *m != 0)?).ok()?,
+        unit,
+        source_id: row.indexer_id.map_or_else(|| "0".into(), |i| i.to_string()),
+        source_name: row
+            .indexer_id
+            .and_then(|i| names.get(&i))
+            .cloned()
+            .unwrap_or_else(|| "Download".into()),
+        title: row.source_title.clone(),
+        quality: row.quality.clone(),
+        method: method_of(&row.grab_source),
+        info_url: row.info_url.clone(),
+        state,
+        progress: if finished || matches!(state, QueueState::ImportFailed | QueueState::Importing) {
+            1.0
         } else {
-            client::progress_state(&t.state)
-        };
-        if !by_media.contains_key(&media) {
-            order.push(media);
-        }
-        by_media.entry(media).or_default().push(DownloadProgress {
-            ref_: t.hash.clone(),
-            unit,
-            progress: t.progress,
-            bytes_per_second: Some(t.dlspeed),
-            eta_seconds: (t.eta > 0.0 && t.eta < 8_640_000.0).then_some(t.eta),
-            state: download_state(state),
-        });
-    }
-    Ok(Sets {
-        by_media,
-        order,
-        rows,
+            t.map_or(0.0, |t| t.progress)
+        },
+        size_bytes: t
+            .map(|t| t.size)
+            .or(row.size)
+            .and_then(|n| u64::try_from(n).ok())
+            .filter(|n| *n > 0),
+        bytes_per_second: t.map(|t| t.dlspeed),
+        eta_seconds: t.and_then(|t| (t.eta > 0.0 && t.eta < 8_640_000.0).then_some(t.eta)),
+        error: matches!(state, QueueState::ImportFailed | QueueState::Failed)
+            .then(|| row.status_message.clone())
+            .flatten(),
     })
 }
 
-fn publish_set(media: i64, downloads: &[DownloadProgress]) {
-    if let Err(e) = host::progress_set(media as u32, downloads) {
-        warn!("Import: progress publish failed: {}", e.message);
-    }
-}
-
-fn publish_one(media: i64, all: &[Held], all_ok: bool) -> R<()> {
-    if !all_ok {
-        return Ok(());
-    }
-    let by_media = build_sets(all)?.by_media;
-    publish_set(media, by_media.get(&media).map_or(&[][..], Vec::as_slice));
-    Ok(())
-}
-
-/// Every media's complete set; one that had downloads last tick and has none is stated empty.
-/// After a start the rows stand in for that memory (`progressResync`).
-fn emit_progress(all: &[Held], all_ok: bool) -> R<()> {
-    if !all_ok {
-        return Ok(());
-    }
-    let Sets {
-        mut by_media,
-        mut order,
-        rows,
-    } = build_sets(all)?;
-    let resync = state::get("progressResync")?.is_some_and(|v| v == json!(true));
-    let owed: Vec<i64> = if resync {
-        rows.iter().filter_map(|r| r.media_id).collect()
-    } else {
-        state::get("reportedMediaIds")?
-            .and_then(|v| serde_json::from_value::<Vec<i64>>(v).ok())
-            .unwrap_or_default()
-    };
-    for m in owed {
-        if let std::collections::hash_map::Entry::Vacant(e) = by_media.entry(m) {
-            e.insert(vec![]);
-            order.push(m);
+/// The plugin's transfers: every open row with what its client reports (a row the client no longer
+/// holds is left out), and the rows that finished lately.
+fn build_queue(all: &[Held]) -> R<Vec<QueueEntry>> {
+    let mut rows = history::by_statuses(&["grabbed", "importing", "import_failed"])?;
+    let mut live: HashMap<i64, &Torrent> = HashMap::new();
+    for h in all {
+        if let Some(row) = match_and_heal(&h.t, &mut rows)? {
+            live.insert(row.id, &h.t);
         }
     }
-    let reported: Vec<i64> = order
+    let finished = history::recent_terminal(FINISHED_WINDOW_MIN)?;
+    let listed: Vec<&HistoryRow> = rows
         .iter()
-        .copied()
-        .filter(|m| by_media.get(m).is_some_and(|l| !l.is_empty()))
+        .chain(finished.iter())
+        .filter(|r| r.media_id.is_some_and(|m| m != 0))
         .collect();
-    state::set("reportedMediaIds", &json!(reported))?;
-    if resync {
-        state::set("progressResync", &json!(false))?;
+    let units = row_units(&listed);
+    let names: HashMap<i64, String> = indexers::list_all()?
+        .into_iter()
+        .map(|ix| (ix.id, ix.name))
+        .collect();
+    let mut out = vec![];
+    for row in &rows {
+        let t = live.get(&row.id).copied();
+        let state = match row.status.as_str() {
+            "importing" => QueueState::Importing,
+            "import_failed" => QueueState::ImportFailed,
+            _ if t.is_some() => queue_state(client::progress_state(&t.expect("live").state)),
+            // Never reached a client: that is what queued means.
+            _ if row.torrent_hash.as_deref().is_none_or(str::is_empty) => QueueState::Queued,
+            _ => continue,
+        };
+        out.extend(queue_entry(
+            row,
+            units.get(&row.id).cloned(),
+            &names,
+            state,
+            t,
+        ));
     }
-    for m in order {
-        publish_set(m, &by_media[&m]);
+    for row in &finished {
+        let state = if row.status == "completed" {
+            QueueState::Imported
+        } else if row
+            .status_message
+            .as_deref()
+            .is_some_and(|m| WITHDRAWN.contains(&m))
+        {
+            continue;
+        } else {
+            QueueState::Failed
+        };
+        out.extend(queue_entry(
+            row,
+            units.get(&row.id).cloned(),
+            &names,
+            state,
+            None,
+        ));
+    }
+    Ok(out)
+}
+
+/// States the whole queue to the core; nothing when a client did not answer, so no row looks gone.
+fn publish_queue(all: &[Held], all_ok: bool) -> R<()> {
+    if !all_ok {
+        return Ok(());
+    }
+    if let Err(e) = host::queue_set(&build_queue(all)?) {
+        warn!("Import: queue publish failed: {}", e.message);
     }
     Ok(())
 }
@@ -371,16 +390,16 @@ fn reached(all: &[Held], hash: &str, expect: Outcome) -> bool {
     if expect == "paused" { paused } else { !paused }
 }
 
-/// Waits (up to 4 s) for the client to reflect a control, then states that media's set.
+/// Waits (up to 4 s) for the client to reflect a control, then states the queue.
 pub fn settle_and_publish(row: &HistoryRow, expect: Outcome) -> R<()> {
-    let (Some(media), Some(hash)) = (row.media_id, row.torrent_hash.as_deref()) else {
+    let Some(hash) = row.torrent_hash.as_deref() else {
         return Ok(());
     };
     let deadline = Instant::now() + Duration::from_secs(4);
     loop {
         let (all, ok) = fetch_all()?;
         if reached(&all, hash, expect) || Instant::now() >= deadline {
-            return publish_one(media, &all, ok);
+            return publish_queue(&all, ok);
         }
         std::thread::sleep(Duration::from_millis(300));
     }
@@ -431,7 +450,7 @@ pub fn poll() -> R<()> {
     if all_ok {
         reconcile(&all, &grabbed, &importing)?;
     }
-    emit_progress(&all, all_ok)?;
+    publish_queue(&all, all_ok)?;
 
     let completed: Vec<&Held> = all
         .iter()
@@ -470,9 +489,7 @@ pub fn poll() -> R<()> {
         };
         let run = || {
             history::mark_importing(row.id)?;
-            if let Some(m) = row.media_id {
-                publish_one(m, &all, all_ok)?;
-            }
+            publish_queue(&all, all_ok)?;
             process_one(&row, &held.t, client)
         };
         match run() {
