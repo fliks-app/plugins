@@ -3,8 +3,8 @@ use crate::host::{self, Ingest};
 use crate::{Fail, store};
 use std::path::Path;
 
-/// The attempt the host drops a scheduled call after is the 20th.
-const LAST_ATTEMPT: u32 = 19;
+/// The host runs attempts 1..=20 and drops the call after the 20th.
+pub const LAST_ATTEMPT: u32 = 20;
 
 pub trait Library {
     fn ingest(&self, req: &Ingest, paths: Vec<String>) -> Result<(), Fail>;
@@ -116,6 +116,8 @@ mod tests {
         assert!(settle(d.path(), "b", 1, Err(Fail::Retry("x".into()))).is_err());
         assert!(d.path().join("b").exists());
         assert!(settle(d.path(), "b", 19, Err(Fail::Retry("x".into()))).is_err());
+        assert!(d.path().join("b").exists());
+        assert!(settle(d.path(), "b", LAST_ATTEMPT, Err(Fail::Retry("x".into()))).is_err());
         assert!(!d.path().join("b").exists());
         let d = seeded();
         assert_eq!(
