@@ -255,11 +255,17 @@ fn template_matches_the_published_manifest() {
         .replace("\"season.", "\"group.");
     let mut old: Value = serde_json::from_str(&renamed).unwrap();
     let mut new: Value = serde_json::from_str(include_str!("../plugin.template.json")).unwrap();
-    let contributions = new["ui"]["contributions"].as_array_mut().unwrap();
-    let items: Vec<Value> = contributions
-        .extract_if(.., |c| c["slot"] == "media.item.actions")
-        .collect();
-    assert_eq!(items.len(), 2);
+    // The grab buttons are core-owned since the provider contract: only settings and nav remain.
+    let buttons = |c: &Value| {
+        ["media.actions", "media.group.actions", "media.item.actions"]
+            .contains(&c["slot"].as_str().unwrap_or_default())
+    };
+    let dropped = |v: &mut Value| {
+        let all = v["ui"]["contributions"].as_array_mut().unwrap();
+        all.extract_if(.., |c| buttons(c)).count()
+    };
+    assert_eq!(dropped(&mut new), 0);
+    assert_eq!(dropped(&mut old), 3);
     assert_eq!(
         (
             &new["pluginApi"],
@@ -368,6 +374,9 @@ fn template_matches_the_published_manifest() {
     assert_eq!(new, old);
     for (lang, strings) in old_i18n.as_object().unwrap() {
         for (k, v) in strings.as_object().unwrap() {
+            if k.starts_with("download.media.") || k.starts_with("download.group.") {
+                continue;
+            }
             assert_eq!(&new_i18n[lang][k], v, "{lang} {k}");
         }
     }
