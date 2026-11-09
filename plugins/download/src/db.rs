@@ -883,48 +883,16 @@ pub mod history {
         )
     }
 
-    /// Newest first; page and count share one WHERE.
-    pub fn page(
-        limit: i64,
-        offset: i64,
-        q: Option<&str>,
-        status: Option<&str>,
-    ) -> R<(Vec<HistoryRow>, i64)> {
-        let mut conds = vec![];
-        let mut params = vec![];
-        if let Some(q) = q {
-            params.push(text(q));
-            conds.push(format!(
-                r#"strpos(lower("sourceTitle"), lower(${})) > 0"#,
-                params.len()
-            ));
-        }
-        if let Some(s) = status {
-            params.push(text(s));
-            conds.push(format!(r#""status" = ${}"#, params.len()));
-        }
-        let wh = if conds.is_empty() {
-            String::new()
-        } else {
-            format!("WHERE {}", conds.join(" AND "))
-        };
-        let n = params.len();
-        let count: Option<Count> = first(
-            &format!(r#"SELECT COUNT(*)::int AS "count" FROM "download_history" {wh}"#),
-            &params,
-        )?;
-        params.push(int(limit));
-        params.push(int(offset));
-        let rows = query(
+    /// The rows that finished (or failed) within the last `minutes`.
+    pub fn recent_terminal(minutes: i64) -> R<Vec<HistoryRow>> {
+        query(
             &format!(
-                r#"SELECT {COLUMNS} FROM "download_history" {wh}
-          ORDER BY "createdAt" DESC, "id" DESC LIMIT ${} OFFSET ${}"#,
-                n + 1,
-                n + 2
+                r#"SELECT {COLUMNS} FROM "download_history"
+        WHERE "status" IN ('completed', 'failed')
+          AND "updatedAt" > now() - make_interval(mins => $1::int)"#
             ),
-            &params,
-        )?;
-        Ok((rows, count.map_or(0, |c| c.count)))
+            &[int(minutes)],
+        )
     }
 
     pub fn completed_by_hashes(hashes: &[String]) -> R<Vec<HistoryRow>> {
@@ -943,21 +911,6 @@ pub mod history {
         first(
             &format!(r#"SELECT {COLUMNS} FROM "download_history" WHERE "id" = $1"#),
             &[int(id)],
-        )
-    }
-
-    pub fn remove(id: i64) -> R<()> {
-        exec(
-            r#"DELETE FROM "download_history" WHERE "id" = $1"#,
-            &[int(id)],
-        )
-        .map(drop)
-    }
-
-    pub fn clear_terminal() -> R<u64> {
-        exec(
-            r#"DELETE FROM "download_history" WHERE "status" IN ('completed', 'failed', 'import_failed', 'warning')"#,
-            &[],
         )
     }
 

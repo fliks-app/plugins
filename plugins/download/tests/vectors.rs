@@ -275,7 +275,7 @@ fn template_matches_the_published_manifest() {
         ),
         (
             &json!(3),
-            &json!(">=6.0.0 <7.0.0"),
+            &json!(">=6.1.0 <7.0.0"),
             &json!("wasm"),
             &json!({ "internal": true })
         )
@@ -335,27 +335,40 @@ fn template_matches_the_published_manifest() {
         }))
     );
     old["ui"].as_object_mut().unwrap().remove("releasePicker");
-    // Added since: the queue's seeders column, and replacing a release from the queue and history.
-    let replace_routes: Vec<Value> = new["routes"]
+    // The queue and history UI moved to the core: its routes, nav entries, pages and permission go,
+    // and the plugin states its four actions.
+    let actions: Vec<Value> = new["routes"]
         .as_array_mut()
         .unwrap()
         .extract_if(.., |r| {
-            r["path"]
-                .as_str()
-                .is_some_and(|p| p.starts_with("/queue/:id/replace"))
+            r["path"].as_str().is_some_and(|p| p.starts_with("/queue/"))
         })
         .collect();
-    assert_eq!(replace_routes.len(), 2);
-    let (mut peers, mut submenus) = (0, 0);
-    for page in new["ui"]["configPages"].as_array_mut().unwrap() {
-        if let Some(cols) = page.get_mut("columns").and_then(Value::as_array_mut) {
-            peers += cols.extract_if(.., |c| c["format"] == "peers").count();
-        }
-        if let Some(acts) = page.get_mut("rowActions").and_then(Value::as_array_mut) {
-            submenus += acts.extract_if(.., |a| a["kind"] == "submenu").count();
-        }
-    }
-    assert_eq!((peers, submenus), (1, 2));
+    assert_eq!(actions.len(), 4);
+    let queue_ui = |p: &str| p.starts_with("/queue") || p.starts_with("/history");
+    old["routes"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|r| !queue_ui(r["path"].as_str().unwrap()));
+    old["ui"]["contributions"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|c| {
+            ![
+                "fliks-download.nav.queue",
+                "fliks-download.settings.history",
+            ]
+            .contains(&c["id"].as_str().unwrap())
+        });
+    old["ui"]["configPages"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|p| !["queue", "history"].contains(&p["id"].as_str().unwrap()));
+    old["permissions"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|p| p != "queue");
+    new.as_object_mut().unwrap().remove("acquisition");
     // Removed since: the core runs the automatic search, so no SearchMissing job and no immediate-search toggle.
     old["jobs"]
         .as_array_mut()
@@ -385,6 +398,9 @@ fn template_matches_the_published_manifest() {
     for (lang, strings) in old_i18n.as_object().unwrap() {
         for (k, v) in strings.as_object().unwrap() {
             let removed = k.starts_with("download.config.general.immediate_search")
+                || k.starts_with("download.config.queue.")
+                || k.starts_with("download.config.history.")
+                || k.starts_with("download.status.")
                 || k == "download.jobs.search_missing";
             if removed || k.starts_with("download.media.") || k.starts_with("download.group.") {
                 continue;
@@ -434,7 +450,7 @@ fn routes_equal_the_manifest_both_ways() {
         .into_iter()
         .map(|(m, p, _)| (m.to_owned(), p.to_owned()))
         .collect();
-    assert_eq!(table.len(), 41);
+    assert_eq!(table.len(), 35);
     assert_eq!(table, manifest);
 }
 
@@ -769,8 +785,14 @@ fn resolve(method: &str, path: &str) -> Option<Map<String, Value>> {
 
 #[test]
 fn route_match() {
+    // The queue and history routes moved to the core: their frozen matches no longer apply.
+    let moved = |c: &Value| {
+        let p = c["path"].as_str().unwrap();
+        (p.starts_with("/queue") || p.starts_with("/history")) && !c["output"].is_null()
+    };
     let different: Vec<String> = cases(&golden(), "routeMatch")
         .iter()
+        .filter(|c| !moved(c))
         .filter_map(|c| {
             let got = resolve(c["method"].as_str().unwrap(), c["path"].as_str().unwrap())
                 .map_or(Value::Null, Value::Object);
@@ -778,8 +800,8 @@ fn route_match() {
         })
         .collect();
     // DL7: the host's matcher ignores case and a trailing `/`, and a capture is never empty.
-    assert_eq!(different.len(), 4, "{}", different.join("\n"));
-    for path in ["/1/Releases", "/1/releases", "/queue/", "//releases"] {
+    assert_eq!(different.len(), 3, "{}", different.join("\n"));
+    for path in ["/1/Releases", "/1/releases", "//releases"] {
         assert!(different.iter().any(|d| d.contains(path)), "{path}");
     }
 }

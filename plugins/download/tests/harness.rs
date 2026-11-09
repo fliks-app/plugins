@@ -20,6 +20,8 @@ const HASH: &str = "0123456789abcdef0123456789abcdef01234567";
 fn setup() -> Setup {
     let mut s = Setup::from_crate(env!("CARGO_MANIFEST_DIR"));
     s.network_internal = true;
+    // The harness core reports 6.0.0; the manifest's real range is pinned by the vectors test.
+    s.template["fliks"] = json!(">=6.0.0 <7.0.0");
     s
 }
 
@@ -83,6 +85,23 @@ async fn status_of(c: &mut PgConnection, id: i64) -> (String, Option<String>) {
     )
     .bind(id as i32)
     .fetch_one(c)
+    .await
+    .unwrap()
+}
+
+/// A queue action on the history row `row`, as the core's queue routes send it.
+async fn act(h: &Harness, action: &str, row: i64) -> HttpResponse {
+    let b = json!({ "ref": row.to_string() });
+    h.proxy("POST", &format!("/queue/{action}"), Some(&b)).await
+}
+
+/// What the core holds of this plugin's transfers: (ref, state, progress), oldest first.
+async fn queue_rows(h: &Harness) -> Vec<(String, String, f64)> {
+    sqlx::query_as(
+        r#"SELECT "ref", state, progress FROM acquisition_queue WHERE "pluginId" = $1 ORDER BY id"#,
+    )
+    .bind(&h.id)
+    .fetch_all(&h.pool)
     .await
     .unwrap()
 }
@@ -403,14 +422,7 @@ async fn start_migrates_and_routes_answer() {
         assert!(body(&r)[0]["fields"].is_array(), "{p}");
         assert_eq!(body(&h.proxy("GET", p, None).await), json!([]), "{p}");
     }
-    assert_eq!(
-        body(&h.proxy("GET", "/queue", None).await),
-        json!({ "data": [], "total": 0, "page": 1, "pageSize": 25, "clientsUnreachable": false })
-    );
-    assert_eq!(
-        body(&h.proxy("GET", "/history?page=2&pageSize=500", None).await),
-        json!({ "data": [], "total": 0, "page": 2, "pageSize": 100 })
-    );
+    assert!(queue_rows(&h).await.is_empty());
     assert_eq!(
         body(&h.proxy("GET", "/blocklist", None).await),
         json!({ "data": [], "total": 0, "page": 1, "pageSize": 25 })
@@ -466,8 +478,7 @@ async fn start_migrates_and_routes_answer() {
             json!({ "error": { "key": "download.http.errors.not_found", "detail": "999" } })
         )
     );
-    let r = h.proxy("POST", "/queue/999/retry-import", None).await;
-    assert_eq!(r.status, 404);
+    assert_eq!(act(&h, "retry-import", 999).await.status, 404);
     let r = h.proxy("GET", "/indexers/7/stats", None).await;
     assert_eq!((r.status, body(&r)), (200, json!([])));
 
@@ -748,12 +759,6 @@ async fn import_leases_rearm_only_expired_rows() {
         statuses(&mut plugin_db(&h).await).await == ["grabbed", "grabbed", "grabbed"]
     })
     .await;
-    let resync: Value =
-        sqlx::query_scalar(r#"SELECT "value" FROM "poller_state" WHERE "key" = 'progressResync'"#)
-            .fetch_one(&mut db)
-            .await
-            .unwrap();
-    assert_eq!(resync, json!(true));
     h.finish().await;
 }
 
@@ -1173,7 +1178,7 @@ async fn a_round_out_of_time_drops_its_requests_without_pushing_the_spacing() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn a_manual_grab_reaches_the_client_and_the_queue_drives_it() {
+async fn a_manual_grab_reaches_the_client_and_the_queue_actions_drive_it() {
     let Some(h) = Harness::start(setup()).await else {
         return;
     };
@@ -1214,63 +1219,20 @@ async fn a_manual_grab_reaches_the_client_and_the_queue_drives_it() {
     assert_eq!(info, None, "only an http(s) info URL is kept");
     let row = i64::from(row);
 
-    let q = body(&h.proxy("GET", "/queue", None).await);
-    assert_eq!(q["total"], json!(1), "{q}");
-    let item = &q["data"][0];
+    h.job("ImportCompleted", None).await.unwrap();
     assert_eq!(
-        (
-            &item["id"],
-            &item["state"],
-            &item["progress"],
-            &item["title"],
-            &item["mediaType"],
-            &item["seeders"],
-            &item["leechers"]
-        ),
-        (
-            &json!(row),
-            &json!("active"),
-            &json!(50),
-            &json!("Some Movie"),
-            &json!("movie"),
-            &json!(12),
-            &Value::Null
-        )
+        queue_rows(&h).await,
+        [(row.to_string(), "active".into(), 0.5)]
     );
-    let h1 = body(&h.proxy("GET", "/history", None).await);
-    assert_eq!(h1["data"][0]["displayStatus"], json!("active"), "{h1}");
 
-    assert_eq!(
-        h.proxy("POST", &format!("/queue/{row}/pause"), None)
-            .await
-            .status,
-        200
-    );
+    assert_eq!(act(&h, "pause", row).await.status, 200);
     assert_eq!(qbit.hits_to("/api/v2/torrents/stop").len(), 1);
-    let q = body(&h.proxy("GET", "/queue", None).await);
-    assert_eq!(q["data"][0]["state"], json!("paused"));
-    assert_eq!(
-        h.proxy("POST", &format!("/queue/{row}/resume"), None)
-            .await
-            .status,
-        200
-    );
+    assert_eq!(queue_rows(&h).await[0].1, "paused");
+    assert_eq!(act(&h, "resume", row).await.status, 200);
     assert_eq!(qbit.hits_to("/api/v2/torrents/start").len(), 1);
+    assert_eq!(queue_rows(&h).await[0].1, "active");
 
-    let r = h.proxy("DELETE", &format!("/history/{row}"), None).await;
-    assert_eq!(
-        (r.status, body(&r)),
-        (
-            409,
-            json!({ "error": { "key": "download.config.history.errors.still_running", "detail": "grabbed" } })
-        )
-    );
-    assert_eq!(
-        h.proxy("DELETE", &format!("/queue/{row}?deleteFiles=true"), None)
-            .await
-            .status,
-        200
-    );
+    assert_eq!(act(&h, "remove", row).await.status, 200);
     let del = qbit.hits_to("/api/v2/torrents/delete");
     assert!(del[0].body.contains("deleteFiles=true"), "{}", del[0].body);
     assert_eq!(
@@ -1280,7 +1242,8 @@ async fn a_manual_grab_reaches_the_client_and_the_queue_drives_it() {
             Some("download.queue.removed_by_user".into())
         )
     );
-    let r = h.proxy("POST", &format!("/queue/{row}/pause"), None).await;
+    assert_eq!(queue_rows(&h).await[0].1, "removed");
+    let r = act(&h, "pause", row).await;
     assert_eq!(
         (r.status, body(&r)),
         (
@@ -1292,7 +1255,7 @@ async fn a_manual_grab_reaches_the_client_and_the_queue_drives_it() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn a_grab_reaches_transmission_and_the_queue_drives_it() {
+async fn a_grab_reaches_transmission_and_the_queue_actions_drive_it() {
     let Some(h) = Harness::start(setup()).await else {
         return;
     };
@@ -1339,43 +1302,26 @@ async fn a_grab_reaches_transmission_and_the_queue_drives_it() {
         json!({ "ids": [HASH], "labels": ["movies"] })
     );
 
-    let q = body(&h.proxy("GET", "/queue", None).await);
-    assert_eq!(q["total"], json!(1), "{q}");
-    let row = q["data"][0]["id"].as_i64().unwrap();
+    let row: i32 = sqlx::query_scalar(r#"SELECT "id" FROM "download_history""#)
+        .fetch_one(&mut plugin_db(&h).await)
+        .await
+        .unwrap();
+    let row = i64::from(row);
+    h.job("ImportCompleted", None).await.unwrap();
     assert_eq!(
-        (
-            &q["data"][0]["state"],
-            &q["data"][0]["progress"],
-            &q["data"][0]["seeders"],
-            &q["data"][0]["leechers"]
-        ),
-        (&json!("active"), &json!(50), &json!(8), &json!(4))
+        queue_rows(&h).await,
+        [(row.to_string(), "active".into(), 0.5)]
     );
-    assert_eq!(
-        h.proxy("POST", &format!("/queue/{row}/pause"), None)
-            .await
-            .status,
-        200
-    );
-    let q = body(&h.proxy("GET", "/queue", None).await);
-    assert_eq!(q["data"][0]["state"], json!("paused"));
-    assert_eq!(
-        h.proxy("POST", &format!("/queue/{row}/resume"), None)
-            .await
-            .status,
-        200
-    );
+    assert_eq!(act(&h, "pause", row).await.status, 200);
+    assert_eq!(queue_rows(&h).await[0].1, "paused");
+    assert_eq!(act(&h, "resume", row).await.status, 200);
     assert_eq!(rpc_calls(&tr, "torrent-start").len(), 1);
-    assert_eq!(
-        h.proxy("DELETE", &format!("/queue/{row}?deleteFiles=true"), None)
-            .await
-            .status,
-        200
-    );
+    assert_eq!(act(&h, "remove", row).await.status, 200);
     assert_eq!(
         rpc_calls(&tr, "torrent-remove")[0]["arguments"],
         json!({ "ids": [HASH], "delete-local-data": true })
     );
+    assert_eq!(queue_rows(&h).await[0].1, "removed");
     h.finish().await;
 }
 
@@ -1492,12 +1438,23 @@ fn okc(method: &'static str, route: &'static str, path: &str, ok: Option<Value>)
     }
 }
 
+/// A `POST` to a queue action with `body`, answered by an `{error}`.
+fn action(
+    path: &'static str,
+    body: Value,
+    status: u16,
+    key: &'static str,
+    detail: Option<&str>,
+) -> Case {
+    err("POST", path, path, Some(body), status, key, detail)
+}
+
 const BAD_PARAM: &str = "download.http.errors.bad_param";
 const BAD_BODY: &str = "download.http.errors.bad_body";
 const NOT_FOUND: &str = "download.http.errors.not_found";
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn all_41_routes_answer_the_frozen_statuses() {
+async fn all_35_routes_answer_the_frozen_statuses() {
     let Some(h) = Harness::start(setup()).await else {
         return;
     };
@@ -1606,8 +1563,6 @@ async fn all_41_routes_answer_the_frozen_statuses() {
             BAD_PARAM,
             Some("itemId"),
         ),
-        okc("GET", "/queue", "/queue", None),
-        okc("GET", "/history", "/history", None),
         okc("GET", "/indexers", "/indexers", Some(json!([]))),
         err(
             "POST",
@@ -1921,186 +1876,91 @@ async fn all_41_routes_answer_the_frozen_statuses() {
             NOT_FOUND,
             Some("Download client #999 not found"),
         ),
-        err(
-            "POST",
-            "/queue/:id/pause",
-            "/queue/abc/pause",
-            None,
+        // `{ref}` is missing, not a number, unknown, or names a row the action cannot drive.
+        action("/queue/pause", json!({}), 400, BAD_PARAM, Some("ref")),
+        action(
+            "/queue/pause",
+            json!({ "ref": "abc" }),
             400,
             BAD_PARAM,
-            Some("id"),
+            Some("ref"),
         ),
-        err(
-            "POST",
-            "/queue/:id/pause",
-            "/queue/999/pause",
-            None,
+        action(
+            "/queue/pause",
+            json!({ "ref": 7 }),
+            400,
+            BAD_PARAM,
+            Some("ref"),
+        ),
+        action(
+            "/queue/pause",
+            json!({ "ref": "999" }),
             404,
             NOT_FOUND,
             Some("999"),
         ),
-        err(
-            "POST",
-            "/queue/:id/pause",
-            &format!("/queue/{completed}/pause"),
-            None,
+        action(
+            "/queue/pause",
+            json!({ "ref": completed }),
             409,
             not_controllable,
             Some("completed"),
         ),
-        err(
-            "POST",
-            "/queue/:id/pause",
-            &format!("/queue/{grabbed}/pause"),
-            None,
+        action(
+            "/queue/pause",
+            json!({ "ref": grabbed }),
             409,
             "download.queue.errors.no_torrent",
             Some(grabbed),
         ),
-        err(
-            "POST",
-            "/queue/:id/resume",
-            "/queue/999/resume",
-            None,
+        action(
+            "/queue/resume",
+            json!({ "ref": "999" }),
             404,
             NOT_FOUND,
             Some("999"),
         ),
-        err(
-            "POST",
-            "/queue/:id/resume",
-            &format!("/queue/{completed}/resume"),
-            None,
+        action(
+            "/queue/resume",
+            json!({ "ref": completed }),
             409,
             not_controllable,
             Some("completed"),
         ),
-        err(
-            "DELETE",
-            "/queue/:id",
-            "/queue/999",
-            None,
+        action(
+            "/queue/remove",
+            json!({ "ref": "999" }),
             404,
             NOT_FOUND,
             Some("999"),
         ),
-        err(
-            "DELETE",
-            "/queue/:id",
-            &format!("/queue/{completed}"),
-            None,
+        action(
+            "/queue/remove",
+            json!({ "ref": completed }),
             409,
             not_controllable,
             Some("completed"),
         ),
-        err(
-            "POST",
-            "/queue/:id/retry-import",
-            "/queue/abc/retry-import",
-            None,
+        action(
+            "/queue/retry-import",
+            json!({ "ref": "abc" }),
             400,
             BAD_PARAM,
-            Some("id"),
+            Some("ref"),
         ),
-        err(
-            "POST",
-            "/queue/:id/retry-import",
-            "/queue/999/retry-import",
-            None,
+        action(
+            "/queue/retry-import",
+            json!({ "ref": "999" }),
             404,
             NOT_FOUND,
             Some("999"),
         ),
-        err(
-            "POST",
-            "/queue/:id/retry-import",
-            &format!("/queue/{failed}/retry-import"),
-            None,
+        action(
+            "/queue/retry-import",
+            json!({ "ref": failed }),
             409,
             "download.queue.errors.not_retryable",
             Some("failed"),
-        ),
-        err(
-            "GET",
-            "/queue/:id/replace/releases",
-            "/queue/abc/replace/releases",
-            None,
-            400,
-            BAD_PARAM,
-            Some("id"),
-        ),
-        err(
-            "GET",
-            "/queue/:id/replace/releases",
-            "/queue/999/replace/releases",
-            None,
-            404,
-            NOT_FOUND,
-            Some("999"),
-        ),
-        err(
-            "GET",
-            "/queue/:id/replace/releases",
-            &format!("/queue/{completed}/replace/releases"),
-            None,
-            409,
-            "download.queue.errors.not_replaceable",
-            Some("completed"),
-        ),
-        err(
-            "POST",
-            "/queue/:id/replace",
-            "/queue/abc/replace",
-            None,
-            400,
-            BAD_PARAM,
-            Some("id"),
-        ),
-        err(
-            "POST",
-            "/queue/:id/replace",
-            "/queue/999/replace",
-            None,
-            404,
-            NOT_FOUND,
-            Some("999"),
-        ),
-        err(
-            "POST",
-            "/queue/:id/replace",
-            &format!("/queue/{completed}/replace"),
-            None,
-            409,
-            "download.queue.errors.not_replaceable",
-            Some("completed"),
-        ),
-        // No media: nothing to search again.
-        err(
-            "POST",
-            "/queue/:id/replace",
-            &format!("/queue/{grabbed}/replace"),
-            None,
-            409,
-            "download.queue.errors.not_replaceable",
-            Some("grabbed"),
-        ),
-        err(
-            "DELETE",
-            "/history/:id",
-            "/history/abc",
-            None,
-            400,
-            BAD_PARAM,
-            Some("id"),
-        ),
-        err(
-            "DELETE",
-            "/history/:id",
-            "/history/999",
-            None,
-            404,
-            NOT_FOUND,
-            Some("999"),
         ),
         okc(
             "GET",
@@ -2131,13 +1991,6 @@ async fn all_41_routes_answer_the_frozen_statuses() {
             404,
             NOT_FOUND,
             Some("999"),
-        ),
-        // Last: it removes the terminal rows seeded above.
-        okc(
-            "DELETE",
-            "/history/all",
-            "/history/all",
-            Some(json!({ "removed": 2 })),
         ),
     ];
     for c in &cases {
@@ -2170,7 +2023,7 @@ async fn all_41_routes_answer_the_frozen_statuses() {
         .into_iter()
         .map(|(m, p, _)| (m.to_owned(), p.to_owned()))
         .collect();
-    assert_eq!(table.len(), 41);
+    assert_eq!(table.len(), 35);
     for (m, p) in &table {
         assert!(
             cases.iter().any(|c| c.method == m && c.route == p),
@@ -2232,7 +2085,7 @@ async fn a_client_that_refuses_or_is_missing_answers_502() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn a_torrent_list_with_one_unreadable_entry_makes_the_client_unreachable() {
+async fn a_torrent_list_with_one_unreadable_entry_keeps_its_rows_listed_as_stalled() {
     let Some(h) = Harness::start(setup()).await else {
         return;
     };
@@ -2255,9 +2108,20 @@ async fn a_torrent_list_with_one_unreadable_entry_makes_the_client_unreachable()
     );
     add_qbit(&h, &bad).await;
     let mut db = plugin_db(&h).await;
-    exec(&mut db, r#"INSERT INTO "download_history" ("sourceTitle", "quality", "status", "torrentHash", "downloadClientId") SELECT 'x', 'HD', 'grabbed', 'abc', "id" FROM "download_clients""#).await;
-    let q = body(&h.proxy("GET", "/queue", None).await);
-    assert_eq!(q["clientsUnreachable"], json!(true), "{q}");
+    let media = add_movie(&h, "Some Movie").await;
+    exec(&mut db, &format!(r#"INSERT INTO "download_history" ("sourceTitle", "quality", "status", "torrentHash", "downloadClientId", "mediaId") SELECT 'x', 'HD', 'grabbed', 'abc', "id", {media} FROM "download_clients""#)).await;
+    // A row the core already holds open must not be closed by a tick where its client is unreadable.
+    sqlx::query(
+        r#"INSERT INTO acquisition_queue ("pluginId", "ref", "mediaId", "sourceId", "sourceName", title, quality, method, state)
+           VALUES ($1, '1', $2, '0', 'x', 't', 'HD', 'auto', 'active')"#,
+    )
+    .bind(&h.id)
+    .bind(media as i32)
+    .execute(&h.pool)
+    .await
+    .unwrap();
+    h.job("ImportCompleted", None).await.unwrap();
+    assert_eq!(queue_rows(&h).await, [("1".into(), "stalled".into(), 0.0)]);
     h.finish().await;
 }
 
@@ -2276,18 +2140,14 @@ async fn retry_import_rearms_only_a_failed_import_and_only_once() {
         .await
     };
     let id = failed(&mut db).await;
-    let r = h
-        .proxy("POST", &format!("/queue/{id}/retry-import"), None)
-        .await;
+    let r = act(&h, "retry-import", id).await;
     assert_eq!((r.status, body(&r)), (200, json!({})));
     assert_eq!(status_of(&mut db, id).await, ("grabbed".into(), None));
     until("the queue change", MAX, async || {
         std::iter::from_fn(|| rx.try_recv().ok()).any(|b| format!("{b:?}").contains("QueueUpdated"))
     })
     .await;
-    let r = h
-        .proxy("POST", &format!("/queue/{id}/retry-import"), None)
-        .await;
+    let r = act(&h, "retry-import", id).await;
     assert_eq!(
         (r.status, body(&r)),
         (
@@ -2298,14 +2158,144 @@ async fn retry_import_rearms_only_a_failed_import_and_only_once() {
 
     // Two retries racing for one row: exactly one wins.
     let id = failed(&mut db).await;
-    let path = format!("/queue/{id}/retry-import");
+    let payload = json!({ "ref": id.to_string() }).to_string();
     let (a, b) = tokio::join!(
-        h.http(request("POST", &path, &[], b"")),
-        h.http(request("POST", &path, &[], b""))
+        h.http(request(
+            "POST",
+            "/queue/retry-import",
+            &[],
+            payload.as_bytes()
+        )),
+        h.http(request(
+            "POST",
+            "/queue/retry-import",
+            &[],
+            payload.as_bytes()
+        ))
     );
-    let mut statuses = [a.unwrap().status, b.unwrap().status];
+    let (a, b) = (a.unwrap(), b.unwrap());
+    let seen = format!(
+        "{:?} {:?}",
+        String::from_utf8_lossy(&a.body),
+        String::from_utf8_lossy(&b.body)
+    );
+    let mut statuses = [a.status, b.status];
     statuses.sort();
-    assert_eq!(statuses, [200, 409]);
+    assert_eq!(statuses, [200, 409], "{seen}");
+    h.finish().await;
+}
+
+/// A row of the core's queue for this plugin's `ref`: (state, progress, source, method, error).
+type Entry = (String, f64, String, String, Option<String>);
+
+async fn entries(h: &Harness, row: i64) -> Vec<Entry> {
+    sqlx::query_as(
+        r#"SELECT state, progress, "sourceName", method, error FROM acquisition_queue
+           WHERE "pluginId" = $1 AND "ref" = $2 ORDER BY id"#,
+    )
+    .bind(&h.id)
+    .bind(row.to_string())
+    .fetch_all(&h.pool)
+    .await
+    .unwrap()
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn with_no_enabled_client_the_queue_is_still_stated_and_clamped() {
+    let Some(h) = Harness::start(setup()).await else {
+        return;
+    };
+    let media = add_movie(&h, "Some Movie").await;
+    let mut db = plugin_db(&h).await;
+    let title = "x".repeat(600);
+    exec(&mut db, format!(r#"INSERT INTO "download_history" ("sourceTitle", "quality", "status", "torrentHash", "mediaId") VALUES ('{title}', ' ', 'grabbed', 'abc', {media})"#)).await;
+    h.job("ImportCompleted", None).await.unwrap();
+    let rows: Vec<(String, String, String)> = sqlx::query_as(
+        r#"SELECT state, title, quality FROM acquisition_queue WHERE "pluginId" = $1 AND "finishedAt" IS NULL"#,
+    )
+    .bind(&h.id)
+    .fetch_all(&h.pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        rows,
+        [("stalled".into(), "x".repeat(500), "Unknown".into())],
+        "a clamped entry, listed although no client is enabled"
+    );
+    h.finish().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_poller_states_every_transfer_to_the_core() {
+    let Some(h) = Harness::start(setup()).await else {
+        return;
+    };
+    let qbit = fake_qbit();
+    add_qbit(&h, &qbit).await;
+    let media = add_movie(&h, "Some Movie").await;
+    let mut db = plugin_db(&h).await;
+    let tracker = add_indexer(&mut db, "Tracker", json!({})).await;
+    let magnet = format!("magnet:?xt=urn:btih:{HASH}&dn=Some.Movie.2020.1080p");
+    let r = h
+        .proxy(
+            "POST",
+            &format!("/{media}/grab"),
+            Some(&json!({ "downloadUrl": magnet, "force": true })),
+        )
+        .await;
+    assert_eq!(r.status, 200, "{:?}", body(&r));
+    let live = scalar_i64(&mut db, r#"SELECT "id"::bigint FROM "download_history""#).await;
+    exec(
+        &mut db,
+        format!(r#"UPDATE "download_history" SET "indexerId" = {tracker} WHERE "id" = {live}"#),
+    )
+    .await;
+    let mut seed = async |status: &str, message: &str| -> i64 {
+        scalar_i64(
+            &mut db,
+            &format!(
+                r#"INSERT INTO "download_history" ("sourceTitle", "quality", "status", "statusMessage", "mediaId", "grabSource")
+                   VALUES ('x', 'HD', '{status}', NULLIF('{message}', ''), {media}, 'rss') RETURNING "id"::bigint"#
+            ),
+        )
+        .await
+    };
+    let done = seed("completed", "").await;
+    let failed = seed("failed", "boom").await;
+    let withdrawn = seed("failed", "download.queue.removed_by_user").await;
+
+    h.job("ImportCompleted", None).await.unwrap();
+    let active: Entry = (
+        "active".into(),
+        0.5,
+        "Tracker".into(),
+        "manual".into(),
+        None,
+    );
+    assert_eq!(entries(&h, live).await, [active]);
+    let imported: Entry = (
+        "imported".into(),
+        1.0,
+        "Download".into(),
+        "rss".into(),
+        None,
+    );
+    assert_eq!(entries(&h, done).await, [imported]);
+    let boom = Some("boom".to_owned());
+    let failed_entry: Entry = ("failed".into(), 1.0, "Download".into(), "rss".into(), boom);
+    assert_eq!(entries(&h, failed).await, [failed_entry]);
+    assert_eq!(entries(&h, withdrawn).await, []);
+
+    // A finished row is reported once, however many ticks follow.
+    h.job("ImportCompleted", None).await.unwrap();
+    assert_eq!(entries(&h, done).await.len(), 1);
+    assert_eq!(entries(&h, failed).await.len(), 1);
+
+    assert_eq!(act(&h, "remove", live).await.status, 200);
+    assert_eq!(entries(&h, live).await[0].0, "removed");
+    h.job("ImportCompleted", None).await.unwrap();
+    assert_eq!(entries(&h, live).await.len(), 1);
+    assert_eq!(entries(&h, withdrawn).await, []);
     h.finish().await;
 }
 
@@ -2626,14 +2616,6 @@ async fn book_fixture_with(
         ),
     )
     .await;
-    // The host's progress store is process-wide and keyed by media id: keep ids unique across fixtures.
-    static NEXT: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(5_000);
-    let start = NEXT.fetch_add(10, std::sync::atomic::Ordering::Relaxed);
-    sqlx::query("SELECT setval(pg_get_serial_sequence('media', 'id'), $1, false)")
-        .bind(start)
-        .execute(&h.pool)
-        .await
-        .unwrap();
     let media = add_book(&h, "Mirelune", &lib, families).await;
     Some((h, base, media, qbit))
 }
@@ -2762,6 +2744,14 @@ async fn a_book_is_acquired_from_want_to_import() {
             .await
             .unwrap();
     assert_eq!(editions, ["text"]);
+
+    // The core's queue saw the import start, then holds it as imported, once.
+    assert_eq!(queue_rows(&h).await[0].1, "importing");
+    for _ in 0..2 {
+        h.job("ImportCompleted", None).await.unwrap();
+        let rows = queue_rows(&h).await;
+        assert_eq!((rows.len(), rows[0].1.as_str()), (1, "imported"));
+    }
     h.finish().await;
     let _ = std::fs::remove_dir_all(base);
 }
@@ -2801,10 +2791,6 @@ async fn the_rss_sweep_grabs_a_book_through_its_targets() {
 /// Another provider's download of the media stops the RSS auto-grab; once it is gone the sync grabs.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_download_in_flight_at_another_provider_blocks_the_auto_grab() {
-    use fliks_plugin_sdk::harness::fliks_server::plugins::events::progress_gates;
-    use fliks_plugin_sdk::harness::fliks_server::plugins::runtime::fliks::plugin::types::{
-        DownloadProgress, DownloadState,
-    };
     let Some((h, base, media, qbit)) =
         book_fixture("book-in-flight", &["text"], false, &["Mirelune.epub"]).await
     else {
@@ -2818,25 +2804,21 @@ async fn a_download_in_flight_at_another_provider_blocks_the_auto_grab() {
     .into_bytes();
     let tracker = Stub::start(move |_, _, _| (200, vec![], feed.clone()));
     add_book_indexer(&h, &tracker).await;
-    let other = [DownloadProgress {
-        ref_: "x".into(),
-        unit: None,
-        progress: 0.1,
-        bytes_per_second: None,
-        eta_seconds: None,
-        state: DownloadState::Active,
-    }];
-    progress_gates()
-        .set(&h.st, "other.provider", media as i32, &other)
-        .await
-        .unwrap();
+    sqlx::query(
+        r#"INSERT INTO acquisition_queue ("pluginId", "ref", "mediaId", "sourceId", "sourceName", title, quality, method, state, progress)
+           VALUES ('other.provider', 'x', $1, '0', 'other', 't', 'HD', 'auto', 'active', 0.1)"#,
+    )
+    .bind(media as i32)
+    .execute(&h.pool)
+    .await
+    .unwrap();
 
     h.job("RssSync", None).await.unwrap();
     assert!(logged(&h, "a grab is in flight at other.provider"));
     assert!(qbit.hits_to("/api/v2/torrents/add").is_empty());
 
-    progress_gates()
-        .set(&h.st, "other.provider", media as i32, &[])
+    sqlx::query(r#"UPDATE acquisition_queue SET state = 'removed', "finishedAt" = now() WHERE "pluginId" = 'other.provider'"#)
+        .execute(&h.pool)
         .await
         .unwrap();
     h.job("RssSync", None).await.unwrap();
