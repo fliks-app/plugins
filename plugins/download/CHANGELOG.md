@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.9.1](https://github.com/fliks-app/plugins/compare/download-v2.9.0...download-v2.9.1) (2026-11-09)
+
+
+### Bug Fixes
+
+* **download:** follow up the review of the core queue ([#121](https://github.com/fliks-app/plugins/issues/121)) ([050bd5a](https://github.com/fliks-app/plugins/commit/050bd5aa0263f26e3b2a2c16e375da5275c8ef64))
+
 ## [2.9.0](https://github.com/fliks-app/plugins/compare/download-v2.8.0...download-v2.9.0) (2026-11-09)
 
 
