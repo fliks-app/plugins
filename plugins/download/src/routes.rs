@@ -213,7 +213,12 @@ fn grab_release(r: &Request) -> R<Response> {
         Ok(f) => f,
         Err(resp) => return resp,
     };
-    let Some(manual) = manual_of(&b, matches!(r.principal, Principal::System)) else {
+    let auto = match str_field(&b, "method").as_deref() {
+        None | Some("manual") => false,
+        Some("auto") => true,
+        Some(_) => return bad_param("method"),
+    };
+    let Some(manual) = manual_of(&b, auto) else {
         return bad_param("downloadUrl");
     };
     ok(grab::grab_release(
@@ -226,7 +231,7 @@ fn grab_release(r: &Request) -> R<Response> {
     )?)
 }
 
-/// A grab names its release: the core's sweep and the user pick it, never this plugin.
+/// A grab names its release and its method (`auto` from the core's sweep, else `manual`).
 fn manual_of(b: &Map<String, Value>, auto: bool) -> Option<Manual> {
     str_field(b, "downloadUrl")
         .filter(|u| !u.is_empty())

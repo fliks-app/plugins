@@ -1270,6 +1270,37 @@ async fn a_manual_grab_reaches_the_client_and_the_queue_actions_drive_it() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_grab_records_the_method_the_core_names() {
+    let Some(h) = Harness::start(setup()).await else {
+        return;
+    };
+    add_qbit(&h, &fake_qbit()).await;
+    let media = add_movie(&h, "Some Movie").await;
+    let magnet = format!("magnet:?xt=urn:btih:{HASH}&dn=Some.Movie.2020.1080p");
+    let grab = |method: Value| {
+        let b = json!({ "downloadUrl": magnet, "force": true, "method": method });
+        let path = format!("/{media}/grab");
+        let h = &h;
+        async move { h.proxy("POST", &path, Some(&b)).await }
+    };
+    let r = grab(json!("bogus")).await;
+    assert_eq!(
+        (r.status, body(&r)),
+        (
+            400,
+            json!({ "error": { "key": BAD_PARAM, "detail": "method" } })
+        )
+    );
+    assert_eq!(grab(json!("auto")).await.status, 200);
+    let method: String = sqlx::query_scalar(r#"SELECT "grabSource" FROM "download_history""#)
+        .fetch_one(&mut plugin_db(&h).await)
+        .await
+        .unwrap();
+    assert_eq!(method, "auto");
+    h.finish().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn an_unmatched_row_is_held_and_an_importing_one_removed() {
     let Some(h) = Harness::start(setup()).await else {
         return;
