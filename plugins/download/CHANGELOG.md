@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.6.0](https://github.com/fliks-app/plugins/compare/download-v2.5.0...download-v2.6.0) (2026-11-09)
+
+
+### Features
+
+* **download:** act as an acquisition provider ([#112](https://github.com/fliks-app/plugins/issues/112)) ([b785653](https://github.com/fliks-app/plugins/commit/b785653158bda6a45836d53b66be734a58913406))
+
 ## [2.5.0](https://github.com/fliks-app/plugins/compare/download-v2.4.1...download-v2.5.0) (2026-11-08)
 
 
