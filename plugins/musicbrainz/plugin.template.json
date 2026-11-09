@@ -35,7 +35,9 @@
         "edition",
         "person",
         "credits",
-        "findBy"
+        "findBy",
+        "artistSearch",
+        "recordingSearch"
       ]
     },
     "findBy": [

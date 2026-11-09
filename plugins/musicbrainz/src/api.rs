@@ -162,6 +162,46 @@ pub fn search(
     Ok(hits(&array(&body, "release-groups"), name, h))
 }
 
+/// The artists matching `text`, in the search's own order.
+pub fn search_artists(h: &impl Http, text: &str, page: u32) -> R<Vec<Value>> {
+    let body = h.mb(
+        "/artist",
+        &[
+            ("query", map::escape(text.trim())),
+            ("limit", HITS.to_string()),
+            ("offset", ((page.max(1) - 1) * HITS).to_string()),
+        ],
+    )?;
+    Ok(array(&body, "artists")
+        .iter()
+        .filter_map(map::artist_hit)
+        .collect())
+}
+
+/// The recordings matching `text` with the album each is listed under; one entry per title and artist.
+pub fn search_recordings(h: &impl Http, text: &str, page: u32) -> R<Vec<Value>> {
+    let body = h.mb(
+        "/recording",
+        &[
+            ("query", map::escape(text.trim())),
+            ("limit", HITS.to_string()),
+            ("offset", ((page.max(1) - 1) * HITS).to_string()),
+        ],
+    )?;
+    let mut seen = std::collections::HashSet::new();
+    Ok(array(&body, "recordings")
+        .iter()
+        .filter_map(map::recording_hit)
+        .filter(|r| {
+            let by = r["artists"][0]["name"].as_str().unwrap_or_default();
+            seen.insert(format!(
+                "{}\u{1f}{by}",
+                r["title"].as_str().unwrap_or_default().to_lowercase()
+            ))
+        })
+        .collect())
+}
+
 pub fn work(h: &impl Http, id: &str) -> R<Value> {
     let g = group(h, id)?;
     let gid = g["id"].as_str().unwrap_or_default().to_lowercase();

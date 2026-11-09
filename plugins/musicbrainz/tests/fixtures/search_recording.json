@@ -1,0 +1,19 @@
+{"created": "2026-01-01T00:00:00.000Z", "count": 4, "offset": 0, "recordings": [
+  {"id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd", "score": 100, "title": "Placeholder Song", "length": 183000,
+   "artist-credit": [{"name": "Example Artist", "artist": {"id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "name": "Example Artist", "sort-name": "Artist, Example"}}],
+   "releases": [
+     {"id": "11111111-aaaa-4aaa-8aaa-000000000001", "status": "Bootleg", "date": "1999-01-01",
+      "release-group": {"id": "22222222-aaaa-4aaa-8aaa-000000000001", "title": "Live Bootleg", "primary-type": "Album", "secondary-types": ["Live"]}},
+     {"id": "11111111-aaaa-4aaa-8aaa-000000000002", "status": "Official", "date": "2005-03-01",
+      "release-group": {"id": "22222222-aaaa-4aaa-8aaa-000000000002", "title": "Placeholder Compilation", "primary-type": "Album", "secondary-types": ["Compilation"]}},
+     {"id": "11111111-aaaa-4aaa-8aaa-000000000003", "status": "Official", "date": "2004-05-01",
+      "release-group": {"id": "22222222-aaaa-4aaa-8aaa-000000000003", "title": "Placeholder Album", "primary-type": "Album"}}
+   ]},
+  {"id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee", "score": 90, "title": "placeholder song", "length": 183000,
+   "artist-credit": [{"name": "Example Artist", "artist": {"id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "name": "Example Artist"}}],
+   "releases": [{"id": "11111111-aaaa-4aaa-8aaa-000000000004", "status": "Official", "date": "2010-01-01",
+      "release-group": {"id": "22222222-aaaa-4aaa-8aaa-000000000004", "title": "Another Album", "primary-type": "Album"}}]},
+  {"id": "ffffffff-ffff-4fff-8fff-ffffffffffff", "score": 80, "title": "Orphan Song",
+   "artist-credit": [{"name": "Example Artist", "artist": {"id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "name": "Example Artist"}}],
+   "releases": []}
+]}

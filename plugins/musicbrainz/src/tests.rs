@@ -37,6 +37,8 @@ impl Http for Fake {
         );
         let has = |k: &str| query.iter().any(|(n, _)| *n == k);
         Ok(match path {
+            "/artist" => fx("search_artist.json"),
+            "/recording" => fx("search_recording.json"),
             "/release-group" if has("query") => fx("search.json"),
             "/release-group" => fx("rg_browse.json"),
             "/release" => fx("releases.json"),
@@ -388,4 +390,54 @@ fn every_record_passes_the_host_checks() {
     host::person(&person(&h, ARTIST).unwrap()).unwrap();
     let c = credits(&h, ARTIST).unwrap();
     assert_eq!(host::albums(c["albums"].as_array().unwrap()).kept.len(), 1);
+}
+
+#[test]
+fn an_artist_search_keeps_the_records_with_an_id_and_a_name() {
+    let h = Fake::default();
+    let hits = search_artists(&h, "Example (Artist)", 2).unwrap();
+    assert_eq!(ids(&hits), [ARTIST, "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"]);
+    assert_eq!(
+        (
+            hits[0]["artistType"].clone(),
+            hits[0]["country"].clone(),
+            hits[0]["sortName"].clone()
+        ),
+        (json!("group"), json!("GB"), json!("Artist, Example"))
+    );
+    assert_eq!(hits[0]["disambiguation"], "placeholder band");
+    assert!(hits[1].get("country").is_none());
+    assert_eq!(h.queries(), [r"Example \(Artist\)"]);
+}
+
+#[test]
+fn a_recording_is_listed_under_its_best_release_group_and_once_per_title() {
+    let h = Fake::default();
+    let hits = search_recordings(&h, "placeholder song", 1).unwrap();
+    // The orphan has no release group, and the second record repeats the title of the first.
+    assert_eq!(hits.len(), 1);
+    let r = &hits[0];
+    assert_eq!(r["externalId"], "dddddddd-dddd-4ddd-8ddd-dddddddddddd");
+    assert_eq!(
+        (r["title"].clone(), r["durationMs"].clone()),
+        (json!("Placeholder Song"), json!(183000))
+    );
+    assert_eq!(r["artists"][0]["name"], "Example Artist");
+    let a = &r["album"];
+    assert_eq!(
+        a["externalId"], "22222222-aaaa-4aaa-8aaa-000000000003",
+        "official plain album first"
+    );
+    assert_eq!(
+        (a["title"].clone(), a["mediaType"].clone()),
+        (json!("Placeholder Album"), json!("album"))
+    );
+    assert_eq!(a["firstReleaseDate"], "2004-05-01");
+    assert_eq!(a["artists"][0]["name"], "Example Artist");
+    assert!(
+        a["posterUrl"]
+            .as_str()
+            .unwrap()
+            .contains("coverartarchive.org/release-group/")
+    );
 }

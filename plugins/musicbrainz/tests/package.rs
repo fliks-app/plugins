@@ -19,7 +19,15 @@ fn the_provider_packages_and_verifies() {
     assert_eq!(
         p["kinds"]["album"],
         serde_json::json!([
-            "search", "work", "children", "edition", "person", "credits", "findBy"
+            "search",
+            "work",
+            "children",
+            "edition",
+            "person",
+            "credits",
+            "findBy",
+            "artistSearch",
+            "recordingSearch"
         ])
     );
     assert_eq!(

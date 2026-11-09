@@ -94,6 +94,16 @@ fn json_of(v: impl Into<Value>) -> R<String> {
 
 impl MetadataProvider for Provider {
     fn search(q: SearchQuery, _lang: Lang) -> R<String> {
+        let target = q
+            .extra
+            .iter()
+            .find(|(k, _)| k == "target")
+            .map(|(_, v)| v.as_str());
+        match target {
+            Some("artist") => return json_of(api::search_artists(&Live, &q.query, q.page)?),
+            Some("recording") => return json_of(api::search_recordings(&Live, &q.query, q.page)?),
+            _ => {}
+        }
         json_of(api::search(
             &Live,
             &q.query,

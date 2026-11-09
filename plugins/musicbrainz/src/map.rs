@@ -162,6 +162,56 @@ pub fn album(g: &Value, popularity: Option<f64>) -> Option<Value> {
     })))
 }
 
+/// An artist search hit.
+pub fn artist_hit(a: &Value) -> Option<Value> {
+    Some(compact(json!({
+        "externalId": s(a, "id").and_then(uuid)?,
+        "name": s(a, "name")?,
+        "sortName": s(a, "sort-name"),
+        "disambiguation": s(a, "disambiguation"),
+        "artistType": lower(a, "type"),
+        "country": s(a, "country"),
+    })))
+}
+
+/// The release a recording is shown under: official first, a plain album before the rest, then the earliest.
+fn best_release(r: &Value) -> Option<&Value> {
+    let rank = |x: &&Value| {
+        let g = x.get("release-group").unwrap_or(&Value::Null);
+        let plain = lower(g, "primary-type").as_deref() == Some("album")
+            && list(g, "secondary-types").is_empty();
+        (
+            !s(x, "status").is_some_and(|t| t.eq_ignore_ascii_case("official")),
+            !plain,
+            s(x, "date").is_none(),
+            s(x, "date").unwrap_or_default().to_owned(),
+        )
+    };
+    list(r, "releases")
+        .iter()
+        .filter(|x| x.get("release-group").and_then(|g| s(g, "id")).is_some())
+        .min_by_key(rank)
+}
+
+/// A recording search hit with the release group it is listed under as an album record.
+pub fn recording_hit(r: &Value) -> Option<Value> {
+    let rel = best_release(r)?;
+    let mut g = rel["release-group"].clone();
+    g["artist-credit"] = r["artist-credit"].clone();
+    if g.get("first-release-date").is_none_or(Value::is_null)
+        && let Some(d) = s(rel, "date")
+    {
+        g["first-release-date"] = d.into();
+    }
+    Some(compact(json!({
+        "externalId": s(r, "id").and_then(uuid)?,
+        "title": s(r, "title")?,
+        "durationMs": r.get("length").and_then(Value::as_u64).filter(|l| *l > 0),
+        "artists": credits(r.get("artist-credit").unwrap_or(&Value::Null)),
+        "album": album(&g, None)?,
+    })))
+}
+
 /// Higher is better: the search score first, then what the owner of a library wants first.
 pub fn score(g: &Value, text: &str, popularity: Option<f64>) -> f64 {
     let exact = s(g, "title").is_some_and(|t| t.to_lowercase() == text.trim().to_lowercase());
