@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.3](https://github.com/fliks-app/plugins/compare/musicbrainz-v0.3.2...musicbrainz-v0.3.3) (2026-11-09)
+
+
+### Documentation
+
+* **musicbrainz:** wrap a long readme line ([#107](https://github.com/fliks-app/plugins/issues/107)) ([f663939](https://github.com/fliks-app/plugins/commit/f6639390b9533485e2c5d9bd55d1762da09a4a73))
+
 ## [0.3.2](https://github.com/fliks-app/plugins/compare/musicbrainz-v0.3.1...musicbrainz-v0.3.2) (2026-11-09)
 
 
