@@ -149,7 +149,7 @@ pub fn search(
         query += &format!(" AND artist:\"{}\"", map::escape(a));
     }
     if let Some(y) = year.filter(|y| (1..=9999).contains(y)) {
-        query += &format!(" AND firstreleasedate:{y}*");
+        query += &format!(" AND firstreleasedate:{y}");
     }
     let body = h.mb(
         "/release-group",
