@@ -764,8 +764,14 @@ async fn an_acquisition_request_schedules_one_search_per_media() {
     };
     h.event(
         "media.acquisition.requested",
-        &json!({ "mediaIds": [3, 3, 4.5, "x", 9] }),
+        &json!({ "provider": "fliks.download", "mediaIds": [3, 3, 4.5, "x", 9] }),
     );
+    // Addressed to another provider, or to none: ignored.
+    h.event(
+        "media.acquisition.requested",
+        &json!({ "provider": "fliks.other", "mediaIds": [5] }),
+    );
+    h.event("media.acquisition.requested", &json!({ "mediaIds": [6] }));
     until("the event", MAX, async || {
         logged(&h, "searching for media 3, 9")
     })
@@ -783,7 +789,10 @@ async fn an_acquisition_request_schedules_one_search_per_media() {
 
     h.set_config("requestsAutoGrabOnApproval", Some("false"))
         .await;
-    h.event("media.acquisition.requested", &json!({ "mediaIds": [4] }));
+    h.event(
+        "media.acquisition.requested",
+        &json!({ "provider": "fliks.download", "mediaIds": [4] }),
+    );
     until("the refusal", MAX, async || {
         logged(&h, "immediate search is off")
     })
