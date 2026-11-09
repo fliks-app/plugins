@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.9.0](https://github.com/fliks-app/plugins/compare/download-v2.8.0...download-v2.9.0) (2026-11-09)
+
+
+### Features
+
+* **download:** report the queue to the core, drop the queue and history pages ([#119](https://github.com/fliks-app/plugins/issues/119)) ([caed22e](https://github.com/fliks-app/plugins/commit/caed22ec9dd3144c5f3c8a06480a6fcbcca4b36c))
+
 ## [2.8.0](https://github.com/fliks-app/plugins/compare/download-v2.7.0...download-v2.8.0) (2026-11-09)
 
 
