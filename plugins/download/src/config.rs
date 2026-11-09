@@ -25,13 +25,6 @@ pub fn auto_acquisition_paused(job: &str) -> Result<bool, String> {
     Ok(paused)
 }
 
-/// Only the string `false` turns the immediate search off.
-pub fn immediate_search() -> Result<bool, String> {
-    let kv = host::config_get(Some(&["requestsAutoGrabOnApproval".to_owned()]))
-        .map_err(|e| e.message)?;
-    Ok(value(&kv, "requestsAutoGrabOnApproval").as_deref() != Some("false"))
-}
-
 pub const DEFAULT_SEARCH_BUDGET_MS: u64 = 30_000;
 
 pub fn search_budget_ms_of(raw: Option<&str>) -> u64 {

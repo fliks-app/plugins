@@ -356,6 +356,16 @@ fn template_matches_the_published_manifest() {
         }
     }
     assert_eq!((peers, submenus), (1, 2));
+    // Removed since: the core runs the automatic search, so no SearchMissing job and no immediate-search toggle.
+    old["jobs"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|j| j["name"] != "SearchMissing");
+    for page in old["ui"]["configPages"].as_array_mut().unwrap() {
+        if let Some(fields) = page.get_mut("fields").and_then(Value::as_array_mut) {
+            fields.retain(|f| f["key"] != "requestsAutoGrabOnApproval");
+        }
+    }
     let (old_i18n, new_i18n) = (old["i18n"].clone(), new["i18n"].clone());
     for k in [
         "pluginApi",
@@ -374,7 +384,9 @@ fn template_matches_the_published_manifest() {
     assert_eq!(new, old);
     for (lang, strings) in old_i18n.as_object().unwrap() {
         for (k, v) in strings.as_object().unwrap() {
-            if k.starts_with("download.media.") || k.starts_with("download.group.") {
+            let removed = k.starts_with("download.config.general.immediate_search")
+                || k == "download.jobs.search_missing";
+            if removed || k.starts_with("download.media.") || k.starts_with("download.group.") {
                 continue;
             }
             assert_eq!(&new_i18n[lang][k], v, "{lang} {k}");
@@ -435,7 +447,7 @@ fn every_job_has_a_handler() {
         .iter()
         .map(|j| j["name"].as_str().unwrap())
         .collect();
-    assert_eq!(jobs.len(), 5);
+    assert_eq!(jobs.len(), 4);
     for j in jobs {
         assert!(
             fk_plugin_download::job_handler(j).is_some(),
@@ -576,18 +588,11 @@ fn a_target_is_the_work_a_season_or_an_episode() {
     use grab::Piece;
     let mut t = target(None);
     assert_eq!(grab::piece(&t), Piece::Work);
-    assert_eq!(grab::key_of(&t, 0), (1, None, None, 0));
     t.scope = vec![unit(Some(2), None)];
     assert_eq!(grab::piece(&t), Piece::Season(2));
-    assert_eq!(grab::key_of(&t, 0), (1, Some(20), None, 0));
     t.scope = vec![unit(Some(2), Some(5.0))];
     assert_eq!(grab::piece(&t), Piece::Episode(2, 5));
     assert_eq!(grab::numbers(&t), (Some(2), Some(5)));
-    assert_eq!(grab::key_of(&t, 0), (1, Some(20), Some(50), 0));
-    assert!(
-        grab::key_of(&t, 1) > (1, Some(20), Some(50), 0),
-        "a book's second want sorts after its first"
-    );
 }
 
 #[test]

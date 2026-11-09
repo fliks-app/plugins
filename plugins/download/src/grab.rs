@@ -1,4 +1,4 @@
-//! Search, scoring, grabs and the automatic sweeps (`SearchMissing`, `RssSync`).
+//! Search, scoring, grabs and the automatic sweeps (`RssSync`) and the releases the core sweep asks for.
 
 use crate::config;
 use crate::db::{Coverage, DownloadClientRow, IndexerRow, blocklist, clients, history, indexers};
@@ -765,6 +765,8 @@ pub fn search_releases(
 }
 
 pub struct Manual {
+    /// Picked by the core's sweep: recorded as an automatic grab.
+    pub auto: bool,
     pub download_url: String,
     pub source_title: Option<String>,
     pub indexer_id: Option<i64>,
@@ -979,7 +981,14 @@ pub fn grab_release(
                 " (forced)"
             }
         );
-        let mut a = args_for(&target, media, &client, &scored, "manual");
+        let mut a = args_for(
+            &target,
+            media,
+            &client,
+            &scored,
+            if m.auto { "auto" } else { "manual" },
+        );
+        a.reject_if_present = m.auto;
         a.info_url = m.info_url;
         a.indexer_id = m.indexer_id;
         a.source_title = source_title;
@@ -1233,108 +1242,43 @@ fn auto_grab_or_skip(target: &Target, client: &DownloadClientRow) -> Outcome {
     })
 }
 
-/// Candidates arrive sorted by this tuple; a season pack sorts before its episodes. The last
-/// field is a book want's position among those of its media, the host's order of (family, language).
-pub type Key = (u32, Option<u32>, Option<u32>, u8);
-
-pub fn key_of(t: &Target, ordinal: u8) -> Key {
-    (t.media_id, group_id(t), item_id(t), ordinal)
-}
-
-/// Whether a target still has to run in a sweep resumed after `resume`.
-pub fn after(key: Key, resume: Option<Key>) -> bool {
-    resume.is_none_or(|r| key > r)
-}
-
-/// The sweep's resume key (`Some`: the time budget ran out after it) and the media (id, title)
-/// where something was wanted, searched, and nothing grabbed.
-pub type Sweep = (Option<Key>, Vec<(u32, String)>);
-
-pub fn search_missing(media_ids: Option<Vec<u32>>, resume: Option<Key>) -> R<Sweep> {
-    if config::auto_acquisition_paused("SearchMissing").map_err(Error::Other)? {
-        return Ok((None, vec![]));
+/// What the core's sweep asks of a provider: the releases this one would grab for the target, best
+/// first. Nothing while automatic acquisition is paused, no client is set up, the media wants nothing
+/// or a grab of its own is pending.
+pub fn search_auto(
+    media_id: u32,
+    group_id: Option<u32>,
+    item_id: Option<u32>,
+    family: Option<Family>,
+    language: Option<&str>,
+) -> R<Vec<Ranked>> {
+    if config::auto_acquisition_paused("Search").map_err(Error::Other)? || pick_client()?.is_none()
+    {
+        return Ok(vec![]);
     }
-    let Some(client) = pick_client()? else {
-        warn!("SearchMissing: no enabled download client configured");
-        return Ok((None, vec![]));
-    };
-    let (mut grabbed_media, mut empty): (HashSet<u32>, Vec<(u32, String)>) = Default::default();
-    let (mut cursor, mut count, mut done, mut current) = (None, 0, resume, None);
-    let mut prev: Option<(u32, Option<u32>, Option<u32>)> = None;
-    let mut ordinal = 0u8;
-    let mut packs: Vec<u32> = vec![];
-    loop {
-        let page = host::acquisition_candidates(&CandidatesQuery {
-            kind: None,
-            family: None,
-            media_ids: media_ids.clone(),
-            available_on: today(),
-            limit: 200,
-            cursor: cursor.take(),
-        })?;
-        for target in &page.items {
-            count += 1;
-            let id = (target.media_id, group_id(target), item_id(target));
-            ordinal = if prev == Some(id) {
-                ordinal.saturating_add(1)
-            } else {
-                0
-            };
-            prev = Some(id);
-            let key = key_of(target, ordinal);
-            if !after(key, resume) {
-                continue;
-            }
-            if current != Some(key) {
-                done = current.or(done);
-                current = Some(key);
-            }
-            if net::budget().remaining() < Duration::from_millis(config::search_budget_ms()) {
-                info!("SearchMissing: out of time after {count} candidate(s), resuming later");
-                return Ok((done, vec![]));
-            }
-            if target
-                .want
-                .as_ref()
-                .is_none_or(|w| w.decision == WantDecision::Skip)
-            {
-                continue;
-            }
-            if matches!(piece(target), Piece::Episode(..))
-                && let Some(g) = group_id(target)
-                && packs.contains(&g)
-            {
-                continue;
-            }
-            let outcome = auto_grab_or_skip(target, &client);
-            match outcome {
-                Outcome::Grabbed => {
-                    grabbed_media.insert(target.media_id);
-                }
-                Outcome::NoRelease if !empty.iter().any(|(m, _)| *m == target.media_id) => {
-                    empty.push((target.media_id, target.title.clone()));
-                }
-                _ => {}
-            }
-            if outcome == Outcome::Grabbed
-                && is_season(target)
-                && let Some(g) = group_id(target)
-            {
-                packs.push(g);
-            }
-        }
-        match page.cursor {
-            Some(c)
-                if !config::auto_acquisition_paused("SearchMissing").map_err(Error::Other)? =>
-            {
-                cursor = Some(c)
-            }
-            _ => break,
-        }
+    let (target, _) = load_target(media_id, group_id, item_id, family, language)?;
+    if let Some(blocking) = pending(&target)? {
+        info!(
+            "Search #{media_id} \"{}\": a grab is already pending (\"{blocking}\")",
+            target.title
+        );
+        return Ok(vec![]);
     }
-    info!("SearchMissing: {count} candidate(s) checked");
-    empty.retain(|(m, _)| !grabbed_media.contains(m));
-    Ok((None, empty))
+    let scored = search_scored(&target, Kind::Auto, None, None)?;
+    let picks = pick(&scored, &target);
+    let total = scored.len();
+    let kept = scored
+        .into_iter()
+        .enumerate()
+        .filter(|(i, _)| picks.contains(i))
+        .map(|(_, r)| r)
+        .collect::<Vec<_>>();
+    info!(
+        "Search #{media_id} \"{}\" for the core → {} of {total} release(s) eligible",
+        target.title,
+        kept.len()
+    );
+    Ok(kept)
 }
 
 pub struct Match {

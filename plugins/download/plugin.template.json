@@ -253,12 +253,6 @@
   },
   "jobs": [
     {
-      "name": "SearchMissing",
-      "cron": "0 0-23/6 * * *",
-      "triggerable": true,
-      "labelKey": "download.jobs.search_missing"
-    },
-    {
       "name": "RssSync",
       "cron": "*/15 * * * *",
       "triggerable": true,
@@ -388,13 +382,6 @@
             "labelKey": "download.config.general.auto_acquisition_paused",
             "hint": "download.config.general.auto_acquisition_paused_hint",
             "default": false
-          },
-          {
-            "key": "requestsAutoGrabOnApproval",
-            "type": "toggle",
-            "labelKey": "download.config.general.immediate_search",
-            "hint": "download.config.general.immediate_search_hint",
-            "default": true
           },
           {
             "key": "search_budget_seconds",
@@ -1163,9 +1150,6 @@
       "download.config.general.title": "General",
       "download.config.general.auto_acquisition_paused": "Pause automatic downloads",
       "download.config.general.auto_acquisition_paused_hint": "No new release is grabbed on its own. Downloads in progress finish and are imported, and you can still grab a release yourself.",
-      "download.config.general.immediate_search": "Search as soon as a title needs a download",
-      "download.config.general.immediate_search_hint": "When a request is approved, a file is identified or new episodes appear. Off, the next scheduled search handles it.",
-      "download.jobs.search_missing": "Search missing",
       "download.jobs.rss_sync": "RSS sync",
       "download.jobs.import_completed": "Import completed downloads",
       "download.jobs.clean_stalled": "Clean stalled downloads",
@@ -1360,9 +1344,6 @@
       "download.config.general.title": "Général",
       "download.config.general.auto_acquisition_paused": "Suspendre les téléchargements automatiques",
       "download.config.general.auto_acquisition_paused_hint": "Aucune release n’est plus récupérée d’elle-même. Les téléchargements en cours se terminent et sont importés, et vous pouvez toujours en récupérer une vous-même.",
-      "download.config.general.immediate_search": "Chercher dès qu’un titre doit être téléchargé",
-      "download.config.general.immediate_search_hint": "Quand une demande est approuvée, qu’un fichier est identifié ou que de nouveaux épisodes sortent. Désactivé, la prochaine recherche planifiée s’en charge.",
-      "download.jobs.search_missing": "Recherche des médias manquants",
       "download.jobs.rss_sync": "Synchronisation RSS",
       "download.jobs.import_completed": "Import des téléchargements terminés",
       "download.jobs.clean_stalled": "Nettoyage des torrents bloqués",

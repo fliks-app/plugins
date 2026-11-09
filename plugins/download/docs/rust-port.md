@@ -97,7 +97,9 @@ The plugin matches paths itself (core forwards the raw sub-path): `matchOne` spl
 before percent-decoding each segment, first match wins, case-sensitive
 [ts:src/seams/http-routes.ts:1305-1330]. See DL7.
 
-### 1.3 Jobs (5) [ts:scripts/manifest-template.ts:227-233, ts:src/seams/jobs.ts:25-43]
+### 1.3 Jobs (5, historical: `SearchMissing` is gone) [ts:scripts/manifest-template.ts:227-233, ts:src/seams/jobs.ts:25-43]
+
+> Since the core runs automatic acquisition, the plugin has no `SearchMissing` job, no `search:<id>` call, no `media.acquisition.requested` handler and no `requestsAutoGrabOnApproval` key: the core calls the `search` route (answering what this provider would grab) and the `grab` route. `RssSync` remains.
 
 | Job | Cron (server zone) | Body | Triggerable |
 |---|---|---|---|

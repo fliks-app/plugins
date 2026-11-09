@@ -20,7 +20,6 @@ pub mod torznab;
 pub mod transmission;
 pub mod util;
 
-use fliks_plugin_sdk::bindings::fliks::plugin::types::{AcquisitionEvent, Failed};
 use fliks_plugin_sdk::rt::{self, Budget, budgets};
 use fliks_plugin_sdk::{HealthReport, HttpRequest, HttpResponse, Plugin, host};
 use serde_json::{Value, json};
@@ -36,7 +35,6 @@ type Job = fn(Option<&str>) -> error::R<()>;
 /// The handler of a manifest job.
 pub fn job_handler(name: &str) -> Option<Job> {
     Some(match name {
-        "SearchMissing" => search_missing_job,
         "RssSync" => |_| grab::rss_sync(),
         "ImportCompleted" => |_| poller::poll(),
         "CleanStalled" => |_| poller::clean_stalled(),
@@ -45,84 +43,10 @@ pub fn job_handler(name: &str) -> Option<Job> {
     })
 }
 
-const PLUGIN_ID: &str = "fliks.download";
-
 struct Download;
 
 fn text(e: impl std::fmt::Display) -> String {
     e.to_string()
-}
-
-fn resume_of(v: &Value) -> Option<(Option<u32>, Option<u32>, u8)> {
-    let r = v.get("resume")?;
-    let id = |k: &str| {
-        r.get(k)
-            .and_then(Value::as_u64)
-            .and_then(|i| u32::try_from(i).ok())
-    };
-    let rank = r.get("family").and_then(Value::as_u64).unwrap_or(0);
-    Some((
-        id("seasonId"),
-        id("episodeId"),
-        u8::try_from(rank).unwrap_or(0),
-    ))
-}
-
-/// `SearchMissing`: a scoped run starts from the top; the unscoped sweep resumes where the
-/// last run ran out of time.
-fn search_missing_job(args: Option<&str>) -> error::R<()> {
-    let args: Value = args
-        .and_then(|a| serde_json::from_str(a).ok())
-        .unwrap_or(Value::Null);
-    let ids = args
-        .get("mediaIds")
-        .and_then(Value::as_array)
-        .filter(|a| a.iter().all(Value::is_number));
-    if let Some(ids) = ids {
-        let ids = ids
-            .iter()
-            .filter_map(Value::as_u64)
-            .filter_map(|i| u32::try_from(i).ok())
-            .collect();
-        grab::search_missing(Some(ids), None)?;
-        return Ok(());
-    }
-    // A key saved before books has no family rank: it resumes from the text want.
-    let resume = db::state::get("searchMissingResume")?.and_then(|v| {
-        serde_json::from_value::<grab::Key>(v.clone())
-            .ok()
-            .or_else(|| {
-                let (m, g, i) =
-                    serde_json::from_value::<(u32, Option<u32>, Option<u32>)>(v).ok()?;
-                Some((m, g, i, 0))
-            })
-    });
-    match grab::search_missing(None, resume)?.0 {
-        Some(key) => db::state::set("searchMissingResume", &json!(key)),
-        None => db::state::delete("searchMissingResume"),
-    }
-}
-
-/// Tells the host this provider found nothing, so it can ask the next provider.
-fn publish_no_release(empty: &[(u32, String)]) {
-    for (media_id, title) in empty {
-        let ev = AcquisitionEvent::Failed(Failed {
-            media_id: *media_id,
-            title: title.clone(),
-            reason: "no-release".into(),
-        });
-        if let Err(e) = host::events_publish(&[ev]) {
-            warn!(
-                "acquisition.failed (no-release) not published for #{media_id}: {}",
-                e.message
-            );
-        }
-    }
-}
-
-/// The host names the provider a request is for; any other (or none) is not ours.
-fn addressed_to_us(payload: &Value) -> bool {
-    payload.get("provider").and_then(Value::as_str) == Some(PLUGIN_ID)
 }
 
 impl Plugin for Download {
@@ -167,23 +91,6 @@ impl Plugin for Download {
         let (prefix, rest) = key.split_once(':').unwrap_or((&key, ""));
         let id: Option<u32> = rest.parse().ok();
         match (prefix, id) {
-            ("search", Some(media)) => {
-                let resume = resume_of(&payload).map(|(s, e, f)| (media, s, e, f));
-                let request = payload.get("request") == Some(&json!(true));
-                let (next, empty) =
-                    grab::search_missing(Some(vec![media]), resume).map_err(text)?;
-                if let Some((_, s, e, f)) = next {
-                    fliks_plugin_sdk::scheduled::schedule(
-                        &key,
-                        0,
-                        &json!({ "request": request, "resume": { "seasonId": s, "episodeId": e, "family": f } }),
-                    )
-                    .map_err(|e| e.message)?;
-                } else if request {
-                    publish_no_release(&empty);
-                }
-                Ok(())
-            }
             ("caps", Some(id)) => {
                 let Some(mut ix) = db::indexers::find(id.into()).map_err(text)? else {
                     return Ok(());
@@ -215,76 +122,9 @@ impl Plugin for Download {
         routes::ROUTER.handle(req)
     }
 
-    /// `media.acquisition.requested` schedules one `search:<id>` per media: a second event for
-    /// the same media replaces its pending call.
-    fn event(name: String, payload: String) {
-        if name != "media.acquisition.requested" {
-            return;
-        }
-        let payload: Value = serde_json::from_str(&payload).unwrap_or(Value::Null);
-        if !addressed_to_us(&payload) {
-            return;
-        }
-        let mut ids: Vec<u32> = vec![];
-        for v in payload
-            .get("mediaIds")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-        {
-            let Some(f) = v
-                .as_f64()
-                .filter(|f| f.fract() == 0.0 && *f > 0.0 && *f <= f64::from(u32::MAX))
-            else {
-                continue;
-            };
-            if !ids.contains(&(f as u32)) {
-                ids.push(f as u32);
-            }
-        }
-        if ids.is_empty() {
-            return;
-        }
-        match config::immediate_search() {
-            Err(e) => error!("{name}: search failed: {e}"),
-            Ok(false) => {
-                info!("{name}: immediate search is off, left to the next scheduled search")
-            }
-            Ok(true) => {
-                let list: Vec<String> = ids.iter().map(u32::to_string).collect();
-                info!("{name}: searching for media {}", list.join(", "));
-                for id in ids {
-                    if let Err(e) = fliks_plugin_sdk::scheduled::schedule(
-                        &format!("search:{id}"),
-                        0,
-                        &json!({ "request": true }),
-                    ) {
-                        error!("{name}: search of #{id} not scheduled: {}", e.message);
-                    }
-                }
-            }
-        }
-    }
-
     fn config_changed(keys: Vec<String>) {
         info!("config changed: {} (read on next use)", keys.join(", "));
     }
 }
 
 fliks_plugin_sdk::export!(Download);
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn only_requests_addressed_to_this_plugin_run() {
-        assert!(addressed_to_us(
-            &json!({"provider": "fliks.download", "mediaIds": [1]})
-        ));
-        assert!(!addressed_to_us(
-            &json!({"provider": "fliks.deezer", "mediaIds": [1]})
-        ));
-        assert!(!addressed_to_us(&json!({"mediaIds": [1]})));
-    }
-}
