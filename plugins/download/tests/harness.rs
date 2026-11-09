@@ -1548,11 +1548,7 @@ async fn all_35_routes_answer_the_frozen_statuses() {
         ref_of(&h, grabbed).await,
     );
     let (completed_ref, failed_ref, grabbed_ref) = (&refs.0, &refs.1, &refs.2);
-    let (completed, failed, grabbed) = (
-        completed.to_string(),
-        failed.to_string(),
-        grabbed.to_string(),
-    );
+    let (completed, grabbed) = (completed.to_string(), grabbed.to_string());
     let (completed, grabbed) = (&completed, &grabbed);
 
     let not_controllable = "download.queue.errors.not_controllable";
