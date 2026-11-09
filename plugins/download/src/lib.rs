@@ -100,7 +100,6 @@ impl Plugin for Download {
                 };
                 rt::block_on(torznab::refresh_caps(&mut ix, round))
                     .map_err(|_| format!("[{}] caps probe: the slot stayed busy", ix.name))?;
-                indexers::publish_sources();
                 Ok(())
             }
             ("grab-started", Some(_)) => {

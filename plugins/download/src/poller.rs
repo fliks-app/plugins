@@ -262,6 +262,27 @@ fn method_of(s: &str) -> GrabMethod {
     }
 }
 
+/// The core's id of a transfer: the row id plus its creation time, so a reinstall that restarts ids
+/// never reuses one.
+pub fn queue_ref(row: &HistoryRow) -> String {
+    let stamp: String = row
+        .created_at
+        .chars()
+        .filter(char::is_ascii_digit)
+        .collect();
+    format!("{}-{stamp}", row.id)
+}
+
+/// Matches the client's torrents to the rows now and returns the row as it stands after.
+pub fn match_now(row: HistoryRow) -> R<HistoryRow> {
+    let (all, _) = fetch_all()?;
+    let mut rows = history::by_statuses(&["grabbed"])?;
+    for h in &all {
+        match_and_heal(&h.t, &mut rows)?;
+    }
+    Ok(history::find(row.id)?.unwrap_or(row))
+}
+
 /// The core refuses a field outside 1-500 characters and then the whole snapshot.
 fn clamp(s: &str, fallback: &str) -> String {
     let s: String = s.trim().chars().take(500).collect();
@@ -277,7 +298,7 @@ fn queue_entry(
 ) -> Option<QueueEntry> {
     let finished = matches!(state, QueueState::Imported | QueueState::Failed);
     Some(QueueEntry {
-        ref_: row.id.to_string(),
+        ref_: queue_ref(row),
         media_id: u32::try_from(row.media_id.filter(|m| *m != 0)?).ok()?,
         unit,
         source_id: row.indexer_id.map_or_else(|| "0".into(), |i| i.to_string()),

@@ -156,18 +156,27 @@ pub fn kinds(tree: Option<&str>) -> Vec<&'static str> {
     .collect()
 }
 
-/// One source per enabled, searchable indexer that serves at least one kind.
+/// The host refuses a list over this size, or a name outside 1-200 characters, as a whole.
+const MAX_SOURCES: usize = 200;
+
+/// One source per enabled, searchable indexer that serves at least one kind: the first 200, names clamped.
 pub fn sources_of(rows: &[IndexerRow]) -> Vec<Source> {
     rows.iter()
         .filter(|ix| ix.enabled && (ix.enable_search || ix.enable_interactive_search))
         .filter_map(|ix| {
             let kinds = kinds(ix.caps_categories.as_deref());
+            let name: String = ix.name.trim().chars().take(200).collect();
             (!kinds.is_empty()).then(|| Source {
                 id: ix.id.to_string(),
-                name: ix.name.clone(),
+                name: if name.is_empty() {
+                    format!("Indexer {}", ix.id)
+                } else {
+                    name
+                },
                 kinds: kinds.into_iter().map(String::from).collect(),
             })
         })
+        .take(MAX_SOURCES)
         .collect()
 }
 
@@ -254,5 +263,38 @@ mod tests {
         assert_eq!(kinds(Some("3010")), ["album"]);
         assert_eq!(kinds(Some("7020,7030")), ["book", "comic"]);
         assert!(kinds(Some("1000,4000")).is_empty());
+    }
+
+    fn indexer(id: i64, name: &str) -> IndexerRow {
+        serde_json::from_value(json!({
+            "id": id, "name": name, "implementation": "torznab", "settings": {},
+            "enableRss": true, "enableSearch": true, "enableInteractiveSearch": true,
+            "priority": 25, "enabled": true, "capsSearchFallback": false, "capsMovieSearch": true,
+            "capsTvSearch": false, "capsMovieSearchParams": null, "capsTvSearchParams": null,
+            "capsBookSearch": false, "capsBookSearchParams": null, "capsCategories": "2000",
+            "capsProbedAt": null, "requestDelay": 2, "createdAt": "", "updatedAt": "",
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn sources_stay_inside_the_host_contract() {
+        let long = "n".repeat(300);
+        let rows = [indexer(1, &long), indexer(2, "  "), indexer(3, " Tracker ")];
+        let names: Vec<String> = sources_of(&rows).into_iter().map(|s| s.name).collect();
+        assert_eq!(
+            names,
+            [
+                "n".repeat(200),
+                "Indexer 2".to_owned(),
+                "Tracker".to_owned()
+            ]
+        );
+        let many: Vec<IndexerRow> = (0..250).map(|i| indexer(i, "t")).collect();
+        let ids: Vec<String> = sources_of(&many).into_iter().map(|s| s.id).collect();
+        assert_eq!(
+            (ids.len(), ids[0].as_str(), ids[199].as_str()),
+            (200, "0", "199")
+        );
     }
 }

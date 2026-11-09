@@ -213,17 +213,25 @@ fn grab_release(r: &Request) -> R<Response> {
         Ok(f) => f,
         Err(resp) => return resp,
     };
+    let auto = match str_field(&b, "method").as_deref() {
+        None | Some("manual") => false,
+        Some("auto") => true,
+        Some(_) => return bad_param("method"),
+    };
+    let Some(manual) = manual_of(&b, auto) else {
+        return bad_param("downloadUrl");
+    };
     ok(grab::grab_release(
         media,
         group,
         item,
         family,
         str_field(&b, "language").as_deref(),
-        manual_of(&b, matches!(r.principal, Principal::System)),
+        manual,
     )?)
 }
 
-/// A body without `downloadUrl` asks for an auto-pick.
+/// A grab names its release and its method (`auto` from the core's sweep, else `manual`).
 fn manual_of(b: &Map<String, Value>, auto: bool) -> Option<Manual> {
     str_field(b, "downloadUrl")
         .filter(|u| !u.is_empty())
@@ -319,7 +327,11 @@ fn create_indexer(r: &Request) -> R<Response> {
 
 fn update_indexer(r: &Request) -> R<Response> {
     let id = need_id!(r);
-    let input = match indexer_input(&body(r)) {
+    let b = body(r);
+    if b.get("name").is_some() && str_field(&b, "name").is_none_or(|n| n.trim().is_empty()) {
+        return bad_body("name");
+    }
+    let input = match indexer_input(&b) {
         Ok(i) => i,
         Err(resp) => return resp,
     };
@@ -493,18 +505,22 @@ fn client_usable(id: i64) -> R<bool> {
 
 // --- queue actions -------------------------------------------------------------------------
 
-/// The history row a queue action names: `{ref}` is the id the snapshot reported (`poller`).
+/// The history row a queue action names: `{ref}` is what the snapshot reported (`poller::queue_ref`).
 fn target(r: &Request) -> Result<HistoryRow, R<Response>> {
-    let id = body(r)
-        .get("ref")
-        .and_then(Value::as_str)
-        .and_then(|s| s.parse::<i64>().ok());
-    let Some(id) = id else {
+    let b = body(r);
+    let Some(reference) = b.get("ref").and_then(Value::as_str) else {
+        return Err(bad_param("ref"));
+    };
+    let Some(id) = reference
+        .split('-')
+        .next()
+        .and_then(|s| s.parse::<i64>().ok())
+    else {
         return Err(bad_param("ref"));
     };
     match history::find(id) {
-        Ok(Some(row)) => Ok(row),
-        Ok(None) => Err(not_found(&id.to_string())),
+        Ok(Some(row)) if poller::queue_ref(&row) == reference => Ok(row),
+        Ok(_) => Err(not_found(reference)),
         Err(e) => Err(Err(e)),
     }
 }
@@ -532,6 +548,12 @@ fn control(r: &Request, pause: bool) -> R<Response> {
     let row = match controllable(r, &["grabbed"]) {
         Ok(row) => row,
         Err(resp) => return resp,
+    };
+    // A row the client has not matched yet is matched now, so a queued transfer can be held.
+    let row = if row.torrent_hash.as_deref().is_none_or(str::is_empty) {
+        poller::match_now(row)?
+    } else {
+        row
     };
     let (Some(client), Some(hash)) = (
         row.download_client_id,
@@ -562,12 +584,20 @@ fn resume(r: &Request) -> R<Response> {
 }
 
 /// Removes the torrent and its files when its client can be asked, retires the row either way, and
-/// blocklists the release when the core says so.
+/// blocklists the release when the core says so. An importing row is only retired: its files are in use.
 fn remove_queued(r: &Request) -> R<Response> {
-    let row = match controllable(r, &["grabbed", "import_failed"]) {
+    let row = match controllable(r, &["grabbed", "importing", "import_failed"]) {
         Ok(row) => row,
         Err(resp) => return resp,
     };
+    if row.status == "importing" {
+        history::mark_failed(row.id, "download.queue.removed_by_user")?;
+        if body(r).get("blocklist") == Some(&json!(true)) {
+            poller::auto_blocklist(&row, "Blocklisted when removed from the queue");
+        }
+        settle(&row, "absent");
+        return ok(json!({}));
+    }
     let consulted = match row.download_client_id {
         Some(c) => client_usable(c)?,
         None => false,

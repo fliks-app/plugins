@@ -1017,7 +1017,7 @@ pub mod history {
 
     pub fn complete_import(id: i64) -> R<()> {
         exec(
-            r#"UPDATE "download_history" SET "status" = 'completed', "updatedAt" = now() WHERE "id" = $1"#,
+            r#"UPDATE "download_history" SET "status" = 'completed', "updatedAt" = now() WHERE "id" = $1 AND "status" = 'importing'"#,
             &[int(id)],
         )
         .map(drop)
