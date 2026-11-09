@@ -22,5 +22,22 @@
     "limits": { "ratePerSec": 1, "burst": 1 },
     "snapshotTtlSecs": { "work": 2592000, "children": 2592000, "edition": 2592000 },
     "imageHosts": ["covers.openlibrary.org", "archive.org"]
+  },
+  "i18n": {
+    "fr": {
+      "openlibrary.description": "Métadonnées de livres depuis OpenLibrary : recherche, œuvres et leurs éditions."
+    },
+    "de": {
+      "openlibrary.description": "Buch-Metadaten von OpenLibrary: Suche, Werke und ihre Ausgaben."
+    },
+    "es": {
+      "openlibrary.description": "Metadatos de libros de OpenLibrary: búsqueda, obras y sus ediciones."
+    },
+    "it": {
+      "openlibrary.description": "Metadati di libri da OpenLibrary: ricerca, opere e relative edizioni."
+    },
+    "pt": {
+      "openlibrary.description": "Metadados de livros do OpenLibrary: pesquisa, obras e as suas edições."
+    }
   }
 }

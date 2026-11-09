@@ -204,6 +204,7 @@
       "musiclists.attribution": "Lists from ListenBrainz, Last.fm, Spotify, Deezer and MusicBrainz."
     },
     "fr": {
+      "musiclists.description": "Suivez les albums et les morceaux des listes ListenBrainz, Last.fm, Spotify, Deezer et MusicBrainz.",
       "musiclists.config.title": "Listes musicales",
       "musiclists.config.subtitle": "Suivez les albums et titres de vos listes ListenBrainz, Last.fm, Spotify, Deezer et MusicBrainz.",
       "musiclists.labels.new": "Nouvelle liste",
@@ -256,6 +257,18 @@
       "musiclists.sources.recording": "Titres",
       "musiclists.jobs.sync": "Synchroniser les listes musicales",
       "musiclists.attribution": "Listes de ListenBrainz, Last.fm, Spotify, Deezer et MusicBrainz."
+    },
+    "de": {
+      "musiclists.description": "Folgt den Alben und Titeln von Listen aus ListenBrainz, Last.fm, Spotify, Deezer und MusicBrainz."
+    },
+    "es": {
+      "musiclists.description": "Sigue los álbumes y las canciones de listas de ListenBrainz, Last.fm, Spotify, Deezer y MusicBrainz."
+    },
+    "it": {
+      "musiclists.description": "Segue gli album e i brani delle liste di ListenBrainz, Last.fm, Spotify, Deezer e MusicBrainz."
+    },
+    "pt": {
+      "musiclists.description": "Acompanha os álbuns e as faixas das listas do ListenBrainz, Last.fm, Spotify, Deezer e MusicBrainz."
     }
   }
 }

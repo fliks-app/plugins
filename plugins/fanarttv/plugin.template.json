@@ -103,6 +103,7 @@
       "fanarttv.config.attribution": "Images from Fanart.tv (https://fanart.tv)."
     },
     "fr": {
+      "fanarttv.description": "Images d'artistes et pochettes d'albums depuis Fanart.tv, par identifiants MusicBrainz.",
       "fanarttv.config.title": "Fanart.tv",
       "fanarttv.config.subtitle": "Images d'artistes et pochettes d'albums de Fanart.tv.",
       "fanarttv.config.apiKey": "Clé d'API",
@@ -110,6 +111,18 @@
       "fanarttv.config.clientKey": "Clé personnelle",
       "fanarttv.config.clientKey_hint": "Facultatif. Votre clé d'API personnelle Fanart.tv, envoyée avec chaque requête.",
       "fanarttv.config.attribution": "Images de Fanart.tv (https://fanart.tv)."
+    },
+    "de": {
+      "fanarttv.description": "Künstlerbilder und Albumcover von Fanart.tv, anhand von MusicBrainz-IDs."
+    },
+    "es": {
+      "fanarttv.description": "Imágenes de artistas y portadas de álbumes de Fanart.tv, por identificadores de MusicBrainz."
+    },
+    "it": {
+      "fanarttv.description": "Immagini di artisti e copertine di album da Fanart.tv, tramite gli identificativi MusicBrainz."
+    },
+    "pt": {
+      "fanarttv.description": "Imagens de artistas e capas de álbuns do Fanart.tv, por identificadores do MusicBrainz."
     }
   }
 }

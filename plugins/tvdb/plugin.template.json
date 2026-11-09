@@ -63,10 +63,23 @@
       "tvdb.config.apiKey_hint": "Your own TheTVDB API key. Leave it empty to use the key Fliks ships with."
     },
     "fr": {
+      "tvdb.description": "Métadonnées de films et de séries, images, personnes et génériques depuis TheTVDB.",
       "tvdb.config.title": "TheTVDB",
       "tvdb.config.subtitle": "Métadonnées de films et de séries de TheTVDB.",
       "tvdb.config.apiKey": "Clé d'API",
       "tvdb.config.apiKey_hint": "Votre propre clé d'API TheTVDB. Laissez vide pour utiliser la clé fournie avec Fliks."
+    },
+    "de": {
+      "tvdb.description": "Film- und Serien-Metadaten, Bilder, Personen und Mitwirkende von TheTVDB."
+    },
+    "es": {
+      "tvdb.description": "Metadatos de películas y series, imágenes, personas y créditos de TheTVDB."
+    },
+    "it": {
+      "tvdb.description": "Metadati di film e serie, immagini, persone e crediti da TheTVDB."
+    },
+    "pt": {
+      "tvdb.description": "Metadados de filmes e séries, imagens, pessoas e créditos do TheTVDB."
     }
   }
 }
