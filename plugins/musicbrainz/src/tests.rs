@@ -98,7 +98,8 @@ fn search_reranks_by_exact_title_type_and_releases() {
     let q = h.queries().remove(0);
     assert!(q.contains("releasegroup:(Placeholder Album)"));
     assert!(q.contains("artist:\"Example Artist\""));
-    assert!(q.contains("firstreleasedate:2004*"));
+    assert!(q.contains("firstreleasedate:2004"));
+    assert!(!q.contains("firstreleasedate:2004*"));
 }
 
 #[test]
