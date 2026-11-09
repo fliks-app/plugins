@@ -20,6 +20,8 @@ const HASH: &str = "0123456789abcdef0123456789abcdef01234567";
 fn setup() -> Setup {
     let mut s = Setup::from_crate(env!("CARGO_MANIFEST_DIR"));
     s.network_internal = true;
+    // The harness core reports 6.0.0; the manifest's real range is pinned by the vectors test.
+    s.template["fliks"] = json!(">=6.0.0 <7.0.0");
     s
 }
 
@@ -2083,7 +2085,7 @@ async fn a_client_that_refuses_or_is_missing_answers_502() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn a_torrent_list_with_one_unreadable_entry_publishes_no_queue() {
+async fn a_torrent_list_with_one_unreadable_entry_keeps_its_rows_listed_as_stalled() {
     let Some(h) = Harness::start(setup()).await else {
         return;
     };
@@ -2106,9 +2108,9 @@ async fn a_torrent_list_with_one_unreadable_entry_publishes_no_queue() {
     );
     add_qbit(&h, &bad).await;
     let mut db = plugin_db(&h).await;
-    exec(&mut db, r#"INSERT INTO "download_history" ("sourceTitle", "quality", "status", "torrentHash", "downloadClientId") SELECT 'x', 'HD', 'grabbed', 'abc', "id" FROM "download_clients""#).await;
-    // A row the core already holds open would be closed by a snapshot that omits it.
     let media = add_movie(&h, "Some Movie").await;
+    exec(&mut db, &format!(r#"INSERT INTO "download_history" ("sourceTitle", "quality", "status", "torrentHash", "downloadClientId", "mediaId") SELECT 'x', 'HD', 'grabbed', 'abc', "id", {media} FROM "download_clients""#)).await;
+    // A row the core already holds open must not be closed by a tick where its client is unreadable.
     sqlx::query(
         r#"INSERT INTO acquisition_queue ("pluginId", "ref", "mediaId", "sourceId", "sourceName", title, quality, method, state)
            VALUES ($1, '1', $2, '0', 'x', 't', 'HD', 'auto', 'active')"#,
@@ -2119,7 +2121,7 @@ async fn a_torrent_list_with_one_unreadable_entry_publishes_no_queue() {
     .await
     .unwrap();
     h.job("ImportCompleted", None).await.unwrap();
-    assert_eq!(queue_rows(&h).await, [("1".into(), "active".into(), 0.0)]);
+    assert_eq!(queue_rows(&h).await, [("1".into(), "stalled".into(), 0.0)]);
     h.finish().await;
 }
 
@@ -2196,6 +2198,31 @@ async fn entries(h: &Harness, row: i64) -> Vec<Entry> {
     .fetch_all(&h.pool)
     .await
     .unwrap()
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn with_no_enabled_client_the_queue_is_still_stated_and_clamped() {
+    let Some(h) = Harness::start(setup()).await else {
+        return;
+    };
+    let media = add_movie(&h, "Some Movie").await;
+    let mut db = plugin_db(&h).await;
+    let title = "x".repeat(600);
+    exec(&mut db, format!(r#"INSERT INTO "download_history" ("sourceTitle", "quality", "status", "torrentHash", "mediaId") VALUES ('{title}', ' ', 'grabbed', 'abc', {media})"#)).await;
+    h.job("ImportCompleted", None).await.unwrap();
+    let rows: Vec<(String, String, String)> = sqlx::query_as(
+        r#"SELECT state, title, quality FROM acquisition_queue WHERE "pluginId" = $1 AND "finishedAt" IS NULL"#,
+    )
+    .bind(&h.id)
+    .fetch_all(&h.pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        rows,
+        [("stalled".into(), "x".repeat(500), "Unknown".into())],
+        "a clamped entry, listed although no client is enabled"
+    );
+    h.finish().await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

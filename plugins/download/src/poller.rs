@@ -262,6 +262,12 @@ fn method_of(s: &str) -> GrabMethod {
     }
 }
 
+/// The core refuses a field outside 1-500 characters and then the whole snapshot.
+fn clamp(s: &str, fallback: &str) -> String {
+    let s: String = s.trim().chars().take(500).collect();
+    if s.is_empty() { fallback.into() } else { s }
+}
+
 fn queue_entry(
     row: &HistoryRow,
     unit: Option<UnitRef>,
@@ -275,13 +281,14 @@ fn queue_entry(
         media_id: u32::try_from(row.media_id.filter(|m| *m != 0)?).ok()?,
         unit,
         source_id: row.indexer_id.map_or_else(|| "0".into(), |i| i.to_string()),
-        source_name: row
-            .indexer_id
-            .and_then(|i| names.get(&i))
-            .cloned()
-            .unwrap_or_else(|| "Download".into()),
-        title: row.source_title.clone(),
-        quality: row.quality.clone(),
+        source_name: clamp(
+            row.indexer_id
+                .and_then(|i| names.get(&i))
+                .map_or("", String::as_str),
+            "Download",
+        ),
+        title: clamp(&row.source_title, "Untitled"),
+        quality: clamp(&row.quality, "Unknown"),
         method: method_of(&row.grab_source),
         info_url: row.info_url.clone(),
         state,
@@ -298,13 +305,13 @@ fn queue_entry(
         bytes_per_second: t.map(|t| t.dlspeed),
         eta_seconds: t.and_then(|t| (t.eta > 0.0 && t.eta < 8_640_000.0).then_some(t.eta)),
         error: matches!(state, QueueState::ImportFailed | QueueState::Failed)
-            .then(|| row.status_message.clone())
+            .then(|| row.status_message.as_deref().map(|m| clamp(m, "Failed")))
             .flatten(),
     })
 }
 
-/// The plugin's transfers: every open row with what its client reports (a row the client no longer
-/// holds is left out), and the rows that finished lately.
+/// The plugin's transfers: every open row with what its client reports (stalled when the client does
+/// not list it), and the rows that finished lately.
 fn build_queue(all: &[Held]) -> R<Vec<QueueEntry>> {
     let mut rows = history::by_statuses(&["grabbed", "importing", "import_failed"])?;
     let mut live: HashMap<i64, &Torrent> = HashMap::new();
@@ -333,7 +340,8 @@ fn build_queue(all: &[Held]) -> R<Vec<QueueEntry>> {
             _ if t.is_some() => queue_state(client::progress_state(&t.expect("live").state)),
             // Never reached a client: that is what queued means.
             _ if row.torrent_hash.as_deref().is_none_or(str::is_empty) => QueueState::Queued,
-            _ => continue,
+            // Its client does not list it (down, or gone): shown until the reconcile retires the row.
+            _ => QueueState::Stalled,
         };
         out.extend(queue_entry(
             row,
@@ -366,11 +374,8 @@ fn build_queue(all: &[Held]) -> R<Vec<QueueEntry>> {
     Ok(out)
 }
 
-/// States the whole queue to the core; nothing when a client did not answer, so no row looks gone.
-fn publish_queue(all: &[Held], all_ok: bool) -> R<()> {
-    if !all_ok {
-        return Ok(());
-    }
+/// States the whole queue to the core; the rows of a client that did not answer stay listed as stalled.
+fn publish_queue(all: &[Held]) -> R<()> {
     if let Err(e) = host::queue_set(&build_queue(all)?) {
         warn!("Import: queue publish failed: {}", e.message);
     }
@@ -397,9 +402,9 @@ pub fn settle_and_publish(row: &HistoryRow, expect: Outcome) -> R<()> {
     };
     let deadline = Instant::now() + Duration::from_secs(4);
     loop {
-        let (all, ok) = fetch_all()?;
+        let (all, _) = fetch_all()?;
         if reached(&all, hash, expect) || Instant::now() >= deadline {
-            return publish_queue(&all, ok);
+            return publish_queue(&all);
         }
         std::thread::sleep(Duration::from_millis(300));
     }
@@ -441,7 +446,7 @@ pub fn poll() -> R<()> {
         .collect();
     if enabled.is_empty() {
         warn!("Import: no enabled download client found");
-        return Ok(());
+        return publish_queue(&[]);
     }
     let (all, all_ok) = fetch_all()?;
     auto_match(&all)?;
@@ -450,7 +455,7 @@ pub fn poll() -> R<()> {
     if all_ok {
         reconcile(&all, &grabbed, &importing)?;
     }
-    publish_queue(&all, all_ok)?;
+    publish_queue(&all)?;
 
     let completed: Vec<&Held> = all
         .iter()
@@ -489,7 +494,7 @@ pub fn poll() -> R<()> {
         };
         let run = || {
             history::mark_importing(row.id)?;
-            publish_queue(&all, all_ok)?;
+            publish_queue(&all)?;
             process_one(&row, &held.t, client)
         };
         match run() {
