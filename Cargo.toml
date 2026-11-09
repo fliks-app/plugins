@@ -4,11 +4,11 @@ members = ["plugins/download", "plugins/notify", "plugins/openlibrary", "plugins
 
 # One rev of fliks-app/fliks for every plugin; raising it rebuilds them all.
 [workspace.dependencies]
-fliks-plugin-sdk = { git = "https://github.com/fliks-app/fliks", rev = "66f2841974ac449e68dcff6fcd4083465f9c23ba" }
-fliks-plugin-sdk-provider = { git = "https://github.com/fliks-app/fliks", rev = "66f2841974ac449e68dcff6fcd4083465f9c23ba" }
-fliks-plugin-manifest = { git = "https://github.com/fliks-app/fliks", rev = "66f2841974ac449e68dcff6fcd4083465f9c23ba" }
-fliks_domain = { git = "https://github.com/fliks-app/fliks", rev = "66f2841974ac449e68dcff6fcd4083465f9c23ba" }
-fliks-plugin-route = { git = "https://github.com/fliks-app/fliks", rev = "66f2841974ac449e68dcff6fcd4083465f9c23ba" }
+fliks-plugin-sdk = { git = "https://github.com/fliks-app/fliks", rev = "7b9c61890cfdecbdfdbe88eb109326214c4a67f7" }
+fliks-plugin-sdk-provider = { git = "https://github.com/fliks-app/fliks", rev = "7b9c61890cfdecbdfdbe88eb109326214c4a67f7" }
+fliks-plugin-manifest = { git = "https://github.com/fliks-app/fliks", rev = "7b9c61890cfdecbdfdbe88eb109326214c4a67f7" }
+fliks_domain = { git = "https://github.com/fliks-app/fliks", rev = "7b9c61890cfdecbdfdbe88eb109326214c4a67f7" }
+fliks-plugin-route = { git = "https://github.com/fliks-app/fliks", rev = "7b9c61890cfdecbdfdbe88eb109326214c4a67f7" }
 
 [profile.release]
 opt-level = "z"

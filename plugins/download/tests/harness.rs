@@ -2778,6 +2778,54 @@ async fn the_rss_sweep_grabs_a_book_through_its_targets() {
     let _ = std::fs::remove_dir_all(base);
 }
 
+/// Another provider's download of the media stops the sweep's auto-grab; once it is gone the sweep grabs.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_download_in_flight_at_another_provider_blocks_the_auto_grab() {
+    use fliks_plugin_sdk::harness::fliks_server::plugins::events::progress_gates;
+    use fliks_plugin_sdk::harness::fliks_server::plugins::runtime::fliks::plugin::types::{
+        DownloadProgress, DownloadState,
+    };
+    let Some((h, base, media, qbit)) =
+        book_fixture("book-in-flight", &["text"], false, &["Mirelune.epub"]).await
+    else {
+        return;
+    };
+    let feed = format!(
+        r#"<?xml version="1.0"?><rss xmlns:torznab="http://torznab.com/schemas/2015/feed"><channel>
+<item><title>{BOOK_RELEASE}</title><link>magnet:?xt=urn:btih:{HASH}&amp;dn={BOOK_RELEASE}</link><size>2000000</size><torznab:attr name="seeders" value="5"/></item>
+</channel></rss>"#
+    )
+    .into_bytes();
+    let tracker = Stub::start(move |_, _, _| (200, vec![], feed.clone()));
+    add_book_indexer(&h, &tracker).await;
+    let other = [DownloadProgress {
+        ref_: "x".into(),
+        unit: None,
+        progress: 0.1,
+        bytes_per_second: None,
+        eta_seconds: None,
+        state: DownloadState::Active,
+    }];
+    progress_gates()
+        .set(&h.st, "other.provider", media as i32, &other)
+        .await
+        .unwrap();
+
+    let sweep = json!({ "mediaIds": [media] }).to_string();
+    h.job("SearchMissing", Some(&sweep)).await.unwrap();
+    assert!(logged(&h, "a grab is in flight at other.provider"));
+    assert!(qbit.hits_to("/api/v2/torrents/add").is_empty());
+
+    progress_gates()
+        .set(&h.st, "other.provider", media as i32, &[])
+        .await
+        .unwrap();
+    h.job("SearchMissing", Some(&sweep)).await.unwrap();
+    assert_eq!(qbit.hits_to("/api/v2/torrents/add").len(), 1);
+    h.finish().await;
+    let _ = std::fs::remove_dir_all(base);
+}
+
 /// A tracker that refuses `t=book` is asked with `t=search` from then on.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_refused_book_search_is_remembered() {

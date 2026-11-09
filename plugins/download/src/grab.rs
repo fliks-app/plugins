@@ -1154,6 +1154,15 @@ fn try_auto_grab(target: &Target, client: &DownloadClientRow) -> R<Outcome> {
             Outcome::Skipped,
         );
     }
+    // Only video units are whole numbers the host matches; any other kind asks for the whole media.
+    let unit = unit_ref_of(target).filter(|_| media == Media::Series);
+    let elsewhere = host::acquisition_in_flight(target.media_id, unit.as_ref())?;
+    if !elsewhere.is_empty() {
+        return skip(
+            format!("a grab is in flight at {}", elsewhere.join(", ")),
+            Outcome::Skipped,
+        );
+    }
     let scored = search_scored(target, Kind::Auto, None, None)?;
     if scored.is_empty() {
         return skip(
