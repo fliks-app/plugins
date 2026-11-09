@@ -2790,7 +2790,7 @@ async fn core_sweep(h: &Harness, media: i64) {
         let body = json!({
             "downloadUrl": best["downloadUrl"], "sourceTitle": best["title"],
             "sourceId": best["sourceId"], "infoUrl": best["infoUrl"],
-            "family": family_str(t.family), "language": t.language,
+            "family": family_str(t.family), "language": t.language, "method": "auto",
         });
         let mut grab = request(
             "POST",
