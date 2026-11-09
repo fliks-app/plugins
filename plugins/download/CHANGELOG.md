@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.7.0](https://github.com/fliks-app/plugins/compare/download-v2.6.0...download-v2.7.0) (2026-11-09)
+
+
+### Features
+
+* **download:** skip an auto-grab another provider has in flight ([#114](https://github.com/fliks-app/plugins/issues/114)) ([7d23fc0](https://github.com/fliks-app/plugins/commit/7d23fc0ed5e5c94a380f5b122e806d066ff29e33))
+
 ## [2.6.0](https://github.com/fliks-app/plugins/compare/download-v2.5.0...download-v2.6.0) (2026-11-09)
 
 
