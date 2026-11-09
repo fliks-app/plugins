@@ -3,7 +3,10 @@
 use crate::db::{IndexerRow, indexers};
 use crate::error::{Error, R};
 use crate::throttle;
+use crate::torznab::{album_categories, pick_category};
 use crate::util::{Settings, js_number, merge_secrets, redact_secrets, setting};
+use fliks_plugin_sdk::bindings::fliks::plugin::types::{Family, Source};
+use fliks_plugin_sdk::host;
 use serde_json::{Map, Value, json};
 
 const SECRET_KEYS: [&str; 1] = ["apiKey"];
@@ -85,6 +88,7 @@ pub fn create(i: Input) -> R<IndexerRow> {
         enabled: i.enabled.unwrap_or(true),
     })?;
     schedule_caps(saved.id);
+    publish_sources();
     Ok(redact(&saved))
 }
 
@@ -118,12 +122,79 @@ pub fn update(id: i64, i: Input) -> R<IndexerRow> {
         },
     )?;
     schedule_caps(saved.id);
+    publish_sources();
     Ok(redact(&saved))
 }
 
 pub fn remove(id: i64) -> R<()> {
     find(id)?;
-    indexers::remove(id)
+    indexers::remove(id)?;
+    publish_sources();
+    Ok(())
+}
+
+/// The media kinds an indexer's category tree serves; an unprobed tree (none) serves them all.
+pub fn kinds(tree: Option<&str>) -> Vec<&'static str> {
+    let has = |lo: u32, hi: u32| {
+        tree.is_none_or(|t| {
+            t.split(',')
+                .filter_map(|id| id.parse::<u32>().ok())
+                .any(|id| (lo..hi).contains(&id))
+        })
+    };
+    let book =
+        pick_category(tree, Family::Text).is_some() || pick_category(tree, Family::Audio).is_some();
+    [
+        ("movie", has(2000, 3000)),
+        ("series", has(5000, 6000)),
+        ("book", book),
+        ("comic", pick_category(tree, Family::Image).is_some()),
+        ("album", album_categories(tree).is_some()),
+    ]
+    .into_iter()
+    .filter_map(|(k, on)| on.then_some(k))
+    .collect()
+}
+
+/// One source per enabled, searchable indexer that serves at least one kind.
+pub fn sources_of(rows: &[IndexerRow]) -> Vec<Source> {
+    rows.iter()
+        .filter(|ix| ix.enabled && (ix.enable_search || ix.enable_interactive_search))
+        .filter_map(|ix| {
+            let kinds = kinds(ix.caps_categories.as_deref());
+            (!kinds.is_empty()).then(|| Source {
+                id: ix.id.to_string(),
+                name: ix.name.clone(),
+                kinds: kinds.into_iter().map(String::from).collect(),
+            })
+        })
+        .collect()
+}
+
+/// Tells the host which indexers this provider offers; a failure is logged, the next change retries.
+pub fn publish_sources() {
+    match indexers::list_all() {
+        Ok(rows) => {
+            if let Err(e) = host::acquisition_sources_set(&sources_of(&rows)) {
+                warn!("acquisition sources not published: {}", e.message);
+            }
+        }
+        Err(e) => warn!("acquisition sources not published: {e}"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn kinds_follow_the_category_tree() {
+        assert_eq!(kinds(None), ["movie", "series", "book", "comic", "album"]);
+        assert_eq!(kinds(Some("2000,2040,5000")), ["movie", "series"]);
+        assert_eq!(kinds(Some("3010")), ["album"]);
+        assert_eq!(kinds(Some("7020,7030")), ["book", "comic"]);
+        assert!(kinds(Some("1000,4000")).is_empty());
+    }
 }
 
 /// Redacted rows with `useFor` and the open cooldown, in fan-out order.

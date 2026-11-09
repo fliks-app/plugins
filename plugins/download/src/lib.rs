@@ -20,6 +20,7 @@ pub mod torznab;
 pub mod transmission;
 pub mod util;
 
+use fliks_plugin_sdk::bindings::fliks::plugin::types::{AcquisitionEvent, Failed};
 use fliks_plugin_sdk::rt::{self, Budget, budgets};
 use fliks_plugin_sdk::{HealthReport, HttpRequest, HttpResponse, Plugin, host};
 use serde_json::{Value, json};
@@ -43,6 +44,8 @@ pub fn job_handler(name: &str) -> Option<Job> {
         _ => return None,
     })
 }
+
+const PLUGIN_ID: &str = "fliks.download";
 
 struct Download;
 
@@ -94,10 +97,32 @@ fn search_missing_job(args: Option<&str>) -> error::R<()> {
                 Some((m, g, i, 0))
             })
     });
-    match grab::search_missing(None, resume)? {
+    match grab::search_missing(None, resume)?.0 {
         Some(key) => db::state::set("searchMissingResume", &json!(key)),
         None => db::state::delete("searchMissingResume"),
     }
+}
+
+/// Tells the host this provider found nothing, so it can ask the next provider.
+fn publish_no_release(empty: &[(u32, String)]) {
+    for (media_id, title) in empty {
+        let ev = AcquisitionEvent::Failed(Failed {
+            media_id: *media_id,
+            title: title.clone(),
+            reason: "no-release".into(),
+        });
+        if let Err(e) = host::events_publish(&[ev]) {
+            warn!(
+                "acquisition.failed (no-release) not published for #{media_id}: {}",
+                e.message
+            );
+        }
+    }
+}
+
+/// The host names the provider a request is for; any other (or none) is not ours.
+fn addressed_to_us(payload: &Value) -> bool {
+    payload.get("provider").and_then(Value::as_str) == Some(PLUGIN_ID)
 }
 
 impl Plugin for Download {
@@ -124,6 +149,7 @@ impl Plugin for Download {
         if swept > 0 {
             warn!("Import: {swept} importing entries outlived their lease — re-armed as grabbed");
         }
+        indexers::publish_sources();
         // Viewers may hold a snapshot from before the restart: the next tick states every set.
         db::state::set("progressResync", &json!(true)).map_err(text)
     }
@@ -143,15 +169,18 @@ impl Plugin for Download {
         match (prefix, id) {
             ("search", Some(media)) => {
                 let resume = resume_of(&payload).map(|(s, e, f)| (media, s, e, f));
-                if let Some((_, s, e, f)) =
-                    grab::search_missing(Some(vec![media]), resume).map_err(text)?
-                {
+                let request = payload.get("request") == Some(&json!(true));
+                let (next, empty) =
+                    grab::search_missing(Some(vec![media]), resume).map_err(text)?;
+                if let Some((_, s, e, f)) = next {
                     fliks_plugin_sdk::scheduled::schedule(
                         &key,
                         0,
-                        &json!({ "resume": { "seasonId": s, "episodeId": e, "family": f } }),
+                        &json!({ "request": request, "resume": { "seasonId": s, "episodeId": e, "family": f } }),
                     )
                     .map_err(|e| e.message)?;
+                } else if request {
+                    publish_no_release(&empty);
                 }
                 Ok(())
             }
@@ -164,7 +193,9 @@ impl Plugin for Download {
                     fetch_timeout: Duration::from_secs(10),
                 };
                 rt::block_on(torznab::refresh_caps(&mut ix, round))
-                    .map_err(|_| format!("[{}] caps probe: the slot stayed busy", ix.name))
+                    .map_err(|_| format!("[{}] caps probe: the slot stayed busy", ix.name))?;
+                indexers::publish_sources();
+                Ok(())
             }
             ("grab-started", Some(_)) => {
                 if let Err(e) = host::notifications_dispatch_grab_started(&payload.to_string()) {
@@ -191,6 +222,9 @@ impl Plugin for Download {
             return;
         }
         let payload: Value = serde_json::from_str(&payload).unwrap_or(Value::Null);
+        if !addressed_to_us(&payload) {
+            return;
+        }
         let mut ids: Vec<u32> = vec![];
         for v in payload
             .get("mediaIds")
@@ -223,7 +257,7 @@ impl Plugin for Download {
                     if let Err(e) = fliks_plugin_sdk::scheduled::schedule(
                         &format!("search:{id}"),
                         0,
-                        &json!({}),
+                        &json!({ "request": true }),
                     ) {
                         error!("{name}: search of #{id} not scheduled: {}", e.message);
                     }
@@ -238,3 +272,19 @@ impl Plugin for Download {
 }
 
 fliks_plugin_sdk::export!(Download);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_requests_addressed_to_this_plugin_run() {
+        assert!(addressed_to_us(
+            &json!({"provider": "fliks.download", "mediaIds": [1]})
+        ));
+        assert!(!addressed_to_us(
+            &json!({"provider": "fliks.deezer", "mediaIds": [1]})
+        ));
+        assert!(!addressed_to_us(&json!({"mediaIds": [1]})));
+    }
+}

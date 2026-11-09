@@ -1111,33 +1111,55 @@ fn pending(target: &Target) -> R<Option<String>> {
     }
 }
 
-/// Search, pick and grab one automatic target; false when nothing was grabbed.
-fn try_auto_grab(target: &Target, client: &DownloadClientRow) -> R<bool> {
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Outcome {
+    Grabbed,
+    /// The indexers had nothing to grab for a target that wants something.
+    NoRelease,
+    Skipped,
+}
+
+/// Search, pick and grab one automatic target.
+fn try_auto_grab(target: &Target, client: &DownloadClientRow) -> R<Outcome> {
     let Some(media) = Media::of(&target.kind, target.family) else {
         info!(
             "AutoGrab[{}]: \"{}\" skipped — this plugin acquires movies, series, books, comics and albums only",
             target.kind, target.title
         );
-        return Ok(false);
+        return Ok(Outcome::Skipped);
     };
     let kind = media.as_str();
-    let skip = |reason: String| {
+    let skip = |reason: String, outcome: Outcome| {
         info!("AutoGrab[{kind}]: \"{}\" skipped — {reason}", target.title);
-        Ok(false)
+        Ok(outcome)
     };
     match &target.want {
-        None => return skip("no quality/language profile on media".into()),
+        None => {
+            return skip(
+                "no quality/language profile on media".into(),
+                Outcome::Skipped,
+            );
+        }
         Some(w) if w.decision == WantDecision::Skip => {
-            return skip("media already satisfies its profile".into());
+            return skip(
+                "media already satisfies its profile".into(),
+                Outcome::Skipped,
+            );
         }
         _ => {}
     }
     if let Some(blocking) = pending(target)? {
-        return skip(format!("a grab is already pending (\"{blocking}\")"));
+        return skip(
+            format!("a grab is already pending (\"{blocking}\")"),
+            Outcome::Skipped,
+        );
     }
     let scored = search_scored(target, Kind::Auto, None, None)?;
     if scored.is_empty() {
-        return skip("no releases returned by indexers".into());
+        return skip(
+            "no releases returned by indexers".into(),
+            Outcome::NoRelease,
+        );
     }
     let picks = pick(&scored, target);
     if picks.is_empty() {
@@ -1169,33 +1191,36 @@ fn try_auto_grab(target: &Target, client: &DownloadClientRow) -> R<bool> {
         } else {
             "release"
         };
-        return skip(format!(
-            "no eligible {what} ({} checked){top}",
-            scored.len()
-        ));
+        return skip(
+            format!("no eligible {what} ({} checked){top}", scored.len()),
+            Outcome::NoRelease,
+        );
     }
     for i in picks {
         let mut a = args_for(target, media, client, &scored[i], "auto");
         a.reject_if_present = true;
         match grab_and_record(a) {
-            Ok(_) => return Ok(true),
+            Ok(_) => return Ok(Outcome::Grabbed),
             Err(e) => warn!(
                 "AutoGrab[{kind}]: grab failed for \"{}\": {e}",
                 target.title
             ),
         }
     }
-    skip("every eligible release was unobtainable".into())
+    skip(
+        "every eligible release was unobtainable".into(),
+        Outcome::NoRelease,
+    )
 }
 
 /// One target's failure is logged and skipped: it must not end the sweep of the rest.
-fn auto_grab_or_skip(target: &Target, client: &DownloadClientRow) -> bool {
+fn auto_grab_or_skip(target: &Target, client: &DownloadClientRow) -> Outcome {
     try_auto_grab(target, client).unwrap_or_else(|e| {
         warn!(
             "AutoGrab[{}]: \"{}\" failed, the sweep goes on — {e}",
             target.kind, target.title
         );
-        false
+        Outcome::Skipped
     })
 }
 
@@ -1212,15 +1237,19 @@ pub fn after(key: Key, resume: Option<Key>) -> bool {
     resume.is_none_or(|r| key > r)
 }
 
-/// `Ok(Some(key))`: the time budget ran out after `key`; the caller resumes from there.
-pub fn search_missing(media_ids: Option<Vec<u32>>, resume: Option<Key>) -> R<Option<Key>> {
+/// The sweep's resume key (`Some`: the time budget ran out after it) and the media (id, title)
+/// where something was wanted, searched, and nothing grabbed.
+pub type Sweep = (Option<Key>, Vec<(u32, String)>);
+
+pub fn search_missing(media_ids: Option<Vec<u32>>, resume: Option<Key>) -> R<Sweep> {
     if config::auto_acquisition_paused("SearchMissing").map_err(Error::Other)? {
-        return Ok(None);
+        return Ok((None, vec![]));
     }
     let Some(client) = pick_client()? else {
         warn!("SearchMissing: no enabled download client configured");
-        return Ok(None);
+        return Ok((None, vec![]));
     };
+    let (mut grabbed_media, mut empty): (HashSet<u32>, Vec<(u32, String)>) = Default::default();
     let (mut cursor, mut count, mut done, mut current) = (None, 0, resume, None);
     let mut prev: Option<(u32, Option<u32>, Option<u32>)> = None;
     let mut ordinal = 0u8;
@@ -1253,7 +1282,7 @@ pub fn search_missing(media_ids: Option<Vec<u32>>, resume: Option<Key>) -> R<Opt
             }
             if net::budget().remaining() < Duration::from_millis(config::search_budget_ms()) {
                 info!("SearchMissing: out of time after {count} candidate(s), resuming later");
-                return Ok(done);
+                return Ok((done, vec![]));
             }
             if target
                 .want
@@ -1268,8 +1297,17 @@ pub fn search_missing(media_ids: Option<Vec<u32>>, resume: Option<Key>) -> R<Opt
             {
                 continue;
             }
-            let grabbed = auto_grab_or_skip(target, &client);
-            if grabbed
+            let outcome = auto_grab_or_skip(target, &client);
+            match outcome {
+                Outcome::Grabbed => {
+                    grabbed_media.insert(target.media_id);
+                }
+                Outcome::NoRelease if !empty.iter().any(|(m, _)| *m == target.media_id) => {
+                    empty.push((target.media_id, target.title.clone()));
+                }
+                _ => {}
+            }
+            if outcome == Outcome::Grabbed
                 && is_season(target)
                 && let Some(g) = group_id(target)
             {
@@ -1286,7 +1324,8 @@ pub fn search_missing(media_ids: Option<Vec<u32>>, resume: Option<Key>) -> R<Opt
         }
     }
     info!("SearchMissing: {count} candidate(s) checked");
-    Ok(None)
+    empty.retain(|(m, _)| !grabbed_media.contains(m));
+    Ok((None, empty))
 }
 
 pub struct Match {
