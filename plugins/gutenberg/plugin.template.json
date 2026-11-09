@@ -109,6 +109,21 @@
       "gutenberg.settings.subtitle": "Where the books you add are stored.",
       "gutenberg.settings.library_id": "Library id",
       "gutenberg.settings.library_id_hint": "Only needed when several libraries accept books."
+    },
+    "fr": {
+      "gutenberg.description": "Recherchez dans le Projet Gutenberg et ajoutez ses livres numériques gratuits à la bibliothèque."
+    },
+    "de": {
+      "gutenberg.description": "Durchsucht Project Gutenberg und fügt dessen kostenlose E-Books der Bibliothek hinzu."
+    },
+    "es": {
+      "gutenberg.description": "Busca en el Proyecto Gutenberg y añade sus libros electrónicos gratuitos a la biblioteca."
+    },
+    "it": {
+      "gutenberg.description": "Cerca nel Progetto Gutenberg e aggiunge i suoi ebook gratuiti alla libreria."
+    },
+    "pt": {
+      "gutenberg.description": "Pesquisa no Projeto Gutenberg e adiciona os seus livros digitais gratuitos à biblioteca."
     }
   }
 }

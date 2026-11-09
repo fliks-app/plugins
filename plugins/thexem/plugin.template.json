@@ -77,10 +77,23 @@
       "thexem.config.baseUrl_hint": "Leave empty for https://thexem.info."
     },
     "fr": {
+      "thexem.description": "Fait correspondre les numéros de saison et d'épisode des noms de releases aux numéros de diffusion, pour les séries publiées sous une autre numérotation, depuis TheXEM.",
       "thexem.config.title": "TheXEM",
       "thexem.config.subtitle": "Numérotation scene des séries diffusées sous une autre numérotation que celle de la bibliothèque.",
       "thexem.config.baseUrl": "URL de base",
       "thexem.config.baseUrl_hint": "Laissez vide pour https://thexem.info."
+    },
+    "de": {
+      "thexem.description": "Ordnet die Staffel- und Episodennummern von Release-Namen den ausgestrahlten zu, für Serien mit abweichender Nummerierung, über TheXEM."
+    },
+    "es": {
+      "thexem.description": "Asocia los números de temporada y episodio de los nombres de lanzamiento con los de emisión, para series publicadas con otra numeración, desde TheXEM."
+    },
+    "it": {
+      "thexem.description": "Associa i numeri di stagione ed episodio dei nomi delle release a quelli di messa in onda, per le serie pubblicate con un'altra numerazione, tramite TheXEM."
+    },
+    "pt": {
+      "thexem.description": "Associa os números de temporada e episódio dos nomes de lançamento aos de exibição, para séries publicadas com outra numeração, a partir do TheXEM."
     }
   }
 }

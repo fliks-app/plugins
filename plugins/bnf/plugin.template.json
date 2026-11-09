@@ -20,5 +20,22 @@
     "editionNamespaces": ["isbn", "bnf"],
     "limits": { "ratePerSec": 1, "burst": 1 },
     "snapshotTtlSecs": { "edition": 2592000 }
+  },
+  "i18n": {
+    "fr": {
+      "bnf.description": "Métadonnées de livres depuis le catalogue général de la BnF : recherche et éditions par ISBN ou numéro de notice."
+    },
+    "de": {
+      "bnf.description": "Buch-Metadaten aus dem Gesamtkatalog der BnF: Suche und Ausgaben nach ISBN oder Datensatznummer."
+    },
+    "es": {
+      "bnf.description": "Metadatos de libros del catálogo general de la BnF: búsqueda y ediciones por ISBN o número de registro."
+    },
+    "it": {
+      "bnf.description": "Metadati di libri dal catalogo generale della BnF: ricerca ed edizioni per ISBN o numero di scheda."
+    },
+    "pt": {
+      "bnf.description": "Metadados de livros do catálogo geral da BnF: pesquisa e edições por ISBN ou número de registro."
+    }
   }
 }

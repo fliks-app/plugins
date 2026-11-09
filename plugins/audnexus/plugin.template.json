@@ -22,5 +22,22 @@
     "limits": { "ratePerSec": 1, "burst": 1 },
     "snapshotTtlSecs": { "edition": 2592000, "chapters": null },
     "imageHosts": ["m.media-amazon.com", "images-na.ssl-images-amazon.com"]
+  },
+  "i18n": {
+    "fr": {
+      "audnexus.description": "Métadonnées et chapitres de livres audio depuis Audnexus, par ASIN."
+    },
+    "de": {
+      "audnexus.description": "Hörbuch-Metadaten und Kapitel von Audnexus, nach ASIN."
+    },
+    "es": {
+      "audnexus.description": "Metadatos y capítulos de audiolibros de Audnexus, por ASIN."
+    },
+    "it": {
+      "audnexus.description": "Metadati e capitoli di audiolibri da Audnexus, per ASIN."
+    },
+    "pt": {
+      "audnexus.description": "Metadados e capítulos de audiolivros do Audnexus, por ASIN."
+    }
   }
 }

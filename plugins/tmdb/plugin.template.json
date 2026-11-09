@@ -63,10 +63,23 @@
       "tmdb.config.apiKey_hint": "Your own TMDB API key. Leave it empty to use the key Fliks ships with."
     },
     "fr": {
+      "tmdb.description": "Métadonnées de films et de séries, images, personnes et listes depuis The Movie Database.",
       "tmdb.config.title": "TMDB",
       "tmdb.config.subtitle": "Métadonnées de films et de séries de The Movie Database.",
       "tmdb.config.apiKey": "Clé d'API",
       "tmdb.config.apiKey_hint": "Votre propre clé d'API TMDB. Laissez vide pour utiliser la clé fournie avec Fliks."
+    },
+    "de": {
+      "tmdb.description": "Film- und Serien-Metadaten, Bilder, Personen und Listen von The Movie Database."
+    },
+    "es": {
+      "tmdb.description": "Metadatos de películas y series, imágenes, personas y listas de The Movie Database."
+    },
+    "it": {
+      "tmdb.description": "Metadati di film e serie, immagini, persone e liste da The Movie Database."
+    },
+    "pt": {
+      "tmdb.description": "Metadados de filmes e séries, imagens, pessoas e listas do The Movie Database."
     }
   }
 }

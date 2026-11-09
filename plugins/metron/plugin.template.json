@@ -93,11 +93,24 @@
       "metron.config.attribution": "Data from Metron (https://metron.cloud), licensed CC BY-SA 4.0. Some series carry their own attribution on Metron."
     },
     "fr": {
+      "metron.description": "Métadonnées de séries et de numéros de comics depuis Metron (CC BY-SA 4.0). Nécessite votre propre jeton d'API Metron.",
       "metron.config.title": "Metron",
       "metron.config.subtitle": "Métadonnées de bandes dessinées de Metron.",
       "metron.config.apiToken": "Jeton d'API",
       "metron.config.apiToken_hint": "Un jeton de la section « API Tokens » de la page de votre propre compte Metron. Fliks n'en fournit aucun : sans jeton, le fournisseur reste inactif. Metron autorise 20 requêtes par minute et 5 000 par jour et par compte.",
       "metron.config.attribution": "Données de Metron (https://metron.cloud), sous licence CC BY-SA 4.0. Certaines séries portent leur propre attribution sur Metron."
+    },
+    "de": {
+      "metron.description": "Metadaten zu Comic-Serien und -Ausgaben von Metron (CC BY-SA 4.0). Erfordert ein eigenes Metron-API-Token."
+    },
+    "es": {
+      "metron.description": "Metadatos de series y números de cómics de Metron (CC BY-SA 4.0). Requiere tu propio token de API de Metron."
+    },
+    "it": {
+      "metron.description": "Metadati di serie e numeri di fumetti da Metron (CC BY-SA 4.0). Richiede un token API Metron personale."
+    },
+    "pt": {
+      "metron.description": "Metadados de séries e edições de quadrinhos do Metron (CC BY-SA 4.0). Requer o seu próprio token de API do Metron."
     }
   }
 }

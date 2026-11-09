@@ -21,5 +21,22 @@
     "limits": { "ratePerSec": 1, "burst": 1 },
     "snapshotTtlSecs": { "edition": 2592000 },
     "imageHosts": ["m.media-amazon.com"]
+  },
+  "i18n": {
+    "fr": {
+      "audible.description": "Métadonnées de livres audio depuis le catalogue Audible non officiel : recherche et éditions par ASIN."
+    },
+    "de": {
+      "audible.description": "Hörbuch-Metadaten aus dem inoffiziellen Audible-Katalog: Suche und Ausgaben nach ASIN."
+    },
+    "es": {
+      "audible.description": "Metadatos de audiolibros del catálogo no oficial de Audible: búsqueda y ediciones por ASIN."
+    },
+    "it": {
+      "audible.description": "Metadati di audiolibri dal catalogo Audible non ufficiale: ricerca ed edizioni per ASIN."
+    },
+    "pt": {
+      "audible.description": "Metadados de audiolivros do catálogo não oficial da Audible: pesquisa e edições por ASIN."
+    }
   }
 }

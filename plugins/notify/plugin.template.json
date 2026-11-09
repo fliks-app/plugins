@@ -53,10 +53,23 @@
       "notify.config.target_url_hint": "HTTPS address that receives each event as JSON. It often embeds a token, so it is stored as a secret."
     },
     "fr": {
+      "notify.description": "Transmet les événements de Fliks à un webhook HTTPS configuré par l'administrateur, avec des nouvelles tentatives limitées.",
       "notify.config.title": "Notify",
       "notify.config.subtitle": "Transmet chaque événement à un webhook.",
       "notify.config.target_url": "URL cible",
       "notify.config.target_url_hint": "Adresse HTTPS qui reçoit chaque événement en JSON. Elle contient souvent un jeton, elle est donc stockée comme secret."
+    },
+    "de": {
+      "notify.description": "Leitet Fliks-Ereignisse an einen vom Administrator konfigurierten HTTPS-Webhook weiter, mit begrenzten Wiederholungen."
+    },
+    "es": {
+      "notify.description": "Reenvía los eventos de Fliks a un webhook HTTPS configurado por el administrador, con reintentos limitados."
+    },
+    "it": {
+      "notify.description": "Inoltra gli eventi di Fliks a un webhook HTTPS configurato dall'amministratore, con tentativi ripetuti limitati."
+    },
+    "pt": {
+      "notify.description": "Encaminha os eventos do Fliks para um webhook HTTPS configurado pelo administrador, com novas tentativas limitadas."
     }
   }
 }

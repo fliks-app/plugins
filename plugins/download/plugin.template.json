@@ -1417,6 +1417,7 @@
       "download.config.queue.columns.size": "Size"
     },
     "fr": {
+      "download.description": "Recherche sur les indexeurs, gestion des clients de téléchargement et chaîne d'acquisition de Fliks.",
       "download.config.general.subtitle": "Comportement de récupération et d'import.",
       "download.config.indexers.subtitle": "Trackers Torznab interrogés lors d'une recherche de release.",
       "download.config.download_clients.subtitle": "Clients auxquels une release récupérée est transmise.",
@@ -1616,6 +1617,18 @@
       "download.config.queue.columns.speed": "Vitesse",
       "download.config.queue.columns.peers": "Seeders/Leechers",
       "download.config.queue.columns.size": "Taille"
+    },
+    "de": {
+      "download.description": "Indexer-Suche, Verwaltung der Download-Clients und die Beschaffungskette von Fliks."
+    },
+    "es": {
+      "download.description": "Búsqueda en indexadores, gestión de clientes de descarga y cadena de adquisición de Fliks."
+    },
+    "it": {
+      "download.description": "Ricerca sugli indicizzatori, gestione dei client di download e catena di acquisizione di Fliks."
+    },
+    "pt": {
+      "download.description": "Pesquisa em indexadores, gestão de clientes de download e cadeia de aquisição do Fliks."
     }
   }
 }

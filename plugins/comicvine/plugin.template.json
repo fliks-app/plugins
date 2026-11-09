@@ -92,11 +92,24 @@
       "comicvine.config.attribution": "Data and images from Comic Vine (https://comicvine.gamespot.com). Use is limited to non-commercial purposes."
     },
     "fr": {
+      "comicvine.description": "Métadonnées de séries et de numéros de comics depuis Comic Vine, pour un usage non commercial uniquement. Nécessite votre propre clé d'API.",
       "comicvine.config.title": "Comic Vine",
       "comicvine.config.subtitle": "Métadonnées de bandes dessinées de Comic Vine, pour un usage non commercial uniquement.",
       "comicvine.config.apiKey": "Clé d'API",
       "comicvine.config.apiKey_hint": "Votre propre clé d'API Comic Vine (comicvine.gamespot.com/api). Fliks n'en fournit aucune : sans clé, le fournisseur reste inactif. Comic Vine autorise 200 requêtes par ressource et par heure.",
       "comicvine.config.attribution": "Données et images de Comic Vine (https://comicvine.gamespot.com). Usage limité au non commercial."
+    },
+    "de": {
+      "comicvine.description": "Metadaten zu Comic-Bänden und -Ausgaben von Comic Vine, nur für die nicht-kommerzielle Nutzung. Erfordert einen eigenen API-Schlüssel."
+    },
+    "es": {
+      "comicvine.description": "Metadatos de volúmenes y números de cómics de Comic Vine, solo para uso no comercial. Requiere tu propia clave de API."
+    },
+    "it": {
+      "comicvine.description": "Metadati di volumi e numeri di fumetti da Comic Vine, solo per uso non commerciale. Richiede una chiave API personale."
+    },
+    "pt": {
+      "comicvine.description": "Metadados de volumes e edições de quadrinhos do Comic Vine, apenas para uso não comercial. Requer a sua própria chave de API."
     }
   }
 }

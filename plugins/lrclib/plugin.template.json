@@ -71,9 +71,22 @@
       "lrclib.config.attribution": "Lyrics from LRCLIB (https://lrclib.net)."
     },
     "fr": {
+      "lrclib.description": "Paroles synchronisées et simples depuis LRCLIB, associées par titre, artiste, album et durée.",
       "lrclib.config.title": "LRCLIB",
       "lrclib.config.subtitle": "Paroles synchronisées et simples de LRCLIB. Aucun compte ni clé nécessaire.",
       "lrclib.config.attribution": "Paroles de LRCLIB (https://lrclib.net)."
+    },
+    "de": {
+      "lrclib.description": "Synchronisierte und einfache Liedtexte von LRCLIB, zugeordnet über Titel, Künstler, Album und Dauer."
+    },
+    "es": {
+      "lrclib.description": "Letras sincronizadas y simples de LRCLIB, emparejadas por título, artista, álbum y duración."
+    },
+    "it": {
+      "lrclib.description": "Testi sincronizzati e semplici da LRCLIB, abbinati per titolo, artista, album e durata."
+    },
+    "pt": {
+      "lrclib.description": "Letras sincronizadas e simples do LRCLIB, associadas por título, artista, álbum e duração."
     }
   }
 }

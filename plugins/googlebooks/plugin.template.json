@@ -21,5 +21,22 @@
     "limits": { "ratePerSec": 1, "burst": 1 },
     "snapshotTtlSecs": { "edition": 2592000 },
     "imageHosts": ["books.google.com"]
+  },
+  "i18n": {
+    "fr": {
+      "googlebooks.description": "Métadonnées de livres depuis Google Books : recherche et éditions par ISBN ou identifiant de volume."
+    },
+    "de": {
+      "googlebooks.description": "Buch-Metadaten von Google Books: Suche und Ausgaben nach ISBN oder Band-ID."
+    },
+    "es": {
+      "googlebooks.description": "Metadatos de libros de Google Books: búsqueda y ediciones por ISBN o identificador de volumen."
+    },
+    "it": {
+      "googlebooks.description": "Metadati di libri da Google Books: ricerca ed edizioni per ISBN o identificativo del volume."
+    },
+    "pt": {
+      "googlebooks.description": "Metadados de livros do Google Books: pesquisa e edições por ISBN ou identificador de volume."
+    }
   }
 }

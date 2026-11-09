@@ -160,6 +160,21 @@
       "librivox.settings.subtitle": "Where the audiobooks you add are stored.",
       "librivox.settings.library_id": "Library id",
       "librivox.settings.library_id_hint": "Only needed when several libraries accept books."
+    },
+    "fr": {
+      "librivox.description": "Recherchez dans LibriVox et ajoutez ses livres audio gratuits à la bibliothèque."
+    },
+    "de": {
+      "librivox.description": "Durchsucht LibriVox und fügt dessen kostenlose Hörbücher der Bibliothek hinzu."
+    },
+    "es": {
+      "librivox.description": "Busca en LibriVox y añade sus audiolibros gratuitos a la biblioteca."
+    },
+    "it": {
+      "librivox.description": "Cerca in LibriVox e aggiunge i suoi audiolibri gratuiti alla libreria."
+    },
+    "pt": {
+      "librivox.description": "Pesquisa no LibriVox e adiciona os seus audiolivros gratuitos à biblioteca."
     }
   }
 }
