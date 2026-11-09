@@ -183,20 +183,6 @@ pub fn publish_sources() {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn kinds_follow_the_category_tree() {
-        assert_eq!(kinds(None), ["movie", "series", "book", "comic", "album"]);
-        assert_eq!(kinds(Some("2000,2040,5000")), ["movie", "series"]);
-        assert_eq!(kinds(Some("3010")), ["album"]);
-        assert_eq!(kinds(Some("7020,7030")), ["book", "comic"]);
-        assert!(kinds(Some("1000,4000")).is_empty());
-    }
-}
-
 /// Redacted rows with `useFor` and the open cooldown, in fan-out order.
 pub fn list() -> R<Vec<Value>> {
     let rows = indexers::list_all()?;
@@ -255,4 +241,18 @@ pub fn test_connection(implementation: &str, settings: &Settings, id: Option<i64
         }
     };
     crate::torznab::test_connection(&base, &key)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn kinds_follow_the_category_tree() {
+        assert_eq!(kinds(None), ["movie", "series", "book", "comic", "album"]);
+        assert_eq!(kinds(Some("2000,2040,5000")), ["movie", "series"]);
+        assert_eq!(kinds(Some("3010")), ["album"]);
+        assert_eq!(kinds(Some("7020,7030")), ["book", "comic"]);
+        assert!(kinds(Some("1000,4000")).is_empty());
+    }
 }
