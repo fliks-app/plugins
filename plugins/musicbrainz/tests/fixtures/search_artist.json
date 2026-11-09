@@ -1,0 +1,7 @@
+{"created": "2026-01-01T00:00:00.000Z", "count": 2, "offset": 0, "artists": [
+  {"id": "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA", "type": "Group", "score": 100, "name": "Example Artist",
+   "sort-name": "Artist, Example", "country": "GB", "disambiguation": "placeholder band"},
+  {"id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", "score": 80, "name": "Example Singer"},
+  {"id": "not-an-id", "score": 70, "name": "Dropped"},
+  {"id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc", "score": 60, "name": " "}
+]}

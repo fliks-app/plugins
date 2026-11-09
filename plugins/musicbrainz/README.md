@@ -6,6 +6,9 @@ the provider of the core namespace `musicbrainz` (`server/docs/spec/music.md` ru
 - `search` takes free text, a MusicBrainz id or a musicbrainz.org URL, the artist as `author` or
   `author_id`, and re-ranks by exact title, primary type (album, EP, single), release count and, when
   ListenBrainz answers, popularity.
+- `artistSearch` and `recordingSearch` answer the `artist` and `recording` targets of an album search
+  (`search` with `extra.target`): artists with their type and country, recordings with the release
+  group they are listed under (an official plain album first, one entry per title and artist).
 - `work` is a release group, `children` its releases, `edition` one release with its tracklist, the
   performer, conductor, composer and lyricist credits and the works a track plays.
 - `person` is an artist, `credits` its discography (`{albums}`), `findBy` resolves a Spotify or Deezer
