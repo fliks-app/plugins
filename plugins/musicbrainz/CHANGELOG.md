@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/fliks-app/plugins/compare/musicbrainz-v0.3.3...musicbrainz-v0.4.0) (2026-11-09)
+
+
+### Features
+
+* **musicbrainz:** search artists and recordings ([#109](https://github.com/fliks-app/plugins/issues/109)) ([a0c00ad](https://github.com/fliks-app/plugins/commit/a0c00adcbe8944a85883841a558ce52cac09f218))
+
 ## [0.3.3](https://github.com/fliks-app/plugins/compare/musicbrainz-v0.3.2...musicbrainz-v0.3.3) (2026-11-09)
 
 
