@@ -2674,6 +2674,14 @@ async fn book_fixture_with(
         ),
     )
     .await;
+    // The host's progress store is process-wide and keyed by media id: keep ids unique across fixtures.
+    static NEXT: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(5_000);
+    let start = NEXT.fetch_add(10, std::sync::atomic::Ordering::Relaxed);
+    sqlx::query("SELECT setval(pg_get_serial_sequence('media', 'id'), $1, false)")
+        .bind(start)
+        .execute(&h.pool)
+        .await
+        .unwrap();
     let media = add_book(&h, "Mirelune", &lib, families).await;
     Some((h, base, media, qbit))
 }
