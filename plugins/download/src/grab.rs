@@ -908,14 +908,14 @@ fn args_for<'a>(
     }
 }
 
-/// A manual URL is scored alone; a missing one auto-picks from a fresh search.
+/// Scores a manual release alone and grabs it; the core's sweep and the user pick the release.
 pub fn grab_release(
     media_id: u32,
     group_id: Option<u32>,
     item_id: Option<u32>,
     family: Option<Family>,
     language: Option<&str>,
-    manual: Option<Manual>,
+    m: Manual,
 ) -> R<Value> {
     let (target, media) = load_target(media_id, group_id, item_id, family, language)?;
     let client =
@@ -924,174 +924,74 @@ pub fn grab_release(
         return Err(Error::grab("download.grab.errors.unprofiled"));
     }
 
-    if let Some(m) = manual {
-        let source_title = m
-            .source_title
-            .as_deref()
-            .map(str::trim)
-            .filter(|t| !t.is_empty())
-            .map_or_else(|| title_from_url(&m.download_url), str::to_owned);
-        // Without a family, a book release is grabbed for the family its format names.
-        let (target, media) = title_family(&source_title)
-            .filter(|f| family.is_none() && target.kind == "book" && *f != target.family)
-            .and_then(|f| {
-                let ctx =
-                    |l| host::media_acquisition_context(media_id, Some(f), l, group_id, item_id);
-                ctx(book_language(&target))
-                    .ok()?
-                    .or_else(|| ctx(None).ok()?)
-            })
-            .and_then(|t| Some((Media::of(&t.kind, t.family)?, t)))
-            .map_or((target, media), |(media, t)| (t, media));
-        let fabricated = Release {
-            title: source_title.clone(),
-            download_url: m.download_url.clone(),
-            info_url: None,
-            indexer_id: 0,
-            indexer_name: String::new(),
-            size: 0,
-            seeders: 0,
-            leechers: 0,
-            publish_date: Some(now_iso()),
-            freeleech: false,
-            download_volume_factor: 1.0,
-        };
-        let scored = rank(&target, &[], std::slice::from_ref(&fabricated))?
-            .into_iter()
-            .next()
-            .ok_or_else(|| Error::grab("download.grab.errors.no_eligible_release"))?;
-        if scored.scored.blocklisted {
-            return Err(Error::grab_with(
-                "download.grab.errors.blocklisted",
-                source_title,
-            ));
-        }
-        if !scored.scored.allowed && !m.force {
-            return Err(Error::grab_with(
-                "download.grab.errors.quality_not_allowed",
-                scored.scored.quality_name,
-            ));
-        }
-        info!(
-            "Grab #{media_id} \"{}\" — manual URL{}",
-            target.title,
-            if scored.scored.allowed {
-                ""
-            } else {
-                " (forced)"
-            }
-        );
-        let mut a = args_for(
-            &target,
-            media,
-            &client,
-            &scored,
-            if m.auto { "auto" } else { "manual" },
-        );
-        a.reject_if_present = m.auto;
-        a.info_url = m.info_url;
-        a.indexer_id = m.indexer_id;
-        a.source_title = source_title;
-        let hash = grab_and_record(a)?;
-        return Ok(json!({ "torrentHash": hash }));
+    let source_title = m
+        .source_title
+        .as_deref()
+        .map(str::trim)
+        .filter(|t| !t.is_empty())
+        .map_or_else(|| title_from_url(&m.download_url), str::to_owned);
+    // Without a family, a book release is grabbed for the family its format names.
+    let (target, media) = title_family(&source_title)
+        .filter(|f| family.is_none() && target.kind == "book" && *f != target.family)
+        .and_then(|f| {
+            let ctx = |l| host::media_acquisition_context(media_id, Some(f), l, group_id, item_id);
+            ctx(book_language(&target))
+                .ok()?
+                .or_else(|| ctx(None).ok()?)
+        })
+        .and_then(|t| Some((Media::of(&t.kind, t.family)?, t)))
+        .map_or((target, media), |(media, t)| (t, media));
+    let fabricated = Release {
+        title: source_title.clone(),
+        download_url: m.download_url.clone(),
+        info_url: None,
+        indexer_id: 0,
+        indexer_name: String::new(),
+        size: 0,
+        seeders: 0,
+        leechers: 0,
+        publish_date: Some(now_iso()),
+        freeleech: false,
+        download_volume_factor: 1.0,
+    };
+    let scored = rank(&target, &[], std::slice::from_ref(&fabricated))?
+        .into_iter()
+        .next()
+        .ok_or_else(|| Error::grab("download.grab.errors.no_eligible_release"))?;
+    if scored.scored.blocklisted {
+        return Err(Error::grab_with(
+            "download.grab.errors.blocklisted",
+            source_title,
+        ));
     }
-
-    info!("Grab #{media_id} \"{}\" — auto-pick", target.title);
-    let scored = search_scored(&target, Kind::Auto, None, None)?;
-    let picks = pick(&scored, &target);
-    if picks.is_empty() && !is_season(&target) {
-        return Err(Error::grab("download.grab.errors.no_eligible_release"));
+    if !scored.scored.allowed && !m.force {
+        return Err(Error::grab_with(
+            "download.grab.errors.quality_not_allowed",
+            scored.scored.quality_name,
+        ));
     }
-    let mut last = None;
-    for i in picks {
-        let c = &scored[i];
-        match grab_and_record(args_for(&target, media, &client, c, "manual")) {
-            Ok(hash) => return Ok(json!({ "torrentHash": hash })),
-            Err(Error::Unobtainable(m)) => {
-                warn!(
-                    "Grab #{media_id}: \"{}\" is unobtainable ({m}) — trying the next release",
-                    c.raw.title
-                );
-                last = Some(m);
-            }
-            Err(e) => return Err(e),
-        }
-    }
-    if is_season(&target) {
-        let why = if last.is_some() {
-            "every season pack was unobtainable"
-        } else {
-            "no eligible season pack"
-        };
-        return grab_season_episodes(&target, why);
-    }
-    Err(Error::Grab {
-        key: "download.grab.errors.releases_unobtainable",
-        detail: last,
-    })
-}
-
-/// The still-wanted episodes of the target's season, in airing order.
-fn season_episodes(target: &Target) -> R<Vec<Target>> {
-    let mut out = vec![];
-    let mut cursor = None;
-    loop {
-        let page = host::acquisition_candidates(&CandidatesQuery {
-            kind: None,
-            family: Some(Family::Video),
-            media_ids: Some(vec![target.media_id]),
-            available_on: today(),
-            limit: 200,
-            cursor: cursor.take(),
-        })?;
-        for it in page.items {
-            if matches!(piece(&it), Piece::Episode(..))
-                && group_id(&it) == group_id(target)
-                && it
-                    .want
-                    .as_ref()
-                    .is_some_and(|w| w.decision != WantDecision::Skip)
-            {
-                out.push(it);
-            }
-        }
-        match page.cursor {
-            Some(c) => cursor = Some(c),
-            None => break,
-        }
-    }
-    out.sort_by_key(|t| numbers(t).1);
-    Ok(out)
-}
-
-fn grab_season_episodes(target: &Target, why: &str) -> R<Value> {
-    let season = format!("S{}", pad2(numbers(target).0.unwrap_or(0)));
-    let episodes = season_episodes(target)?;
     info!(
-        "Grab #{} \"{}\" {season} — {why}, grabbing {} episode(s) individually",
-        target.media_id,
+        "Grab #{media_id} \"{}\" — manual URL{}",
         target.title,
-        episodes.len()
-    );
-    let mut hashes = vec![];
-    for ep in &episodes {
-        let (Some(g), Some(i), Some(e)) = (group_id(ep), item_id(ep), numbers(ep).1) else {
-            continue;
-        };
-        match grab_release(target.media_id, Some(g), Some(i), None, None, None) {
-            Ok(v) => hashes.push(v["torrentHash"].clone()),
-            Err(err) => warn!(
-                "Grab #{} \"{}\" {season}E{} skipped — {err}",
-                target.media_id,
-                target.title,
-                pad2(e)
-            ),
+        if scored.scored.allowed {
+            ""
+        } else {
+            " (forced)"
         }
-    }
-    if hashes.is_empty() {
-        return Err(Error::grab("download.grab.errors.no_eligible_release"));
-    }
-    Ok(json!({ "torrentHash": hashes[0], "torrentHashes": hashes }))
+    );
+    let mut a = args_for(
+        &target,
+        media,
+        &client,
+        &scored,
+        if m.auto { "auto" } else { "manual" },
+    );
+    a.reject_if_present = m.auto;
+    a.info_url = m.info_url;
+    a.indexer_id = m.indexer_id;
+    a.source_title = source_title;
+    let hash = grab_and_record(a)?;
+    Ok(json!({ "torrentHash": hash }))
 }
 
 /// Season and episode targets are judged on what pending grabs cover; anything else on any
@@ -1120,64 +1020,41 @@ fn pending(target: &Target) -> R<Option<String>> {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum Outcome {
-    Grabbed,
-    /// The indexers had nothing to grab for a target that wants something.
-    NoRelease,
-    Skipped,
-}
-
 /// Search, pick and grab one automatic target.
-fn try_auto_grab(target: &Target, client: &DownloadClientRow) -> R<Outcome> {
+fn try_auto_grab(target: &Target, client: &DownloadClientRow) -> R<()> {
     let Some(media) = Media::of(&target.kind, target.family) else {
         info!(
             "AutoGrab[{}]: \"{}\" skipped — this plugin acquires movies, series, books, comics and albums only",
             target.kind, target.title
         );
-        return Ok(Outcome::Skipped);
+        return Ok(());
     };
     let kind = media.as_str();
-    let skip = |reason: String, outcome: Outcome| {
+    let skip = |reason: String| {
         info!("AutoGrab[{kind}]: \"{}\" skipped — {reason}", target.title);
-        Ok(outcome)
+        Ok(())
     };
     match &target.want {
         None => {
-            return skip(
-                "no quality/language profile on media".into(),
-                Outcome::Skipped,
-            );
+            return skip("no quality/language profile on media".into());
         }
         Some(w) if w.decision == WantDecision::Skip => {
-            return skip(
-                "media already satisfies its profile".into(),
-                Outcome::Skipped,
-            );
+            return skip("media already satisfies its profile".into());
         }
         _ => {}
     }
     if let Some(blocking) = pending(target)? {
-        return skip(
-            format!("a grab is already pending (\"{blocking}\")"),
-            Outcome::Skipped,
-        );
+        return skip(format!("a grab is already pending (\"{blocking}\")"));
     }
     // Only video units are whole numbers the host matches; any other kind asks for the whole media.
     let unit = unit_ref_of(target).filter(|_| media == Media::Series);
     let elsewhere = host::acquisition_in_flight(target.media_id, unit.as_ref())?;
     if !elsewhere.is_empty() {
-        return skip(
-            format!("a grab is in flight at {}", elsewhere.join(", ")),
-            Outcome::Skipped,
-        );
+        return skip(format!("a grab is in flight at {}", elsewhere.join(", ")));
     }
     let scored = search_scored(target, Kind::Auto, None, None)?;
     if scored.is_empty() {
-        return skip(
-            "no releases returned by indexers".into(),
-            Outcome::NoRelease,
-        );
+        return skip("no releases returned by indexers".into());
     }
     let picks = pick(&scored, target);
     if picks.is_empty() {
@@ -1209,36 +1086,32 @@ fn try_auto_grab(target: &Target, client: &DownloadClientRow) -> R<Outcome> {
         } else {
             "release"
         };
-        return skip(
-            format!("no eligible {what} ({} checked){top}", scored.len()),
-            Outcome::NoRelease,
-        );
+        return skip(format!(
+            "no eligible {what} ({} checked){top}",
+            scored.len()
+        ));
     }
     for i in picks {
         let mut a = args_for(target, media, client, &scored[i], "auto");
         a.reject_if_present = true;
         match grab_and_record(a) {
-            Ok(_) => return Ok(Outcome::Grabbed),
+            Ok(_) => return Ok(()),
             Err(e) => warn!(
                 "AutoGrab[{kind}]: grab failed for \"{}\": {e}",
                 target.title
             ),
         }
     }
-    skip(
-        "every eligible release was unobtainable".into(),
-        Outcome::NoRelease,
-    )
+    skip("every eligible release was unobtainable".into())
 }
 
 /// One target's failure is logged and skipped: it must not end the sweep of the rest.
-fn auto_grab_or_skip(target: &Target, client: &DownloadClientRow) -> Outcome {
+fn auto_grab_or_skip(target: &Target, client: &DownloadClientRow) {
     try_auto_grab(target, client).unwrap_or_else(|e| {
         warn!(
             "AutoGrab[{}]: \"{}\" failed, the sweep goes on — {e}",
             target.kind, target.title
         );
-        Outcome::Skipped
     })
 }
 

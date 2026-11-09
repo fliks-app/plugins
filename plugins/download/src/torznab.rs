@@ -549,6 +549,7 @@ pub async fn refresh_caps(ix: &mut IndexerRow, round: Round) -> Result<(), Lapse
     ix.caps_categories = caps.categories;
     ix.caps_search_fallback = false;
     ix.caps_probed_at = Some(crate::util::now_iso());
+    crate::indexers::publish_sources();
     Ok(())
 }
 
