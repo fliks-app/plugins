@@ -275,7 +275,7 @@ fn template_matches_the_published_manifest() {
         ),
         (
             &json!(3),
-            &json!(">=6.0.0 <7.0.0"),
+            &json!(">=6.1.0 <7.0.0"),
             &json!("wasm"),
             &json!({ "internal": true })
         )

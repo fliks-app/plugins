@@ -2,7 +2,7 @@
   "id": "fliks.download",
   "pluginApi": 3,
   "name": "Download",
-  "fliks": ">=6.0.0 <7.0.0",
+  "fliks": ">=6.1.0 <7.0.0",
   "author": "Fliks",
   "description": "Indexer search, download-client management and the acquisition grab pipeline for Fliks.",
   "license": "AGPL-3.0-or-later",
