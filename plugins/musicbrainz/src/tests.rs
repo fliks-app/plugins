@@ -562,3 +562,13 @@ fn text_searches_rank_a_pool_of_a_hundred_and_page_through_it() {
             .is_empty()
     );
 }
+
+#[test]
+fn a_title_shared_by_an_album_and_its_single_matches_the_album() {
+    let albums = [
+        json!({"title": "Thriller", "externalId": "single", "primaryType": "single", "secondaryTypes": []}),
+        json!({"title": "Thriller", "externalId": "live", "primaryType": "album", "secondaryTypes": ["live"]}),
+        json!({"title": "Thriller", "externalId": "studio", "primaryType": "album", "secondaryTypes": []}),
+    ];
+    assert_eq!(groups_by_title(&albums)["thriller"], "studio");
+}

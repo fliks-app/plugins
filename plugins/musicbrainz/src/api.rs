@@ -375,15 +375,7 @@ fn top_recordings(h: &impl Http, artist: &str, albums: &[Value]) -> Option<Vec<V
         })
         .take(TOP_RECORDINGS)
         .collect();
-    let groups: HashMap<String, &str> = albums
-        .iter()
-        .filter_map(|a| {
-            Some((
-                a["title"].as_str()?.trim().to_lowercase(),
-                a["externalId"].as_str()?,
-            ))
-        })
-        .collect();
+    let groups = groups_by_title(albums);
     let release_name = |r: &Value| r["release_name"].as_str().map(|t| t.trim().to_lowercase());
     let misses: Vec<String> = top
         .iter()
@@ -414,6 +406,31 @@ fn top_recordings(h: &impl Http, artist: &str, albums: &[Value]) -> Option<Vec<V
             })))
         })
         .collect()
+}
+
+/// The release group of each lowercased title; when several share it (an album and its single), the studio album.
+pub(crate) fn groups_by_title(albums: &[Value]) -> HashMap<String, &str> {
+    let mut best: HashMap<String, (u8, &str)> = HashMap::new();
+    for a in albums {
+        let (Some(title), Some(id)) = (a["title"].as_str(), a["externalId"].as_str()) else {
+            continue;
+        };
+        let plain = a["secondaryTypes"].as_array().is_none_or(|s| s.is_empty());
+        let rank = match a["primaryType"].as_str() {
+            Some("album") if plain => 0,
+            Some("album") => 1,
+            Some("ep") => 2,
+            Some("single") => 3,
+            _ => 4,
+        };
+        let slot = best
+            .entry(title.trim().to_lowercase())
+            .or_insert((rank, id));
+        if rank < slot.0 {
+            *slot = (rank, id);
+        }
+    }
+    best.into_iter().map(|(t, (_, id))| (t, id)).collect()
 }
 
 /// The release group of each release id, from one search; empty when it fails.
