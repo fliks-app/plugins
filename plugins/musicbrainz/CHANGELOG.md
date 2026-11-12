@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/fliks-app/plugins/compare/musicbrainz-v0.4.0...musicbrainz-v0.4.1) (2026-11-12)
+
+
+### Bug Fixes
+
+* **musicbrainz:** rank text searches over a pool of 100 candidates ([#123](https://github.com/fliks-app/plugins/issues/123)) ([a56ce7e](https://github.com/fliks-app/plugins/commit/a56ce7e2c6d3d1dfee7342fa64a80a11c49fa3a3))
+
 ## [0.4.0](https://github.com/fliks-app/plugins/compare/musicbrainz-v0.3.3...musicbrainz-v0.4.0) (2026-11-09)
 
 
