@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.1](https://github.com/fliks-app/plugins/compare/musicbrainz-v0.5.0...musicbrainz-v0.5.1) (2026-11-12)
+
+
+### Bug Fixes
+
+* **musicbrainz:** match a popular track to the studio album, not its single ([#127](https://github.com/fliks-app/plugins/issues/127)) ([245f9d5](https://github.com/fliks-app/plugins/commit/245f9d5d31aa4b967c90c5bb74e2c6a5eadc5046))
+
 ## [0.5.0](https://github.com/fliks-app/plugins/compare/musicbrainz-v0.4.1...musicbrainz-v0.5.0) (2026-11-12)
 
 
