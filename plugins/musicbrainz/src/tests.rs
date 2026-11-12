@@ -441,3 +441,46 @@ fn a_recording_is_listed_under_its_best_release_group_and_once_per_title() {
             .contains("coverartarchive.org/release-group/")
     );
 }
+
+#[test]
+fn an_exact_album_title_outranks_repeated_words() {
+    let single = json!({"title": "Bad Bad", "score": 100, "primary-type": "Single", "count": 1});
+    let album = json!({"title": "Bad", "score": 62, "primary-type": "Album", "count": 47});
+    assert!(map::score(&album, "bad", None) > map::score(&single, "bad", None));
+}
+
+#[test]
+fn an_exact_recording_known_by_tags_releases_and_listens_comes_first() {
+    let rel = |status: &str, kind: &str| json!({"status": status, "release-group": {"id": GROUP, "primary-type": kind}});
+    let repeated =
+        json!({"title": "Bad Bad Bad", "score": 100, "releases": [rel("Official", "Single")]});
+    let obscure = json!({"title": "Bad", "score": 70, "releases": [rel("Official", "Single")]});
+    let known = json!({
+        "title": "Bad", "score": 70,
+        "tags": [{"name": "pop"}, {"name": "funk"}],
+        "releases": [rel("Official", "Album"), rel("Official", "Album"), rel("Bootleg", "Album")],
+    });
+    let s = |r: &Value, p| map::recording_score(r, "bad", p);
+    assert!(s(&obscure, None) > s(&repeated, None));
+    assert!(s(&known, None) > s(&obscure, None));
+    assert!(s(&obscure, Some(5_000_000.0)) > s(&known, None));
+}
+
+#[test]
+fn text_searches_rank_a_pool_of_a_hundred_and_page_through_it() {
+    assert_eq!(pool_of(1), (0, 0));
+    assert_eq!(pool_of(4), (0, 75));
+    assert_eq!(pool_of(5), (100, 0));
+    let h = Fake::default();
+    search(&h, "x", None, None, None, None, 1).unwrap();
+    search_recordings(&h, "x", 1).unwrap();
+    let q = h.queries();
+    assert!(q[0].contains("primarytype:album^5"));
+    assert!(q[1].starts_with("recording:(x) AND (tag:[a TO z]^10"));
+    // A page past the pool is empty, never a repeat of the first one.
+    assert!(
+        search_recordings(&h, "placeholder song", 2)
+            .unwrap()
+            .is_empty()
+    );
+}
