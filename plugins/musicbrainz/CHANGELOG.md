@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/fliks-app/plugins/compare/musicbrainz-v0.4.1...musicbrainz-v0.5.0) (2026-11-12)
+
+
+### Features
+
+* **musicbrainz:** credits carry the artist's top recordings from ListenBrainz ([#125](https://github.com/fliks-app/plugins/issues/125)) ([d0a19db](https://github.com/fliks-app/plugins/commit/d0a19db4bb628cc90a0e76524f074c40937d70ab))
+
 ## [0.4.1](https://github.com/fliks-app/plugins/compare/musicbrainz-v0.4.0...musicbrainz-v0.4.1) (2026-11-12)
 
 
