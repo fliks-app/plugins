@@ -214,27 +214,36 @@ pub fn search_recordings(h: &impl Http, text: &str, page: u32) -> R<Vec<Value>> 
         ],
     )?;
     let recs = array(&body, "recordings");
-    let ids: Vec<String> = recs
+    let key = |r: &Value| {
+        let by = r["artists"][0]["name"].as_str().unwrap_or_default();
+        format!(
+            "{}\u{1f}{by}",
+            r["title"].as_str().unwrap_or_default().to_lowercase()
+        )
+    };
+    let hits: Vec<(f64, Value)> = recs
         .iter()
-        .filter_map(|r| map::uuid(r["id"].as_str()?))
+        .filter_map(|r| Some((map::recording_score(r, text), map::recording_hit(r)?)))
         .collect();
-    let pop = recording_popularity(h, &ids);
-    let mut ranked: Vec<(f64, Value)> = recs
+    // A known song is many recordings of one title and artist: their releases and tags add up.
+    let mut weight: HashMap<String, f64> = HashMap::new();
+    for (r, (_, hit)) in recs
         .iter()
-        .filter_map(|r| {
-            let p = pop.get(&map::uuid(r["id"].as_str()?)?).copied();
-            Some((map::recording_score(r, text, p), map::recording_hit(r)?))
-        })
+        .filter(|r| map::recording_hit(r).is_some())
+        .zip(&hits)
+    {
+        *weight.entry(key(hit)).or_default() += map::recording_weight(r);
+    }
+    let mut ranked: Vec<(f64, Value)> = hits
+        .into_iter()
+        .map(|(s, r)| (s + (1.0 + weight[&key(&r)]).ln() * 20.0, r))
         .collect();
     ranked.sort_by(|a, b| b.0.total_cmp(&a.0));
     let mut seen = std::collections::HashSet::new();
-    let unique = ranked.into_iter().map(|(_, r)| r).filter(|r| {
-        let by = r["artists"][0]["name"].as_str().unwrap_or_default();
-        seen.insert(format!(
-            "{}\u{1f}{by}",
-            r["title"].as_str().unwrap_or_default().to_lowercase()
-        ))
-    });
+    let unique = ranked
+        .into_iter()
+        .map(|(_, r)| r)
+        .filter(|r| seen.insert(key(r)));
     Ok(page_of(unique.collect(), skip))
 }
 

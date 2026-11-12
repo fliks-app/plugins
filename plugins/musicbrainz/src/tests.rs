@@ -19,6 +19,8 @@ struct Fake {
     /// Every `query` text asked of MusicBrainz.
     queries: RefCell<Vec<String>>,
     popularity: Option<Value>,
+    /// The answer of a text search, in place of the default fixture.
+    search: Option<Value>,
 }
 
 impl Fake {
@@ -36,6 +38,11 @@ impl Http for Fake {
                 .map(|(_, v)| v.clone()),
         );
         let has = |k: &str| query.iter().any(|(n, _)| *n == k);
+        if let Some(b) = &self.search
+            && (path == "/recording" || has("query"))
+        {
+            return Ok(b.clone());
+        }
         Ok(match path {
             "/artist" => fx("search_artist.json"),
             "/recording" => fx("search_recording.json"),
@@ -450,20 +457,46 @@ fn an_exact_album_title_outranks_repeated_words() {
 }
 
 #[test]
-fn an_exact_recording_known_by_tags_releases_and_listens_comes_first() {
+fn an_exact_recording_on_an_official_album_comes_first() {
     let rel = |status: &str, kind: &str| json!({"status": status, "release-group": {"id": GROUP, "primary-type": kind}});
     let repeated =
         json!({"title": "Bad Bad Bad", "score": 100, "releases": [rel("Official", "Single")]});
-    let obscure = json!({"title": "Bad", "score": 70, "releases": [rel("Official", "Single")]});
-    let known = json!({
-        "title": "Bad", "score": 70,
-        "tags": [{"name": "pop"}, {"name": "funk"}],
-        "releases": [rel("Official", "Album"), rel("Official", "Album"), rel("Bootleg", "Album")],
-    });
-    let s = |r: &Value, p| map::recording_score(r, "bad", p);
-    assert!(s(&obscure, None) > s(&repeated, None));
-    assert!(s(&known, None) > s(&obscure, None));
-    assert!(s(&obscure, Some(5_000_000.0)) > s(&known, None));
+    let single = json!({"title": "Bad", "score": 90, "releases": [rel("Official", "Single")]});
+    let album = json!({"title": "Bad", "score": 90, "releases": [rel("Bootleg", "Single"), rel("Official", "Album")]});
+    let s = |r: &Value| map::recording_score(r, "bad");
+    assert!(s(&single) > s(&repeated));
+    assert!(s(&album) > s(&single));
+}
+
+/// Live answers of 2026-11-12, cut to a few artists: the known one is first despite covers and repeated words.
+#[test]
+fn a_known_album_beats_repeated_words_and_namesakes() {
+    let h = Fake {
+        search: Some(fx("search_bad.json")),
+        popularity: Some(fx("popularity_bad.json")),
+        ..Fake::default()
+    };
+    let a = &search(&h, "bad", None, None, None, None, 1).unwrap()[0];
+    assert_eq!(
+        (a["title"].as_str(), a["artists"][0]["name"].as_str()),
+        (Some("Bad"), Some("Michael Jackson"))
+    );
+}
+
+#[test]
+fn a_known_song_beats_its_covers_and_repeated_words() {
+    for (text, fixture, by) in [
+        ("bad", "search_recording_bad.json", "Michael Jackson"),
+        ("africa", "search_recording_africa.json", "Toto"),
+    ] {
+        let h = Fake {
+            search: Some(fx(fixture)),
+            ..Fake::default()
+        };
+        let r = &search_recordings(&h, text, 1).unwrap()[0];
+        assert_eq!(r["artists"][0]["name"], by, "{text}");
+        assert!(r["title"].as_str().unwrap().eq_ignore_ascii_case(text));
+    }
 }
 
 #[test]
