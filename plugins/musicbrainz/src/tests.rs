@@ -22,6 +22,8 @@ struct Fake {
     /// The answer of a text search, in place of the default fixture.
     search: Option<Value>,
     top: Option<Value>,
+    /// The answer of a recording metadata lookup.
+    meta: Option<Value>,
 }
 
 impl Fake {
@@ -77,7 +79,10 @@ impl Http for Fake {
         self.popularity.clone()
     }
 
-    fn lb_get(&self, _path: &str) -> Option<Value> {
+    fn lb_get(&self, path: &str) -> Option<Value> {
+        if path.starts_with("/1/metadata/recording/") {
+            return self.meta.clone();
+        }
         self.top.clone()
     }
 }
@@ -571,4 +576,47 @@ fn a_title_shared_by_an_album_and_its_single_matches_the_album() {
         json!({"title": "Thriller", "externalId": "studio", "primaryType": "album", "secondaryTypes": []}),
     ];
     assert_eq!(groups_by_title(&albums)["thriller"], "studio");
+}
+
+#[test]
+fn trending_recordings_carry_their_release_group_and_skip_the_unknown() {
+    let rec = "6f33dc05-cdc0-4a2f-8039-e8fed082eec6";
+    let h = Fake {
+        top: Some(json!({"payload": {"recordings": [
+            {"recording_mbid": rec, "track_name": "Swim", "artist_name": "Band", "artist_mbids": [ARTIST]},
+            {"recording_mbid": RELEASE, "track_name": "No metadata", "artist_name": "Band"},
+        ]}})),
+        meta: Some(json!({rec: {
+            "recording": {"length": 159007},
+            "release": {"release_group_mbid": GROUP, "name": "Album", "year": 2026},
+        }})),
+        ..Default::default()
+    };
+    let hits = trending(&h, "recording").unwrap();
+    assert_eq!(hits.len(), 1);
+    assert_eq!(hits[0]["album"]["externalId"], GROUP);
+    assert_eq!(hits[0]["album"]["firstReleaseDate"], "2026");
+    assert_eq!(hits[0]["durationMs"], 159007);
+    assert_eq!(hits[0]["artists"][0]["id"], ARTIST);
+}
+
+#[test]
+fn trending_albums_and_artists_map_the_sitewide_rows() {
+    let h = Fake {
+        top: Some(json!({"payload": {
+            "release_groups": [{"release_group_mbid": GROUP, "release_group_name": "Album", "artist_name": "Band", "listen_count": 12}],
+            "artists": [{"artist_mbid": ARTIST, "artist_name": "Band"}],
+        }})),
+        ..Default::default()
+    };
+    let albums = trending(&h, "album").unwrap();
+    assert_eq!(
+        (
+            albums[0]["externalId"].clone(),
+            albums[0]["popularity"].clone()
+        ),
+        (json!(GROUP), json!(12))
+    );
+    assert_eq!(trending(&h, "artist").unwrap()[0]["name"], "Band");
+    assert!(trending(&Fake::default(), "album").is_err());
 }

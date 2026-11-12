@@ -153,6 +153,17 @@ impl MetadataProvider for Provider {
         json_of(api::credits(&Live, &id.value)?)
     }
 
+    fn list(_kind: String, name: String, params: Vec<(String, String)>, _lang: Lang) -> R<String> {
+        if name != "trending" {
+            return Err(ProviderError::NotFound);
+        }
+        let target = params
+            .iter()
+            .find(|(k, _)| k == "target")
+            .map_or("", |(_, v)| v.as_str());
+        json_of(api::trending(&Live, target)?)
+    }
+
     fn find_by(
         source: ExternalId,
         _lang: Lang,
