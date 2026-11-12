@@ -212,6 +212,25 @@ pub fn recording_hit(r: &Value) -> Option<Value> {
     })))
 }
 
+/// How much a recording is released and tagged.
+pub fn recording_weight(r: &Value) -> f64 {
+    (list(r, "tags").len() + list(r, "releases").len()) as f64
+}
+
+/// Higher is better: an exact title, then an official album release; listens of one recording mislead,
+/// a known song being split over many recordings.
+pub fn recording_score(r: &Value, text: &str) -> f64 {
+    let exact = s(r, "title").is_some_and(|t| t.to_lowercase() == text.trim().to_lowercase());
+    let official_album = best_release(r).is_some_and(|x| {
+        let g = x.get("release-group").unwrap_or(&Value::Null);
+        s(x, "status").is_some_and(|t| t.eq_ignore_ascii_case("official"))
+            && lower(g, "primary-type").as_deref() == Some("album")
+            && list(g, "secondary-types").is_empty()
+    });
+    let base = r.get("score").and_then(Value::as_f64).unwrap_or(0.0);
+    base + if exact { 100.0 } else { 0.0 } + if official_album { 15.0 } else { 0.0 }
+}
+
 /// Higher is better: the search score first, then what the owner of a library wants first.
 pub fn score(g: &Value, text: &str, popularity: Option<f64>) -> f64 {
     let exact = s(g, "title").is_some_and(|t| t.to_lowercase() == text.trim().to_lowercase());

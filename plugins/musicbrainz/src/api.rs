@@ -12,6 +12,8 @@ const PAGE: u32 = 100;
 const MAX_RELEASE_PAGES: u32 = 10;
 const MAX_GROUP_PAGES: u32 = 20;
 const HITS: u32 = 25;
+/// The candidates a text search ranks: Lucene's own order buries exact titles under repeated words.
+const POOL: u32 = 100;
 /// ListenBrainz answers at most 100 recordings a call.
 const RECORDINGS_PER_CALL: usize = 100;
 const EDITION_INC: &str = "recordings+artist-credits+media+labels+isrcs+recording-level-rels+work-rels+work-level-rels+artist-rels";
@@ -70,6 +72,16 @@ fn group(h: &impl Http, id: &str) -> R<Value> {
         &format!("/release-group/{}", id_of(id)?),
         &q(&[("inc", "artist-credits+releases+genres")]),
     )
+}
+
+/// The MusicBrainz offset of the pool holding `page`, and where the page starts in it.
+pub(crate) fn pool_of(page: u32) -> (u32, usize) {
+    let i = (page.max(1) - 1) * HITS;
+    (i / POOL * POOL, (i % POOL) as usize)
+}
+
+fn page_of(ranked: Vec<Value>, skip: usize) -> Vec<Value> {
+    ranked.into_iter().skip(skip).take(HITS as usize).collect()
 }
 
 fn hits(groups: &[Value], text: &str, h: &impl Http) -> Vec<Value> {
@@ -151,15 +163,20 @@ pub fn search(
     if let Some(y) = year.filter(|y| (1..=9999).contains(y)) {
         query += &format!(" AND firstreleasedate:{y}");
     }
+    query += " AND (primarytype:album^5 OR primarytype:ep OR primarytype:single OR primarytype:broadcast OR primarytype:other)";
+    let (offset, skip) = pool_of(page);
     let body = h.mb(
         "/release-group",
         &[
             ("query", query),
-            ("limit", HITS.to_string()),
-            ("offset", ((page.max(1) - 1) * HITS).to_string()),
+            ("limit", POOL.to_string()),
+            ("offset", offset.to_string()),
         ],
     )?;
-    Ok(hits(&array(&body, "release-groups"), name, h))
+    Ok(page_of(
+        hits(&array(&body, "release-groups"), name, h),
+        skip,
+    ))
 }
 
 /// The artists matching `text`, in the search's own order.
@@ -180,26 +197,54 @@ pub fn search_artists(h: &impl Http, text: &str, page: u32) -> R<Vec<Value>> {
 
 /// The recordings matching `text` with the album each is listed under; one entry per title and artist.
 pub fn search_recordings(h: &impl Http, text: &str, page: u32) -> R<Vec<Value>> {
+    let text = text.trim();
+    let (offset, skip) = pool_of(page);
     let body = h.mb(
         "/recording",
         &[
-            ("query", map::escape(text.trim())),
-            ("limit", HITS.to_string()),
-            ("offset", ((page.max(1) - 1) * HITS).to_string()),
+            (
+                "query",
+                format!(
+                    "recording:({}) AND (tag:[a TO z]^10 OR primarytype:album^3 OR status:official)",
+                    map::escape(text)
+                ),
+            ),
+            ("limit", POOL.to_string()),
+            ("offset", offset.to_string()),
         ],
     )?;
-    let mut seen = std::collections::HashSet::new();
-    Ok(array(&body, "recordings")
+    let recs = array(&body, "recordings");
+    let key = |r: &Value| {
+        let by = r["artists"][0]["name"].as_str().unwrap_or_default();
+        format!(
+            "{}\u{1f}{by}",
+            r["title"].as_str().unwrap_or_default().to_lowercase()
+        )
+    };
+    let hits: Vec<(f64, Value)> = recs
         .iter()
-        .filter_map(map::recording_hit)
-        .filter(|r| {
-            let by = r["artists"][0]["name"].as_str().unwrap_or_default();
-            seen.insert(format!(
-                "{}\u{1f}{by}",
-                r["title"].as_str().unwrap_or_default().to_lowercase()
-            ))
-        })
-        .collect())
+        .filter_map(|r| Some((map::recording_score(r, text), map::recording_hit(r)?)))
+        .collect();
+    // A known song is many recordings of one title and artist: their releases and tags add up.
+    let mut weight: HashMap<String, f64> = HashMap::new();
+    for (r, (_, hit)) in recs
+        .iter()
+        .filter(|r| map::recording_hit(r).is_some())
+        .zip(&hits)
+    {
+        *weight.entry(key(hit)).or_default() += map::recording_weight(r);
+    }
+    let mut ranked: Vec<(f64, Value)> = hits
+        .into_iter()
+        .map(|(s, r)| (s + (1.0 + weight[&key(&r)]).ln() * 20.0, r))
+        .collect();
+    ranked.sort_by(|a, b| b.0.total_cmp(&a.0));
+    let mut seen = std::collections::HashSet::new();
+    let unique = ranked
+        .into_iter()
+        .map(|(_, r)| r)
+        .filter(|r| seen.insert(key(r)));
+    Ok(page_of(unique.collect(), skip))
 }
 
 pub fn work(h: &impl Http, id: &str) -> R<Value> {
