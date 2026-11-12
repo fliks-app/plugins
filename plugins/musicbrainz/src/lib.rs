@@ -67,21 +67,34 @@ impl Http for Live {
     }
 
     fn lb(&self, path: &str, body: &Value) -> Option<Value> {
-        let mut req = Request::new(Method::Post, format!("{LISTENBRAINZ}{path}"))
-            .header("user-agent", USER_AGENT)
-            .header("accept", "application/json")
+        let req = lb_request(Method::Post, path)
             .header("content-type", "application/json")
-            .body(body.to_string())
-            .timeout(Duration::from_secs(10))
-            .budget(&Budget::host());
-        if let Ok(Some(token)) = setting("listenbrainzToken") {
-            req = req.header("authorization", &format!("Token {token}"));
-        }
-        let resp = req.send().ok()?;
-        (200..300)
-            .contains(&resp.status)
-            .then(|| serde_json::from_slice(&resp.body).ok())?
+            .body(body.to_string());
+        lb_send(req)
     }
+
+    fn lb_get(&self, path: &str) -> Option<Value> {
+        lb_send(lb_request(Method::Get, path))
+    }
+}
+
+fn lb_request(method: Method, path: &str) -> Request {
+    let mut req = Request::new(method, format!("{LISTENBRAINZ}{path}"))
+        .header("user-agent", USER_AGENT)
+        .header("accept", "application/json")
+        .timeout(Duration::from_secs(10))
+        .budget(&Budget::host());
+    if let Ok(Some(token)) = setting("listenbrainzToken") {
+        req = req.header("authorization", &format!("Token {token}"));
+    }
+    req
+}
+
+fn lb_send(req: Request) -> Option<Value> {
+    let resp = req.send().ok()?;
+    (200..300)
+        .contains(&resp.status)
+        .then(|| serde_json::from_slice(&resp.body).ok())?
 }
 
 struct Provider;

@@ -1,0 +1,7 @@
+[
+ {"recording_mbid":"dddddddd-dddd-4ddd-8ddd-dddddddddddd","recording_name":"Placeholder Song","length":183000,"release_mbid":"44444444-4444-4444-8444-444444444444","release_name":"placeholder album","caa_release_mbid":"44444444-4444-4444-8444-444444444444","total_listen_count":900},
+ {"recording_mbid":"eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee","recording_name":"placeholder song","length":184000,"release_mbid":"44444444-4444-4444-8444-444444444444","release_name":"Placeholder Album","total_listen_count":800},
+ {"recording_mbid":"ffffffff-ffff-4fff-8fff-ffffffffffff","recording_name":"Other Song","length":120000,"release_mbid":"55555555-5555-4555-8555-555555555555","release_name":"Placeholder Album (deluxe)","caa_release_mbid":"55555555-5555-4555-8555-555555555555","total_listen_count":700},
+ {"recording_mbid":"not-a-uuid","recording_name":"Broken","total_listen_count":600},
+ {"recording_mbid":"99999999-9999-4999-8999-999999999999","recording_name":"Lost Song","release_name":"Unknown Album","total_listen_count":500}
+]

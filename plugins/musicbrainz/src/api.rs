@@ -3,7 +3,7 @@ use crate::map::{self, Target};
 use fliks_plugin_sdk_provider::ProviderError;
 use provider_common::http::json_reply;
 use serde_json::{Value, json};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 pub type R<T> = Result<T, ProviderError>;
 
@@ -16,6 +16,7 @@ const HITS: u32 = 25;
 const POOL: u32 = 100;
 /// ListenBrainz answers at most 100 recordings a call.
 const RECORDINGS_PER_CALL: usize = 100;
+const TOP_RECORDINGS: usize = 10;
 const EDITION_INC: &str = "recordings+artist-credits+media+labels+isrcs+recording-level-rels+work-rels+work-level-rels+artist-rels";
 
 pub trait Http {
@@ -23,6 +24,8 @@ pub trait Http {
     fn mb(&self, path: &str, query: &[(&str, String)]) -> R<Value>;
     /// A POST of ListenBrainz; none when it refuses, is unreachable or answers nothing usable.
     fn lb(&self, path: &str, body: &Value) -> Option<Value>;
+    /// A GET of ListenBrainz, under the same rules as `lb`.
+    fn lb_get(&self, path: &str) -> Option<Value>;
 }
 
 /// A MusicBrainz answer as the provider reports it; 503 is its rate limit.
@@ -347,7 +350,86 @@ pub fn credits(h: &impl Http, id: &str) -> R<Value> {
             break;
         }
     }
-    Ok(json!({ "albums": albums }))
+    let mut out = json!({ "albums": albums });
+    if let Some(top) = top_recordings(h, &id, &albums) {
+        out["topRecordings"] = json!(top);
+    }
+    Ok(out)
+}
+
+/// The artist's most listened recordings, none when ListenBrainz gives nothing; one title once.
+fn top_recordings(h: &impl Http, artist: &str, albums: &[Value]) -> Option<Vec<Value>> {
+    let Value::Array(rows) =
+        h.lb_get(&format!("/1/popularity/top-recordings-for-artist/{artist}"))?
+    else {
+        return None;
+    };
+    let mut seen = HashSet::new();
+    let mut top: Vec<(String, &Value)> = rows
+        .iter()
+        .filter_map(|r| Some((map::uuid(r["recording_mbid"].as_str()?)?, r)))
+        .filter(|(_, r)| {
+            r["recording_name"]
+                .as_str()
+                .is_some_and(|t| seen.insert(t.trim().to_lowercase()))
+        })
+        .take(TOP_RECORDINGS)
+        .collect();
+    let groups: HashMap<String, &str> = albums
+        .iter()
+        .filter_map(|a| {
+            Some((
+                a["title"].as_str()?.trim().to_lowercase(),
+                a["externalId"].as_str()?,
+            ))
+        })
+        .collect();
+    let release_name = |r: &Value| r["release_name"].as_str().map(|t| t.trim().to_lowercase());
+    let misses: Vec<String> = top
+        .iter()
+        .filter(|(_, r)| release_name(r).is_some_and(|n| !groups.contains_key(&n)))
+        .filter_map(|(_, r)| map::uuid(r["release_mbid"].as_str()?))
+        .collect();
+    let by_release = groups_of_releases(h, &misses);
+    top.drain(..)
+        .map(|(id, r)| {
+            let album = release_name(r).and_then(|n| groups.get(&n).map(|g| (*g).to_owned()));
+            let album = album.or_else(|| {
+                by_release
+                    .get(&map::uuid(r["release_mbid"].as_str()?)?)
+                    .cloned()
+            });
+            let cover = r["caa_release_mbid"]
+                .as_str()
+                .and_then(map::uuid)
+                .map(|c| format!("https://coverartarchive.org/release/{c}/front-250"));
+            Some(map::compact(json!({
+                "recordingId": id,
+                "title": r["recording_name"],
+                "durationMs": r["length"],
+                "listenCount": r["total_listen_count"],
+                "albumExternalId": album,
+                "albumTitle": r["release_name"],
+                "coverUrl": cover,
+            })))
+        })
+        .collect()
+}
+
+/// The release group of each release id, from one search; empty when it fails.
+fn groups_of_releases(h: &impl Http, ids: &[String]) -> HashMap<String, String> {
+    if ids.is_empty() {
+        return HashMap::new();
+    }
+    let query = format!("reid:({})", ids.join(" OR "));
+    let body = h.mb("/release", &[("query", query), ("limit", PAGE.to_string())]);
+    array(&body.unwrap_or_default(), "releases")
+        .iter()
+        .filter_map(|r| {
+            let rid = map::uuid(r["id"].as_str()?)?;
+            Some((rid, map::uuid(r["release-group"]["id"].as_str()?)?))
+        })
+        .collect()
 }
 
 /// The release group of a release id.
