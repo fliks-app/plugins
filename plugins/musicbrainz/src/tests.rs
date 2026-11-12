@@ -21,6 +21,7 @@ struct Fake {
     popularity: Option<Value>,
     /// The answer of a text search, in place of the default fixture.
     search: Option<Value>,
+    top: Option<Value>,
 }
 
 impl Fake {
@@ -48,6 +49,7 @@ impl Http for Fake {
             "/recording" => fx("search_recording.json"),
             "/release-group" if has("query") => fx("search.json"),
             "/release-group" => fx("rg_browse.json"),
+            "/release" if has("query") => fx("reid_search.json"),
             "/release" => fx("releases.json"),
             "/url" => {
                 let r = query.iter().find(|(k, _)| *k == "resource").unwrap();
@@ -73,6 +75,10 @@ impl Http for Fake {
 
     fn lb(&self, _path: &str, _body: &Value) -> Option<Value> {
         self.popularity.clone()
+    }
+
+    fn lb_get(&self, _path: &str) -> Option<Value> {
+        self.top.clone()
     }
 }
 
@@ -337,6 +343,45 @@ fn the_person_is_the_artist() {
 fn credits_are_the_discography_without_broken_entries() {
     let c = credits(&Fake::default(), ARTIST).unwrap();
     assert_eq!(ids(c["albums"].as_array().unwrap()), [GROUP]);
+}
+
+#[test]
+fn top_recordings_match_groups_by_title_and_search_the_misses_once() {
+    let h = Fake {
+        top: Some(fx("top_recordings.json")),
+        ..Fake::default()
+    };
+    let c = credits(&h, ARTIST).unwrap();
+    let top = c["topRecordings"].as_array().unwrap();
+    // The repeated title and the record without a UUID are dropped.
+    assert_eq!(top.len(), 3);
+    assert_eq!(top[0]["albumExternalId"], GROUP);
+    assert_eq!(
+        (top[0]["durationMs"].clone(), top[0]["listenCount"].clone()),
+        (json!(183000), json!(900))
+    );
+    assert_eq!(
+        top[0]["coverUrl"],
+        format!("https://coverartarchive.org/release/{RELEASE}/front-250")
+    );
+    assert_eq!(
+        top[1]["albumExternalId"],
+        "66666666-6666-4666-8666-666666666666"
+    );
+    assert_eq!(top[2]["albumTitle"], "Unknown Album");
+    assert!(top[2].get("albumExternalId").is_none());
+    assert_eq!(
+        h.queries(),
+        ["reid:(55555555-5555-4555-8555-555555555555)"],
+        "the one unmatched release is searched, once"
+    );
+}
+
+#[test]
+fn credits_without_listenbrainz_still_return_the_albums() {
+    let c = credits(&Fake::default(), ARTIST).unwrap();
+    assert!(c.get("topRecordings").is_none());
+    assert_eq!(c["albums"].as_array().unwrap().len(), 1);
 }
 
 #[test]
