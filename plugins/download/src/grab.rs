@@ -472,8 +472,8 @@ pub fn issue_queries(t: &Target, custom: Option<&str>) -> Vec<String> {
     out
 }
 
-/// The queries that find an album: artist and album, then the album alone. A track want searches
-/// its album too. A custom query stands alone.
+/// The queries that find an album: artist and album, then the album alone. A track target names its
+/// own title instead of the album's. A custom query stands alone.
 pub fn album_queries(t: &Target, custom: Option<&str>) -> Vec<String> {
     if let Some(c) = custom.map(str::trim).filter(|c| !c.is_empty()) {
         return vec![c.to_owned()];
@@ -484,10 +484,15 @@ pub fn album_queries(t: &Target, custom: Option<&str>) -> Vec<String> {
         .find(|c| c.role == "artist")
         .map(|c| c.name.trim())
         .filter(|n| !n.is_empty() && !n.eq_ignore_ascii_case("various artists"));
+    let title = unit_of(t)
+        .and_then(|u| u.title.as_deref())
+        .map(str::trim)
+        .filter(|n| !n.is_empty())
+        .unwrap_or(&t.search_title);
     artist
-        .map(|a| format!("{a} {}", t.search_title))
+        .map(|a| format!("{a} {title}"))
         .into_iter()
-        .chain([t.search_title.clone()])
+        .chain([title.to_owned()])
         .collect()
 }
 
