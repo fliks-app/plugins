@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/fliks-app/plugins/compare/musicbrainz-v0.5.1...musicbrainz-v0.6.0) (2026-11-13)
+
+
+### Features
+
+* **musicbrainz:** serve the week's trending albums, artists and tracks ([#129](https://github.com/fliks-app/plugins/issues/129)) ([bd58111](https://github.com/fliks-app/plugins/commit/bd58111d3b3b5eebe28644c57a03263fc4136502))
+
 ## [0.5.1](https://github.com/fliks-app/plugins/compare/musicbrainz-v0.5.0...musicbrainz-v0.5.1) (2026-11-12)
 
 
