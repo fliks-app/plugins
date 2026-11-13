@@ -1297,7 +1297,7 @@ dependencies = [
 
 [[package]]
 name = "fk-plugin-download"
-version = "2.9.1"
+version = "2.10.0"
 dependencies = [
  "chrono",
  "fliks-plugin-manifest",
