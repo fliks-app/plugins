@@ -15,6 +15,8 @@ the provider of the core namespace `musicbrainz` (`server/docs/spec/music.md` ru
   album id (through the URL relations) and an ISRC.
 - `work` carries the group's `genres`, most voted first; the annotation (editor notes) is not an
   overview. `edition` carries each track's ListenBrainz `popularity`, from one batch call per release.
+- `lists` answers `trending` with `target` = `album` (the default), `artist` or `recording`: the week's
+  most listened of the ListenBrainz sitewide statistics, 30 each, recordings with their release group.
 - Covers are the Cover Art Archive's `front-500` of the group and of the release. A merged id is
   answered under its new id: the record's `externalId` differs from the id asked.
 
