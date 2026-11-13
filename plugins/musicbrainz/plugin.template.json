@@ -37,7 +37,8 @@
         "credits",
         "findBy",
         "artistSearch",
-        "recordingSearch"
+        "recordingSearch",
+        "lists"
       ]
     },
     "findBy": [

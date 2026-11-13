@@ -1,7 +1,7 @@
 //! The MusicBrainz lookups over an injected transport, so recorded bodies can stand in for the network.
 use crate::map::{self, Target};
 use fliks_plugin_sdk_provider::ProviderError;
-use provider_common::http::json_reply;
+use provider_common::http::{json_reply, upstream};
 use serde_json::{Value, json};
 use std::collections::{HashMap, HashSet};
 
@@ -537,4 +537,43 @@ pub fn find_by(h: &impl Http, provider: &str, value: &str) -> R<Option<String>> 
         "isrc" => by_isrc(h, &value.replace('-', "").to_uppercase()),
         _ => Ok(None),
     }
+}
+
+const TRENDING: usize = 30;
+
+/// The week's most listened albums, artists or recordings on ListenBrainz, as search hits.
+/// `target` is `artist`, `recording` or anything else for albums.
+pub fn trending(h: &impl Http, target: &str) -> R<Vec<Value>> {
+    let (path, key) = match target {
+        "artist" => ("artists", "artists"),
+        "recording" => ("recordings", "recordings"),
+        _ => ("release-groups", "release_groups"),
+    };
+    let body = h
+        .lb_get(&format!(
+            "/1/stats/sitewide/{path}?count={TRENDING}&range=week"
+        ))
+        .ok_or_else(|| upstream(None, "ListenBrainz gave no statistics"))?;
+    let rows = array(&body["payload"], key);
+    Ok(match target {
+        "artist" => rows.iter().filter_map(map::trending_artist).collect(),
+        "recording" => {
+            let ids: Vec<&str> = rows
+                .iter()
+                .filter_map(|r| r["recording_mbid"].as_str())
+                .collect();
+            let meta = h
+                .lb_get(&format!(
+                    "/1/metadata/recording/?recording_mbids={}&inc=release+artist",
+                    ids.join(",")
+                ))
+                .unwrap_or(Value::Null);
+            rows.iter()
+                .filter_map(|r| {
+                    map::trending_recording(r, meta.get(r["recording_mbid"].as_str()?)?)
+                })
+                .collect()
+        }
+        _ => rows.iter().filter_map(map::trending_album).collect(),
+    })
 }

@@ -458,3 +458,54 @@ pub fn person(a: &Value) -> Value {
         "biography": s(a, "annotation"),
     }))
 }
+
+fn listened_artists(r: &Value) -> Vec<Value> {
+    let ids = list(r, "artist_mbids");
+    match s(r, "artist_name") {
+        Some(name) => vec![compact(
+            json!({ "name": name, "id": ids.first().and_then(Value::as_str).and_then(uuid) }),
+        )],
+        None => vec![],
+    }
+}
+
+/// A ListenBrainz sitewide release group as an album record.
+pub fn trending_album(r: &Value) -> Option<Value> {
+    let id = s(r, "release_group_mbid").and_then(uuid)?;
+    Some(compact(json!({
+        "externalId": id,
+        "title": s(r, "release_group_name")?,
+        "posterUrl": cover_of_group(&id),
+        "sourceUrl": url_of("release-group", &id),
+        "artists": listened_artists(r),
+        "popularity": r.get("listen_count"),
+        "mediaType": "album",
+    })))
+}
+
+/// A ListenBrainz sitewide artist as an artist hit.
+pub fn trending_artist(r: &Value) -> Option<Value> {
+    Some(json!({ "externalId": s(r, "artist_mbid").and_then(uuid)?, "name": s(r, "artist_name")? }))
+}
+
+/// A ListenBrainz sitewide recording, with its release group from the recording metadata `meta`.
+pub fn trending_recording(r: &Value, meta: &Value) -> Option<Value> {
+    let rel = &meta["release"];
+    let group = s(rel, "release_group_mbid").and_then(uuid)?;
+    let artists = listened_artists(r);
+    Some(compact(json!({
+        "externalId": s(r, "recording_mbid").and_then(uuid)?,
+        "title": s(r, "track_name")?,
+        "durationMs": meta["recording"]["length"].as_u64().filter(|l| *l > 0),
+        "artists": artists,
+        "album": compact(json!({
+            "externalId": group,
+            "title": s(rel, "name")?,
+            "firstReleaseDate": rel["year"].as_u64().map(|y| y.to_string()),
+            "posterUrl": cover_of_group(&group),
+            "sourceUrl": url_of("release-group", &group),
+            "artists": artists,
+            "mediaType": "album",
+        })),
+    })))
+}
