@@ -896,6 +896,16 @@ fn an_album_is_searched_by_artist_and_title_then_title_alone() {
 }
 
 #[test]
+fn a_track_is_searched_by_its_own_title() {
+    let mut t = track(1, 3.0);
+    t.scope[0].title = Some(" Red Lights ".into());
+    assert_eq!(
+        grab::album_queries(&t, None),
+        ["The Fixtures Red Lights", "Red Lights"]
+    );
+}
+
+#[test]
 fn a_track_want_is_the_album_work_not_an_episode() {
     use grab::Piece;
     let mut t = track(2, 5.0);
