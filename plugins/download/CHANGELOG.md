@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.10.0](https://github.com/fliks-app/plugins/compare/download-v2.9.1...download-v2.10.0) (2026-11-13)
+
+
+### Features
+
+* **download:** search an album track by its own title ([#133](https://github.com/fliks-app/plugins/issues/133)) ([bf04347](https://github.com/fliks-app/plugins/commit/bf04347d71787fb32a03162560c03c40f117037d))
+
 ## [2.9.1](https://github.com/fliks-app/plugins/compare/download-v2.9.0...download-v2.9.1) (2026-11-09)
 
 
