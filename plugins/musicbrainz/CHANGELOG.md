@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/fliks-app/plugins/compare/musicbrainz-v0.6.0...musicbrainz-v0.6.1) (2026-11-13)
+
+
+### Documentation
+
+* **musicbrainz:** document the trending list ([#131](https://github.com/fliks-app/plugins/issues/131)) ([175a0b2](https://github.com/fliks-app/plugins/commit/175a0b2ab45828ad127cdb2d88326e5056f7bb9a))
+
 ## [0.6.0](https://github.com/fliks-app/plugins/compare/musicbrainz-v0.5.1...musicbrainz-v0.6.0) (2026-11-13)
 
 
