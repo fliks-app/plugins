@@ -27,7 +27,8 @@ fn the_provider_packages_and_verifies() {
             "credits",
             "findBy",
             "artistSearch",
-            "recordingSearch"
+            "recordingSearch",
+            "lists"
         ])
     );
     assert_eq!(
