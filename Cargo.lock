@@ -1368,7 +1368,7 @@ dependencies = [
 
 [[package]]
 name = "fk-plugin-music-lists"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "fliks-plugin-sdk",
  "serde_json",
