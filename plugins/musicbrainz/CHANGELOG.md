@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/fliks-app/plugins/compare/musicbrainz-v0.6.2...musicbrainz-v0.7.0) (2026-11-16)
+
+
+### Features
+
+* **musicbrainz:** send release disambiguation, group id and the release of a recording hit ([#153](https://github.com/fliks-app/plugins/issues/153)) ([f1871c7](https://github.com/fliks-app/plugins/commit/f1871c7ec6194ea1d9ae1d3f781203b5cda94664))
+
 ## [0.6.2](https://github.com/fliks-app/plugins/compare/musicbrainz-v0.6.1...musicbrainz-v0.6.2) (2026-11-16)
 
 
