@@ -1231,7 +1231,7 @@ checksum = "1c66915cc5391097de7a2b0b972e8505aa33c0df401fd3a6811dbdb32881ba48"
 
 [[package]]
 name = "fk-plugin-audible"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "fliks-plugin-sdk",
  "fliks-plugin-sdk-provider",
@@ -1242,7 +1242,7 @@ dependencies = [
 
 [[package]]
 name = "fk-plugin-audnexus"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "fliks-plugin-sdk",
  "fliks-plugin-sdk-provider",
@@ -1253,7 +1253,7 @@ dependencies = [
 
 [[package]]
 name = "fk-plugin-bnf"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "fliks-plugin-sdk",
  "fliks-plugin-sdk-provider",
@@ -1266,7 +1266,7 @@ dependencies = [
 
 [[package]]
 name = "fk-plugin-comicvine"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "fliks-plugin-sdk",
  "fliks-plugin-sdk-provider",
@@ -1277,7 +1277,7 @@ dependencies = [
 
 [[package]]
 name = "fk-plugin-download"
-version = "2.9.1"
+version = "2.10.0"
 dependencies = [
  "chrono",
  "fliks-plugin-manifest",
@@ -1295,7 +1295,7 @@ dependencies = [
 
 [[package]]
 name = "fk-plugin-fanarttv"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "fliks-plugin-sdk",
  "fliks-plugin-sdk-provider",
@@ -1307,7 +1307,7 @@ dependencies = [
 
 [[package]]
 name = "fk-plugin-googlebooks"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "fliks-plugin-sdk",
  "fliks-plugin-sdk-provider",
@@ -1318,7 +1318,7 @@ dependencies = [
 
 [[package]]
 name = "fk-plugin-gutenberg"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "direct-source",
  "fliks-plugin-sdk",
@@ -1332,7 +1332,7 @@ dependencies = [
 
 [[package]]
 name = "fk-plugin-librivox"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "direct-source",
  "fliks-plugin-sdk",
@@ -1346,7 +1346,7 @@ dependencies = [
 
 [[package]]
 name = "fk-plugin-lrclib"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "fliks-plugin-sdk",
  "fliks-plugin-sdk-provider",
@@ -1357,7 +1357,7 @@ dependencies = [
 
 [[package]]
 name = "fk-plugin-metron"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "fliks-plugin-sdk",
  "fliks-plugin-sdk-provider",
@@ -1377,7 +1377,7 @@ dependencies = [
 
 [[package]]
 name = "fk-plugin-musicbrainz"
-version = "0.6.1"
+version = "0.6.2"
 dependencies = [
  "fliks-plugin-sdk",
  "fliks-plugin-sdk-provider",
@@ -1389,7 +1389,7 @@ dependencies = [
 
 [[package]]
 name = "fk-plugin-notify"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "fliks-plugin-sdk",
  "serde",
@@ -1400,7 +1400,7 @@ dependencies = [
 
 [[package]]
 name = "fk-plugin-openlibrary"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "fliks-plugin-sdk",
  "fliks-plugin-sdk-provider",
@@ -1412,7 +1412,7 @@ dependencies = [
 
 [[package]]
 name = "fk-plugin-thexem"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "fliks-plugin-sdk",
  "fliks-plugin-sdk-provider",
@@ -1423,7 +1423,7 @@ dependencies = [
 
 [[package]]
 name = "fk-plugin-tmdb"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "fliks-plugin-sdk",
  "fliks-plugin-sdk-provider",
@@ -1434,7 +1434,7 @@ dependencies = [
 
 [[package]]
 name = "fk-plugin-tvdb"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "fliks-plugin-sdk",
  "fliks-plugin-sdk-provider",
