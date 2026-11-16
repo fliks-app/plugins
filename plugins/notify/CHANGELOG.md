@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.1](https://github.com/fliks-app/plugins/compare/notify-v2.0.0...notify-v2.0.1) (2026-11-16)
+
+
+### Bug Fixes
+
+* rebuild every plugin against the new provider interface ([#135](https://github.com/fliks-app/plugins/issues/135)) ([0cfe1ac](https://github.com/fliks-app/plugins/commit/0cfe1acc9424c435f3b752564d2f1b6dda9bb950))
+
 ## [2.0.0](https://github.com/fliks-app/plugins/compare/notify-v1.0.0...notify-v2.0.0) (2026-11-02)
 
 
