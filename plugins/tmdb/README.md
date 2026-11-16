@@ -16,3 +16,7 @@ cargo build -p fk-plugin-tmdb --release --target wasm32-wasip2
 cargo test -p fk-plugin-tmdb --test package                         # needs the release component
 cargo xtask package plugins/tmdb --out dist
 ```
+
+## Compatibility
+
+Built against the provider interface of the Fliks core range declared in its manifest.

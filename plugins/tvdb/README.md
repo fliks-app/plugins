@@ -15,3 +15,7 @@ cargo build -p fk-plugin-tvdb --release --target wasm32-wasip2
 cargo test -p fk-plugin-tvdb --test package                         # needs the release component
 cargo xtask package plugins/tvdb --out dist
 ```
+
+## Compatibility
+
+Built against the provider interface of the Fliks core range declared in its manifest.

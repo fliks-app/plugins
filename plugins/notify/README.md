@@ -55,3 +55,7 @@ Changing the target takes effect on the next attempt, queued deliveries included
 
 Bounds, the delivery queue, the build and the test suite are in
 [docs/development.md](docs/development.md).
+
+## Compatibility
+
+Built against the provider interface of the Fliks core range declared in its manifest.

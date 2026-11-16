@@ -15,3 +15,7 @@ cargo test -p fk-plugin-fanarttv --lib
 cargo build -p fk-plugin-fanarttv --release --target wasm32-wasip2
 cargo test -p fk-plugin-fanarttv --test package   # needs the release component
 ```
+
+## Compatibility
+
+Built against the provider interface of the Fliks core range declared in its manifest.

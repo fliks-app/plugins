@@ -25,3 +25,7 @@ cargo test -p fk-plugin-audible --test package   # needs the release component
 
 `--lib` runs the lookups against the recorded bodies in `plugins/audible/tests/fixtures`
 through a fake transport. The host harness is not used: a provider holds no database.
+
+## Compatibility
+
+Built against the provider interface of the Fliks core range declared in its manifest.

@@ -16,3 +16,7 @@ cargo test -p fk-plugin-lrclib --lib
 cargo build -p fk-plugin-lrclib --release --target wasm32-wasip2
 cargo test -p fk-plugin-lrclib --test package   # needs the release component
 ```
+
+## Compatibility
+
+Built against the provider interface of the Fliks core range declared in its manifest.

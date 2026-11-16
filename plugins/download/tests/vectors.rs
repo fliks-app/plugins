@@ -518,6 +518,8 @@ fn unit(group: Option<u32>, number: Option<f64>) -> Unit {
         title: None,
         air_date: None,
         unit_count: None,
+        isrc: None,
+        duration_ms: None,
     }
 }
 

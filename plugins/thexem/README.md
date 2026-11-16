@@ -20,3 +20,7 @@ cargo test -p fk-plugin-thexem --test package   # needs the release component
 ```
 
 `--lib` runs the parsing against the recorded TheXEM bodies in `plugins/thexem/tests/fixtures`; no network.
+
+## Compatibility
+
+Built against the provider interface of the Fliks core range declared in its manifest.
