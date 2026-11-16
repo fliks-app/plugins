@@ -7,6 +7,8 @@ use std::cell::RefCell;
 
 const GROUP: &str = "11111111-1111-4111-8111-111111111111";
 const RELEASE: &str = "44444444-4444-4444-8444-444444444444";
+const REC_A: &str = "fa294381-91cb-4e44-ba5f-abb570e378f3";
+const REC_B: &str = "8ca3832b-0000-4000-8000-000000000000";
 const ARTIST: &str = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 
 fn fx(name: &str) -> Value {
@@ -24,6 +26,8 @@ struct Fake {
     top: Option<Value>,
     /// The answer of a recording metadata lookup.
     meta: Option<Value>,
+    /// The `(recording, offset)` of every release browse.
+    browses: RefCell<Vec<(String, String)>>,
 }
 
 impl Fake {
@@ -46,7 +50,29 @@ impl Http for Fake {
         {
             return Ok(b.clone());
         }
+        if path == "/release"
+            && let Some((_, rec)) = query.iter().find(|(k, _)| *k == "recording")
+        {
+            let off = query
+                .iter()
+                .find(|(k, _)| *k == "offset")
+                .unwrap()
+                .1
+                .clone();
+            self.browses.borrow_mut().push((rec.clone(), off.clone()));
+            return Ok(match (rec.as_str(), off.as_str()) {
+                (REC_A, "0") => fx("release_browse_p1.json"),
+                (REC_A, "100") => fx("release_browse_p2.json"),
+                (REC_B, "0") => {
+                    let mut b = fx("release_browse_p2.json");
+                    b["release-count"] = json!(50);
+                    b
+                }
+                _ => json!({"release-count": 0, "releases": []}),
+            });
+        }
         Ok(match path {
+            "/isrc/USAAA2400002" => fx("isrc_recordings.json"),
             "/artist" => fx("search_artist.json"),
             "/recording" => fx("search_recording.json"),
             "/release-group" if has("query") => fx("search.json"),
@@ -619,4 +645,44 @@ fn trending_albums_and_artists_map_the_sitewide_rows() {
     );
     assert_eq!(trending(&h, "artist").unwrap()[0]["name"], "Band");
     assert!(trending(&Fake::default(), "album").is_err());
+}
+
+#[test]
+fn recording_releases_pages_the_browse_by_release_count() {
+    let h = Fake::default();
+    let ids = recording_releases(&h, "musicbrainz", &REC_A.to_uppercase()).unwrap();
+    assert_eq!(ids.len(), 150);
+    assert_eq!(ids[0], "10000000-0000-4000-8000-000000000000");
+    let b = h.browses.borrow();
+    assert_eq!(
+        *b,
+        vec![(REC_A.into(), "0".into()), (REC_A.into(), "100".into())]
+    );
+}
+
+#[test]
+fn recording_releases_of_an_isrc_browses_each_recording_deduped() {
+    let h = Fake::default();
+    let ids = recording_releases(&h, "isrc", "US-AAA-24-00002").unwrap();
+    // REC_A's 150 plus REC_B's last 50, which REC_A already holds.
+    assert_eq!(ids.len(), 150);
+    let b = h.browses.borrow();
+    assert_eq!(
+        b.iter().map(|(r, _)| r.as_str()).collect::<Vec<_>>(),
+        [REC_A, REC_A, REC_B]
+    );
+}
+
+#[test]
+fn recording_releases_is_not_found_for_unknown_ids() {
+    let h = Fake::default();
+    let nf = |r: R<Vec<String>>| matches!(r, Err(ProviderError::NotFound));
+    assert!(nf(recording_releases(
+        &h,
+        "musicbrainz",
+        "00000000-0000-4000-8000-000000000000"
+    )));
+    assert!(nf(recording_releases(&h, "musicbrainz", "not-a-uuid")));
+    assert!(nf(recording_releases(&h, "isrc", "USZZZ2400001")));
+    assert!(nf(recording_releases(&h, "tmdb", REC_A)));
 }
