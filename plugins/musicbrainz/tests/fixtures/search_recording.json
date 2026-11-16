@@ -6,7 +6,7 @@
       "release-group": {"id": "22222222-aaaa-4aaa-8aaa-000000000001", "title": "Live Bootleg", "primary-type": "Album", "secondary-types": ["Live"]}},
      {"id": "11111111-aaaa-4aaa-8aaa-000000000002", "status": "Official", "date": "2005-03-01",
       "release-group": {"id": "22222222-aaaa-4aaa-8aaa-000000000002", "title": "Placeholder Compilation", "primary-type": "Album", "secondary-types": ["Compilation"]}},
-     {"id": "11111111-aaaa-4aaa-8aaa-000000000003", "status": "Official", "date": "2004-05-01",
+     {"id": "11111111-aaaa-4aaa-8aaa-000000000003", "title": "Placeholder Album", "status": "Official", "date": "2004-05-01",
       "release-group": {"id": "22222222-aaaa-4aaa-8aaa-000000000003", "title": "Placeholder Album", "primary-type": "Album"}}
    ]},
   {"id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee", "score": 90, "title": "placeholder song", "length": 183000,

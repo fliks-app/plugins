@@ -1,4 +1,4 @@
-{"id":"44444444-4444-4444-8444-444444444444","title":"Placeholder Album","status":"Official","country":"XW","date":"2004-05-01","barcode":"012345678905","text-representation":{"language":"eng","script":"Latn"},"cover-art-archive":{"front":true},
+{"id":"44444444-4444-4444-8444-444444444444","title":"Placeholder Album","status":"Official","disambiguation":"placeholder edition","release-group":{"id":"22222222-aaaa-4aaa-8aaa-000000000003"},"country":"XW","date":"2004-05-01","barcode":"012345678905","text-representation":{"language":"eng","script":"Latn"},"cover-art-archive":{"front":true},
 "artist-credit":[{"name":"Example Artist","joinphrase":"","artist":{"id":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","name":"Example Artist","sort-name":"Artist, Example"}}],
 "label-info":[{"catalog-number":"CAT-1","label":{"name":"Example Label"}}],
 "media":[

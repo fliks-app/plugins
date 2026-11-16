@@ -193,6 +193,11 @@ fn best_release(r: &Value) -> Option<&Value> {
         .min_by_key(rank)
 }
 
+/// The release a hit is on; absent when the provider sent no title for it.
+fn release_ref(rel: &Value) -> Option<Value> {
+    Some(json!({"externalId": s(rel, "id").and_then(uuid)?, "title": s(rel, "title")?}))
+}
+
 /// A recording search hit with the release group it is listed under as an album record.
 pub fn recording_hit(r: &Value) -> Option<Value> {
     let rel = best_release(r)?;
@@ -209,6 +214,7 @@ pub fn recording_hit(r: &Value) -> Option<Value> {
         "durationMs": r.get("length").and_then(Value::as_u64).filter(|l| *l > 0),
         "artists": credits(r.get("artist-credit").unwrap_or(&Value::Null)),
         "album": album(&g, None)?,
+        "release": release_ref(rel),
     })))
 }
 
@@ -292,6 +298,7 @@ pub fn release(r: &Value) -> Option<Map<String, Value>> {
     let Value::Object(m) = compact(json!({
         "externalId": id,
         "title": s(r, "title")?,
+        "disambiguation": s(r, "disambiguation"),
         "country": country,
         "status": lower(r, "status"),
         "media": media.first().and_then(|m| s(m, "format")).map(medium),
@@ -419,6 +426,13 @@ pub fn edition(r: &Value) -> Option<Value> {
     let front = r.pointer("/cover-art-archive/front") == Some(&Value::Bool(true));
     head.insert("tracks".into(), Value::Array(tracks));
     for (k, v) in [
+        (
+            "releaseGroupId",
+            r.pointer("/release-group/id")
+                .and_then(Value::as_str)
+                .and_then(uuid)
+                .map(Value::from),
+        ),
         (
             "language",
             r.pointer("/text-representation/language").cloned(),

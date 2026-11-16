@@ -295,6 +295,8 @@ fn children_are_the_releases() {
     assert_eq!(c[1]["country"], "FR");
     assert_eq!(c[1]["status"], "pseudo-release");
     assert_eq!(c[1]["media"], "vinyl");
+    assert_eq!(c[1]["disambiguation"], "deluxe");
+    assert!(c[0].get("disambiguation").is_none());
     assert!(c[1].get("barcode").is_none());
 }
 
@@ -303,6 +305,8 @@ fn the_edition_carries_the_tracklist_with_credits_and_works() {
     let e = edition(&Fake::default(), RELEASE).unwrap();
     assert_eq!(e["externalId"], RELEASE);
     assert_eq!(e["language"], "eng");
+    assert_eq!(e["disambiguation"], "placeholder edition");
+    assert_eq!(e["releaseGroupId"], "22222222-aaaa-4aaa-8aaa-000000000003");
     assert_eq!(
         e["coverUrl"],
         format!("https://coverartarchive.org/release/{RELEASE}/front-500")
@@ -511,6 +515,11 @@ fn a_recording_is_listed_under_its_best_release_group_and_once_per_title() {
         a["externalId"], "22222222-aaaa-4aaa-8aaa-000000000003",
         "official plain album first"
     );
+    assert_eq!(
+        r["release"]["externalId"],
+        "11111111-aaaa-4aaa-8aaa-000000000003"
+    );
+    assert_eq!(r["release"]["title"], "Placeholder Album");
     assert_eq!(
         (a["title"].clone(), a["mediaType"].clone()),
         (json!("Placeholder Album"), json!("album"))

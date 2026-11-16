@@ -17,7 +17,7 @@ const POOL: u32 = 100;
 /// ListenBrainz answers at most 100 recordings a call.
 const RECORDINGS_PER_CALL: usize = 100;
 const TOP_RECORDINGS: usize = 10;
-const EDITION_INC: &str = "recordings+artist-credits+media+labels+isrcs+recording-level-rels+work-rels+work-level-rels+artist-rels";
+const EDITION_INC: &str = "recordings+release-groups+artist-credits+media+labels+isrcs+recording-level-rels+work-rels+work-level-rels+artist-rels";
 
 pub trait Http {
     /// A GET of the web service (`/ws/2` is the transport's), the answer as JSON.
