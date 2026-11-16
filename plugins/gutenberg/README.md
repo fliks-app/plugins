@@ -33,3 +33,7 @@ cargo test -p fk-plugin-gutenberg --test package   # needs the release component
 
 `--lib` runs the lookups and the download against the recorded bodies in
 `plugins/gutenberg/tests/fixtures` through a fake transport, with no network.
+
+## Compatibility
+
+Built against the provider interface of the Fliks core range declared in its manifest.

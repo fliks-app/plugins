@@ -36,3 +36,7 @@ cargo test -p fk-plugin-music-lists --lib
 cargo build -p fk-plugin-music-lists --release --target wasm32-wasip2
 cargo test -p fk-plugin-music-lists --test package   # needs the release component
 ```
+
+## Compatibility
+
+Built against the provider interface of the Fliks core range declared in its manifest.

@@ -18,3 +18,7 @@ cargo test -p fk-plugin-openlibrary --test package   # needs the release compone
 `--lib` runs the lookups against the recorded bodies in `plugins/openlibrary/tests/fixtures`
 through a fake transport. The host harness is not used: it needs a scratch Postgres, and a provider
 holds no database.
+
+## Compatibility
+
+Built against the provider interface of the Fliks core range declared in its manifest.

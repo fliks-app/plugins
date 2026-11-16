@@ -145,6 +145,17 @@ impl MetadataProvider for Provider {
         Ok(Some(json_of(api::edition(&Live, &edition.value)?)?))
     }
 
+    fn recording_releases(recording: ExternalId) -> R<Vec<ExternalId>> {
+        let ids = api::recording_releases(&Live, &recording.provider, &recording.value)?;
+        Ok(ids
+            .into_iter()
+            .map(|value| ExternalId {
+                provider: "musicbrainz".into(),
+                value,
+            })
+            .collect())
+    }
+
     fn fetch_person(id: ExternalId, _lang: Lang) -> R<String> {
         json_of(api::person(&Live, &id.value)?)
     }

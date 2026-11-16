@@ -28,6 +28,7 @@ fn the_provider_packages_and_verifies() {
             "findBy",
             "artistSearch",
             "recordingSearch",
+            "recordingReleases",
             "lists"
         ])
     );

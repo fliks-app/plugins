@@ -27,3 +27,7 @@ cargo test -p fk-plugin-metron --test package   # needs the release component
 
 `--lib` runs the lookups against the anonymised bodies in `plugins/metron/tests/fixtures` through a
 fake transport; no network.
+
+## Compatibility
+
+Built against the provider interface of the Fliks core range declared in its manifest.

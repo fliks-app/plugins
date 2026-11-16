@@ -530,6 +530,48 @@ fn by_isrc(h: &impl Http, isrc: &str) -> R<Option<String>> {
     }
 }
 
+/// The releases holding a recording, named by a `musicbrainz` recording id or an ISRC; none is `NotFound`.
+pub fn recording_releases(h: &impl Http, provider: &str, value: &str) -> R<Vec<String>> {
+    let recordings = match provider {
+        "musicbrainz" => vec![id_of(value)?],
+        "isrc" => {
+            let isrc = value.replace('-', "").to_uppercase();
+            let body = h.mb(&format!("/isrc/{isrc}"), &[])?;
+            array(&body, "recordings")
+                .iter()
+                .filter_map(|r| map::uuid(r["id"].as_str()?))
+                .collect()
+        }
+        _ => return Err(ProviderError::NotFound),
+    };
+    let mut out: Vec<String> = vec![];
+    for rec in recordings {
+        for p in 0..MAX_RELEASE_PAGES {
+            let body = h.mb(
+                "/release",
+                &[
+                    ("recording", rec.clone()),
+                    ("inc", "release-groups".to_owned()),
+                    ("limit", PAGE.to_string()),
+                    ("offset", (p * PAGE).to_string()),
+                ],
+            )?;
+            let page = array(&body, "releases");
+            out.extend(page.iter().filter_map(|r| map::uuid(r["id"].as_str()?)));
+            let total = body["release-count"].as_u64().unwrap_or(0);
+            if page.is_empty() || u64::from((p + 1) * PAGE) >= total {
+                break;
+            }
+        }
+    }
+    let mut seen = HashSet::new();
+    out.retain(|id| seen.insert(id.clone()));
+    if out.is_empty() {
+        return Err(ProviderError::NotFound);
+    }
+    Ok(out)
+}
+
 pub fn find_by(h: &impl Http, provider: &str, value: &str) -> R<Option<String>> {
     match provider {
         "spotify" => by_url(h, &format!("https://open.spotify.com/album/{value}")),
