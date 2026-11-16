@@ -86,6 +86,18 @@ pub fn escape(text: &str) -> String {
     out
 }
 
+/// Each whitespace-separated word of `text` required in at least one of `fields`, as quoted phrases.
+pub fn token_query(text: &str, fields: &[&str]) -> String {
+    text.split_whitespace()
+        .map(|t| {
+            let t = t.replace('\\', "\\\\").replace('"', "\\\"");
+            let any: Vec<String> = fields.iter().map(|f| format!("{f}:\"{t}\"")).collect();
+            format!("({})", any.join(" OR "))
+        })
+        .collect::<Vec<_>>()
+        .join(" AND ")
+}
+
 /// The credits of an `artist-credit` list, in order.
 pub fn credits(ac: &Value) -> Vec<Value> {
     ac.as_array()
