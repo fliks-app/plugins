@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.2](https://github.com/fliks-app/plugins/compare/musicbrainz-v0.7.1...musicbrainz-v0.7.2) (2026-11-16)
+
+
+### Bug Fixes
+
+* **musicbrainz:** rank a duet under its whole credit and fold hyphen variants ([#157](https://github.com/fliks-app/plugins/issues/157)) ([8275a57](https://github.com/fliks-app/plugins/commit/8275a57cc775fe7d4e10a374a8f52cf5bfffb4b2))
+
 ## [0.7.1](https://github.com/fliks-app/plugins/compare/musicbrainz-v0.7.0...musicbrainz-v0.7.1) (2026-11-16)
 
 
