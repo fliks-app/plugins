@@ -13,7 +13,7 @@
   "plugins/metron": "0.3.1",
   "plugins/comicvine": "0.3.1",
   "plugins/thexem": "0.2.2",
-  "plugins/musicbrainz": "0.7.0",
+  "plugins/musicbrainz": "0.7.1",
   "plugins/fanarttv": "0.2.1",
   "plugins/music-lists": "0.2.2",
   "plugins/lrclib": "0.2.1"
