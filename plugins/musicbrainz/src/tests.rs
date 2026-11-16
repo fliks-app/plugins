@@ -215,7 +215,7 @@ fn token_query_requires_each_word_in_a_field() {
         r#"(recording:"l'été") AND (recording:"café")"#
     );
     assert_eq!(
-        map::token_query(r#"say "hi" a"#, &["recording"]),
+        map::token_query(r#"say "hi" a\b"#, &["recording"]),
         r#"(recording:"say") AND (recording:"\"hi\"") AND (recording:"a\\b")"#
     );
     assert_eq!(

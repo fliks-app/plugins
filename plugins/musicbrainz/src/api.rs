@@ -157,8 +157,14 @@ pub fn search(
         Target::Text => {}
     }
     let name = title.unwrap_or(text).trim();
-    let mut query = map::token_query(name, &["releasegroup", "artist"]);
-    if let Some(id) = artist_id.and_then(map::uuid) {
+    let by_id = artist_id.and_then(map::uuid);
+    let fields: &[&str] = if by_id.is_some() {
+        &["releasegroup"]
+    } else {
+        &["releasegroup", "artist"]
+    };
+    let mut query = map::token_query(name, fields);
+    if let Some(id) = by_id {
         query += &format!(" AND arid:{id}");
     } else if let Some(a) = artist.map(str::trim).filter(|a| !a.is_empty()) {
         query += &format!(" AND artist:\"{}\"", map::escape(a));
