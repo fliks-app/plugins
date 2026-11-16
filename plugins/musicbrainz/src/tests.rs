@@ -719,3 +719,53 @@ fn recording_releases_is_not_found_for_unknown_ids() {
     assert!(nf(recording_releases(&h, "isrc", "USZZZ2400001")));
     assert!(nf(recording_releases(&h, "tmdb", REC_A)));
 }
+
+/// Recorded `/recording` pools of real queries; the expected hit must rank first.
+#[test]
+fn recorded_queries_rank_the_expected_recording() {
+    let dir = format!("{}/tests/fixtures/rank", env!("CARGO_MANIFEST_DIR"));
+    let cases: Vec<Value> =
+        serde_json::from_str(&std::fs::read_to_string(format!("{dir}/cases.json")).unwrap())
+            .unwrap();
+    let (mut top1, mut mrr) = (0, 0.0);
+    for c in &cases {
+        let body: Value = serde_json::from_str(
+            &std::fs::read_to_string(format!("{dir}/{}", c["file"].as_str().unwrap())).unwrap(),
+        )
+        .unwrap();
+        let h = Fake {
+            search: Some(body),
+            ..Fake::default()
+        };
+        let query = c["query"].as_str().unwrap();
+        let hits = search_recordings(&h, query, 1).unwrap();
+        let has = |v: &str, f: &str| {
+            let v = v.to_lowercase().replace('\u{2010}', "-");
+            f.split('|').any(|p| v.contains(p))
+        };
+        let rank = hits.iter().position(|r| {
+            let by = r["artists"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|a| a["name"].as_str().unwrap())
+                .collect::<Vec<_>>()
+                .join(" ");
+            has(r["title"].as_str().unwrap(), c["title"].as_str().unwrap())
+                && has(&by, c["artist"].as_str().unwrap())
+        });
+        println!(
+            "{:<40} {}",
+            query,
+            rank.map_or("-".to_owned(), |r| (r + 1).to_string())
+        );
+        top1 += usize::from(rank == Some(0));
+        mrr += rank.map_or(0.0, |r| 1.0 / (r + 1) as f64);
+        assert_eq!(rank, Some(0), "{query}");
+    }
+    println!(
+        "top1={top1}/{} mrr={:.3}",
+        cases.len(),
+        mrr / cases.len() as f64
+    );
+}
