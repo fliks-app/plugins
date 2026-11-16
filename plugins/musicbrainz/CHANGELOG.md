@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.1](https://github.com/fliks-app/plugins/compare/musicbrainz-v0.7.0...musicbrainz-v0.7.1) (2026-11-16)
+
+
+### Bug Fixes
+
+* **musicbrainz:** require every search word in the title, artist or release ([#155](https://github.com/fliks-app/plugins/issues/155)) ([d040724](https://github.com/fliks-app/plugins/commit/d040724b462f20e5dce44ff9a5c97da8349dea45))
+
 ## [0.7.0](https://github.com/fliks-app/plugins/compare/musicbrainz-v0.6.2...musicbrainz-v0.7.0) (2026-11-16)
 
 
