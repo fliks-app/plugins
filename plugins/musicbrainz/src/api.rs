@@ -227,10 +227,17 @@ pub fn search_recordings(h: &impl Http, text: &str, page: u32) -> R<Vec<Value>> 
     )?;
     let recs = array(&body, "recordings");
     let key = |r: &Value| {
-        let by = r["artists"][0]["name"].as_str().unwrap_or_default();
+        let by: Vec<&str> = r["artists"]
+            .as_array()
+            .map_or(&[][..], Vec::as_slice)
+            .iter()
+            .filter_map(|a| a["name"].as_str())
+            .collect();
+        let title = r["title"].as_str().unwrap_or_default().to_lowercase();
         format!(
-            "{}\u{1f}{by}",
-            r["title"].as_str().unwrap_or_default().to_lowercase()
+            "{}\u{1f}{}",
+            title.replace('\u{2010}', "-"),
+            by.join("\u{1f}")
         )
     };
     let hits: Vec<(f64, Value)> = recs

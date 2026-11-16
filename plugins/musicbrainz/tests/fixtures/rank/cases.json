@@ -1,0 +1,116 @@
+[
+ {
+  "query": "Manhattan-Kaboul renaud",
+  "title": "manhattan",
+  "artist": "axelle",
+  "file": "00.json"
+ },
+ {
+  "query": "Manhattan-Kaboul",
+  "title": "manhattan",
+  "artist": "axelle",
+  "file": "01.json"
+ },
+ {
+  "query": "feeling good bublé",
+  "title": "feeling good",
+  "artist": "bubl",
+  "file": "02.json"
+ },
+ {
+  "query": "feeling good michael buble",
+  "title": "feeling good",
+  "artist": "bubl",
+  "file": "03.json"
+ },
+ {
+  "query": "feeling good",
+  "title": "feeling good",
+  "artist": "bubl|nina|muse",
+  "file": "04.json"
+ },
+ {
+  "query": "bohemian rhapsody queen",
+  "title": "bohemian rhapsody",
+  "artist": "queen",
+  "file": "05.json"
+ },
+ {
+  "query": "bohemian rhapsody",
+  "title": "bohemian rhapsody",
+  "artist": "queen",
+  "file": "06.json"
+ },
+ {
+  "query": "j'ai demandé à la lune indochine",
+  "title": "lune",
+  "artist": "indochine",
+  "file": "07.json"
+ },
+ {
+  "query": "papaoutai",
+  "title": "papaoutai",
+  "artist": "stromae",
+  "file": "08.json"
+ },
+ {
+  "query": "papaoutai racine carrée",
+  "title": "papaoutai",
+  "artist": "stromae",
+  "file": "09.json"
+ },
+ {
+  "query": "imagine lennon",
+  "title": "imagine",
+  "artist": "lennon",
+  "file": "11.json"
+ },
+ {
+  "query": "hotel california eagles",
+  "title": "hotel california",
+  "artist": "eagles",
+  "file": "12.json"
+ },
+ {
+  "query": "l'italiano cutugno",
+  "title": "italiano",
+  "artist": "cutugno",
+  "file": "13.json"
+ },
+ {
+  "query": "alors on danse",
+  "title": "alors on danse",
+  "artist": "stromae",
+  "file": "14.json"
+ },
+ {
+  "query": "wish you were here pink floyd",
+  "title": "wish you were here",
+  "artist": "pink floyd",
+  "file": "15.json"
+ },
+ {
+  "query": "wish you were here avril lavigne",
+  "title": "wish you were here",
+  "artist": "avril",
+  "file": "16.json"
+ },
+ {
+  "query": "la vie en rose piaf",
+  "title": "vie en rose",
+  "artist": "piaf",
+  "file": "18.json"
+ },
+ {
+  "query": "smells like teen spirit nevermind",
+  "title": "smells like teen spirit",
+  "artist": "nirvana",
+  "file": "x0.json"
+ },
+ {
+  "query": "thriller",
+  "title": "thriller",
+  "artist": "jackson",
+  "file": "x1.json"
+ }
+]
