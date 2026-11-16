@@ -1377,7 +1377,7 @@ dependencies = [
 
 [[package]]
 name = "fk-plugin-musicbrainz"
-version = "0.7.1"
+version = "0.7.2"
 dependencies = [
  "fliks-plugin-sdk",
  "fliks-plugin-sdk-provider",
