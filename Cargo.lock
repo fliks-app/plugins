@@ -1231,7 +1231,7 @@ checksum = "1c66915cc5391097de7a2b0b972e8505aa33c0df401fd3a6811dbdb32881ba48"
 
 [[package]]
 name = "fk-plugin-audible"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "fliks-plugin-sdk",
  "fliks-plugin-sdk-provider",
@@ -1253,7 +1253,7 @@ dependencies = [
 
 [[package]]
 name = "fk-plugin-bnf"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "fliks-plugin-sdk",
  "fliks-plugin-sdk-provider",
@@ -1307,7 +1307,7 @@ dependencies = [
 
 [[package]]
 name = "fk-plugin-googlebooks"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "fliks-plugin-sdk",
  "fliks-plugin-sdk-provider",
@@ -1400,7 +1400,7 @@ dependencies = [
 
 [[package]]
 name = "fk-plugin-openlibrary"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "fliks-plugin-sdk",
  "fliks-plugin-sdk-provider",
@@ -1423,7 +1423,7 @@ dependencies = [
 
 [[package]]
 name = "fk-plugin-tmdb"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "fliks-plugin-sdk",
  "fliks-plugin-sdk-provider",
@@ -1434,7 +1434,7 @@ dependencies = [
 
 [[package]]
 name = "fk-plugin-tvdb"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "fliks-plugin-sdk",
  "fliks-plugin-sdk-provider",
