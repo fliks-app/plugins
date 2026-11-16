@@ -142,7 +142,7 @@ fn search_reranks_by_exact_title_type_and_releases() {
         ]
     );
     let q = h.queries().remove(0);
-    assert!(q.contains("releasegroup:(Placeholder Album)"));
+    assert!(q.contains(r#"(releasegroup:"Placeholder" OR artist:"Placeholder") AND (releasegroup:"Album" OR artist:"Album")"#));
     assert!(q.contains("artist:\"Example Artist\""));
     assert!(q.contains("firstreleasedate:2004"));
     assert!(!q.contains("firstreleasedate:2004*"));
@@ -201,6 +201,28 @@ fn listenbrainz_popularity_lifts_a_hit_and_is_reported() {
 #[test]
 fn search_text_is_escaped() {
     assert_eq!(map::escape(r#"a+b "c" (d)/e"#), r#"a\+b \"c\" \(d\)\/e"#);
+}
+
+#[test]
+fn token_query_requires_each_word_in_a_field() {
+    let f = ["recording", "artist"];
+    assert_eq!(
+        map::token_query("Manhattan-Kaboul renaud", &f),
+        r#"(recording:"Manhattan-Kaboul" OR artist:"Manhattan-Kaboul") AND (recording:"renaud" OR artist:"renaud")"#
+    );
+    assert_eq!(
+        map::token_query("l'été  café", &["recording"]),
+        r#"(recording:"l'été") AND (recording:"café")"#
+    );
+    assert_eq!(
+        map::token_query(r#"say "hi" a"#, &["recording"]),
+        r#"(recording:"say") AND (recording:"\"hi\"") AND (recording:"a\\b")"#
+    );
+    assert_eq!(
+        map::token_query("solo", &["recording"]),
+        r#"(recording:"solo")"#
+    );
+    assert_eq!(map::token_query("  ", &["recording"]), "");
 }
 
 #[test]
@@ -594,7 +616,9 @@ fn text_searches_rank_a_pool_of_a_hundred_and_page_through_it() {
     search_recordings(&h, "x", 1).unwrap();
     let q = h.queries();
     assert!(q[0].contains("primarytype:album^5"));
-    assert!(q[1].starts_with("recording:(x) AND (tag:[a TO z]^10"));
+    assert!(
+        q[1].starts_with(r#"(recording:"x" OR artist:"x" OR release:"x") AND (tag:[a TO z]^10"#)
+    );
     // A page past the pool is empty, never a repeat of the first one.
     assert!(
         search_recordings(&h, "placeholder song", 2)

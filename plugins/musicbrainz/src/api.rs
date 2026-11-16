@@ -157,7 +157,7 @@ pub fn search(
         Target::Text => {}
     }
     let name = title.unwrap_or(text).trim();
-    let mut query = format!("releasegroup:({})", map::escape(name));
+    let mut query = map::token_query(name, &["releasegroup", "artist"]);
     if let Some(id) = artist_id.and_then(map::uuid) {
         query += &format!(" AND arid:{id}");
     } else if let Some(a) = artist.map(str::trim).filter(|a| !a.is_empty()) {
@@ -201,6 +201,9 @@ pub fn search_artists(h: &impl Http, text: &str, page: u32) -> R<Vec<Value>> {
 /// The recordings matching `text` with the album each is listed under; one entry per title and artist.
 pub fn search_recordings(h: &impl Http, text: &str, page: u32) -> R<Vec<Value>> {
     let text = text.trim();
+    if text.is_empty() {
+        return Ok(vec![]);
+    }
     let (offset, skip) = pool_of(page);
     let body = h.mb(
         "/recording",
@@ -208,8 +211,8 @@ pub fn search_recordings(h: &impl Http, text: &str, page: u32) -> R<Vec<Value>> 
             (
                 "query",
                 format!(
-                    "recording:({}) AND (tag:[a TO z]^10 OR primarytype:album^3 OR status:official)",
-                    map::escape(text)
+                    "{} AND (tag:[a TO z]^10 OR primarytype:album^3 OR status:official)",
+                    map::token_query(text, &["recording", "artist", "release"])
                 ),
             ),
             ("limit", POOL.to_string()),
