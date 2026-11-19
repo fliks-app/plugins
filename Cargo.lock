@@ -1456,8 +1456,8 @@ dependencies = [
 
 [[package]]
 name = "fliks-engine-core"
-version = "1.24.2"
-source = "git+https://github.com/fliks-app/engine?tag=v1.24.2#cd8b9f29be86f65b4a7ab4a8c79715c9642b9ca2"
+version = "1.28.0"
+source = "git+https://github.com/fliks-app/engine?tag=v1.28.0#1eb64f7538e9595d6368400aa8f96b40cf732d21"
 dependencies = [
  "serde",
  "serde_json",
@@ -1468,7 +1468,7 @@ dependencies = [
 [[package]]
 name = "fliks-plugin-manifest"
 version = "6.0.2"
-source = "git+https://github.com/fliks-app/fliks?rev=fc57dc8846cb8e80d9399e779bd5846555e18c35#fc57dc8846cb8e80d9399e779bd5846555e18c35"
+source = "git+https://github.com/fliks-app/fliks?rev=220bf8b1f6de25af0f7118c446249611cbd4e068#220bf8b1f6de25af0f7118c446249611cbd4e068"
 dependencies = [
  "base64 0.23.1",
  "ed25519-dalek 3.0.0",
@@ -1485,7 +1485,7 @@ dependencies = [
 [[package]]
 name = "fliks-plugin-route"
 version = "0.1.0"
-source = "git+https://github.com/fliks-app/fliks?rev=fc57dc8846cb8e80d9399e779bd5846555e18c35#fc57dc8846cb8e80d9399e779bd5846555e18c35"
+source = "git+https://github.com/fliks-app/fliks?rev=220bf8b1f6de25af0f7118c446249611cbd4e068#220bf8b1f6de25af0f7118c446249611cbd4e068"
 dependencies = [
  "fancy-regex",
 ]
@@ -1493,7 +1493,7 @@ dependencies = [
 [[package]]
 name = "fliks-plugin-sdk"
 version = "0.1.0"
-source = "git+https://github.com/fliks-app/fliks?rev=fc57dc8846cb8e80d9399e779bd5846555e18c35#fc57dc8846cb8e80d9399e779bd5846555e18c35"
+source = "git+https://github.com/fliks-app/fliks?rev=220bf8b1f6de25af0f7118c446249611cbd4e068#220bf8b1f6de25af0f7118c446249611cbd4e068"
 dependencies = [
  "axum",
  "base64 0.23.1",
@@ -1510,14 +1510,14 @@ dependencies = [
  "tower",
  "wasip2",
  "wit-bindgen 0.63.0",
- "wit-parser 0.262.0",
+ "wit-parser 0.263.0",
  "wstd",
 ]
 
 [[package]]
 name = "fliks-plugin-sdk-provider"
 version = "0.1.0"
-source = "git+https://github.com/fliks-app/fliks?rev=fc57dc8846cb8e80d9399e779bd5846555e18c35#fc57dc8846cb8e80d9399e779bd5846555e18c35"
+source = "git+https://github.com/fliks-app/fliks?rev=220bf8b1f6de25af0f7118c446249611cbd4e068#220bf8b1f6de25af0f7118c446249611cbd4e068"
 dependencies = [
  "fliks-plugin-sdk",
  "wasip2",
@@ -1527,7 +1527,7 @@ dependencies = [
 [[package]]
 name = "fliks-server"
 version = "6.0.2"
-source = "git+https://github.com/fliks-app/fliks?rev=fc57dc8846cb8e80d9399e779bd5846555e18c35#fc57dc8846cb8e80d9399e779bd5846555e18c35"
+source = "git+https://github.com/fliks-app/fliks?rev=220bf8b1f6de25af0f7118c446249611cbd4e068#220bf8b1f6de25af0f7118c446249611cbd4e068"
 dependencies = [
  "anyhow",
  "axum",
@@ -1598,7 +1598,7 @@ dependencies = [
 [[package]]
 name = "fliks_domain"
 version = "6.0.2"
-source = "git+https://github.com/fliks-app/fliks?rev=fc57dc8846cb8e80d9399e779bd5846555e18c35#fc57dc8846cb8e80d9399e779bd5846555e18c35"
+source = "git+https://github.com/fliks-app/fliks?rev=220bf8b1f6de25af0f7118c446249611cbd4e068#220bf8b1f6de25af0f7118c446249611cbd4e068"
 dependencies = [
  "chrono",
  "encoding_rs",
@@ -2365,7 +2365,7 @@ dependencies = [
 [[package]]
 name = "kepub"
 version = "6.0.2"
-source = "git+https://github.com/fliks-app/fliks?rev=fc57dc8846cb8e80d9399e779bd5846555e18c35#fc57dc8846cb8e80d9399e779bd5846555e18c35"
+source = "git+https://github.com/fliks-app/fliks?rev=220bf8b1f6de25af0f7118c446249611cbd4e068#220bf8b1f6de25af0f7118c446249611cbd4e068"
 dependencies = [
  "encoding_rs",
  "percent-encoding",
@@ -4724,6 +4724,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "wasmparser"
+version = "0.263.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4f5fa0a054ae153606df820eb0a84213e28cda41bbe04ba2628e71b6ba100fcb"
+dependencies = [
+ "bitflags",
+ "indexmap",
+ "semver",
+]
+
+[[package]]
 name = "wasmprinter"
 version = "0.261.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5347,6 +5358,25 @@ dependencies = [
  "serde_json",
  "unicode-ident",
  "wasmparser 0.262.0",
+]
+
+[[package]]
+name = "wit-parser"
+version = "0.263.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "874d6ce9db4261cb66980ab14f3da066b24292497b6f46f988c0d1b9b27913f3"
+dependencies = [
+ "anyhow",
+ "hashbrown 0.17.1",
+ "id-arena",
+ "indexmap",
+ "log",
+ "semver",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "unicode-ident",
+ "wasmparser 0.263.0",
 ]
 
 [[package]]

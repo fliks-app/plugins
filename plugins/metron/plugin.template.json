@@ -2,7 +2,7 @@
   "id": "fliks.metron",
   "pluginApi": 3,
   "name": "Metron",
-  "fliks": ">=6.0.0 <7.0.0",
+  "fliks": ">=7.0.0 <8.0.0",
   "author": "Fliks",
   "description": "Comic series and issue metadata from Metron (CC BY-SA 4.0). Needs your own Metron API token.",
   "license": "AGPL-3.0-or-later",

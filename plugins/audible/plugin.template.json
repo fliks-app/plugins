@@ -2,7 +2,7 @@
   "id": "fliks.audible",
   "pluginApi": 3,
   "name": "Audible",
-  "fliks": ">=6.0.0 <7.0.0",
+  "fliks": ">=7.0.0 <8.0.0",
   "author": "Fliks",
   "description": "Audiobook metadata from the unofficial Audible catalog: search and editions by ASIN.",
   "license": "AGPL-3.0-or-later",

@@ -12,7 +12,7 @@ allows 300 requests per minute and sends `x-ratelimit-*` headers; the host paces
 A 429 maps to `rate-limited` with its `Retry-After`, else the `retryAfterSeconds` of the body.
 Chapters never expire from the host cache. The data is Audible's and the instance publishes no terms.
 
-Requires Fliks 6.0.0 or later.
+Requires Fliks 7.0.0 or later.
 
 ## Build and test
 

@@ -2,7 +2,7 @@
   "id": "fliks.comicvine",
   "pluginApi": 3,
   "name": "Comic Vine",
-  "fliks": ">=6.0.0 <7.0.0",
+  "fliks": ">=7.0.0 <8.0.0",
   "author": "Fliks",
   "description": "Comic volume and issue metadata from Comic Vine, for non-commercial use only. Needs your own API key.",
   "license": "AGPL-3.0-or-later",

@@ -2,7 +2,7 @@
   "id": "fliks.bnf",
   "pluginApi": 3,
   "name": "BnF",
-  "fliks": ">=6.0.0 <7.0.0",
+  "fliks": ">=7.0.0 <8.0.0",
   "author": "Fliks",
   "description": "Book metadata from the BnF general catalogue: search and editions by ISBN or notice id.",
   "license": "AGPL-3.0-or-later",

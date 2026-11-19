@@ -2,7 +2,7 @@
   "id": "fliks.tvdb",
   "pluginApi": 3,
   "name": "TheTVDB",
-  "fliks": ">=6.0.0 <7.0.0",
+  "fliks": ">=7.0.0 <8.0.0",
   "author": "Fliks",
   "description": "Movie and series metadata, images, people and credits from TheTVDB.",
   "license": "AGPL-3.0-or-later",

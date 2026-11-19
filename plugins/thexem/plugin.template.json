@@ -2,7 +2,7 @@
   "id": "fliks.thexem",
   "pluginApi": 3,
   "name": "TheXEM scene numbering",
-  "fliks": ">=6.0.0 <7.0.0",
+  "fliks": ">=7.0.0 <8.0.0",
   "author": "Fliks",
   "description": "Maps the season and episode numbers of release names to the aired ones for series released under another numbering, from TheXEM.",
   "license": "AGPL-3.0-or-later",

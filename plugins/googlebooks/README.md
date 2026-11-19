@@ -9,7 +9,7 @@ them at one per second. Google documents no keyless quota and has answered every
 a 429 for a zero daily quota (observed 2026-11-01); that, or a quota error body, maps to
 `rate-limited` and the provider is skipped. Covers come from `books.google.com`.
 
-Requires Fliks 6.0.0 or later.
+Requires Fliks 7.0.0 or later.
 
 ## Build and test
 
