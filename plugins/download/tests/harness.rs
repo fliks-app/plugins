@@ -20,8 +20,6 @@ const HASH: &str = "0123456789abcdef0123456789abcdef01234567";
 fn setup() -> Setup {
     let mut s = Setup::from_crate(env!("CARGO_MANIFEST_DIR"));
     s.network_internal = true;
-    // The harness core reports 6.0.0; the manifest's real range is pinned by the vectors test.
-    s.template["fliks"] = json!(">=6.0.0 <7.0.0");
     s
 }
 
