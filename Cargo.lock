@@ -1412,7 +1412,7 @@ dependencies = [
 
 [[package]]
 name = "fk-plugin-thexem"
-version = "0.2.2"
+version = "1.0.0"
 dependencies = [
  "fliks-plugin-sdk",
  "fliks-plugin-sdk-provider",
