@@ -2,7 +2,7 @@
   "id": "fliks.musiclists",
   "pluginApi": 3,
   "name": "Music lists",
-  "fliks": ">=6.1.0 <7.0.0",
+  "fliks": ">=7.0.0 <8.0.0",
   "author": "Fliks",
   "description": "Follow the albums and tracks of ListenBrainz, Last.fm, Spotify, Deezer and MusicBrainz lists.",
   "license": "AGPL-3.0-or-later",

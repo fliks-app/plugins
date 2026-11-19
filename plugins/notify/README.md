@@ -24,7 +24,7 @@ If none of that matters to you, the built-in plugin is less to run.
 
 ## Setting it up
 
-Install it on Fliks 6, set **the target URL** in its settings page, and use the test delivery to
+Install it on Fliks 7, set **the target URL** in its settings page, and use the test delivery to
 confirm your endpoint answers. The URL often carries a token, so it is stored as a secret and never
 written to the logs.
 

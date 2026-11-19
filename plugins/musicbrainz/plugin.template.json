@@ -2,7 +2,7 @@
   "id": "fliks.musicbrainz",
   "pluginApi": 3,
   "name": "MusicBrainz",
-  "fliks": ">=6.1.0 <7.0.0",
+  "fliks": ">=7.0.0 <8.0.0",
   "author": "Fliks",
   "description": "Album, release and artist metadata from MusicBrainz, with cover art from the Cover Art Archive and optional ListenBrainz popularity.",
   "license": "AGPL-3.0-or-later",

@@ -2,7 +2,7 @@
   "id": "fliks.lrclib",
   "pluginApi": 3,
   "name": "LRCLIB",
-  "fliks": ">=6.1.0 <7.0.0",
+  "fliks": ">=7.0.0 <8.0.0",
   "author": "Fliks",
   "description": "Synced and plain lyrics from LRCLIB, matched on title, artist, album and duration.",
   "license": "AGPL-3.0-or-later",

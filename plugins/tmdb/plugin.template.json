@@ -2,7 +2,7 @@
   "id": "fliks.tmdb",
   "pluginApi": 3,
   "name": "TMDB",
-  "fliks": ">=6.0.0 <7.0.0",
+  "fliks": ">=7.0.0 <8.0.0",
   "author": "Fliks",
   "description": "Movie and series metadata, images, people and lists from The Movie Database.",
   "license": "AGPL-3.0-or-later",

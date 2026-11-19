@@ -2,7 +2,7 @@
   "id": "fliks.fanarttv",
   "pluginApi": 3,
   "name": "Fanart.tv",
-  "fliks": ">=6.1.0 <7.0.0",
+  "fliks": ">=7.0.0 <8.0.0",
   "author": "Fliks",
   "description": "Artist images and album covers from Fanart.tv, keyed by MusicBrainz ids.",
   "license": "AGPL-3.0-or-later",

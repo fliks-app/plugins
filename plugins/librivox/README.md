@@ -23,7 +23,7 @@ Requests are anonymous, identified by a `Fliks-LibriVox/<version>` user agent. T
 one request per second by the host, and section downloads are one second apart. LibriVox recordings are
 public domain; the MP3 files are served by the Internet Archive.
 
-Requires Fliks 6.0.0 or later.
+Requires Fliks 7.0.0 or later.
 
 ## Build and test
 

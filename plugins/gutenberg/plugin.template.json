@@ -2,7 +2,7 @@
   "id": "fliks.gutenberg",
   "pluginApi": 3,
   "name": "Project Gutenberg",
-  "fliks": ">=6.0.0 <7.0.0",
+  "fliks": ">=7.0.0 <8.0.0",
   "author": "Fliks",
   "description": "Search Project Gutenberg and add its free ebooks to the library.",
   "license": "AGPL-3.0-or-later",
