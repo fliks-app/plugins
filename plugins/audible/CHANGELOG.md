@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.0.0](https://github.com/fliks-app/plugins/compare/audible-v0.3.1...audible-v1.0.0) (2026-11-19)
+
+
+### ⚠ BREAKING CHANGES
+
+* every plugin requires fliks >=7.0.0 <8.0.0 and no longer loads on core 6.
+
+### Features
+
+* require fliks &gt;=7.0.0 &lt;8.0.0 and build against the 7.0.0 plugin WIT ([#159](https://github.com/fliks-app/plugins/issues/159)) ([33c68b0](https://github.com/fliks-app/plugins/commit/33c68b0c17d00aa347f5891b39c4116b3e09eeb6))
+
 ## [0.3.1](https://github.com/fliks-app/plugins/compare/audible-v0.3.0...audible-v0.3.1) (2026-11-16)
 
 
