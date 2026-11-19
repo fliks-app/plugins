@@ -1318,7 +1318,7 @@ dependencies = [
 
 [[package]]
 name = "fk-plugin-gutenberg"
-version = "0.2.1"
+version = "1.0.0"
 dependencies = [
  "direct-source",
  "fliks-plugin-sdk",
