@@ -3,7 +3,7 @@
   "plugins/notify": "2.0.1",
   "plugins/openlibrary": "0.3.2",
   "plugins/tmdb": "0.3.1",
-  "plugins/bnf": "0.3.1",
+  "plugins/bnf": "1.0.0",
   "plugins/googlebooks": "0.3.1",
   "plugins/tvdb": "0.3.2",
   "plugins/audible": "0.3.1",
