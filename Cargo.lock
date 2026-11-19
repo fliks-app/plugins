@@ -1231,7 +1231,7 @@ checksum = "1c66915cc5391097de7a2b0b972e8505aa33c0df401fd3a6811dbdb32881ba48"
 
 [[package]]
 name = "fk-plugin-audible"
-version = "0.3.1"
+version = "1.0.0"
 dependencies = [
  "fliks-plugin-sdk",
  "fliks-plugin-sdk-provider",
@@ -1277,7 +1277,7 @@ dependencies = [
 
 [[package]]
 name = "fk-plugin-download"
-version = "2.10.0"
+version = "3.0.0"
 dependencies = [
  "chrono",
  "fliks-plugin-manifest",
@@ -1307,7 +1307,7 @@ dependencies = [
 
 [[package]]
 name = "fk-plugin-googlebooks"
-version = "0.3.1"
+version = "1.0.0"
 dependencies = [
  "fliks-plugin-sdk",
  "fliks-plugin-sdk-provider",
@@ -1318,7 +1318,7 @@ dependencies = [
 
 [[package]]
 name = "fk-plugin-gutenberg"
-version = "0.2.1"
+version = "1.0.0"
 dependencies = [
  "direct-source",
  "fliks-plugin-sdk",
@@ -1357,7 +1357,7 @@ dependencies = [
 
 [[package]]
 name = "fk-plugin-metron"
-version = "0.3.1"
+version = "1.0.0"
 dependencies = [
  "fliks-plugin-sdk",
  "fliks-plugin-sdk-provider",
@@ -1368,7 +1368,7 @@ dependencies = [
 
 [[package]]
 name = "fk-plugin-music-lists"
-version = "0.2.2"
+version = "1.0.0"
 dependencies = [
  "fliks-plugin-sdk",
  "serde_json",
@@ -1412,7 +1412,7 @@ dependencies = [
 
 [[package]]
 name = "fk-plugin-thexem"
-version = "0.2.2"
+version = "1.0.0"
 dependencies = [
  "fliks-plugin-sdk",
  "fliks-plugin-sdk-provider",
@@ -1423,7 +1423,7 @@ dependencies = [
 
 [[package]]
 name = "fk-plugin-tmdb"
-version = "0.3.1"
+version = "1.0.0"
 dependencies = [
  "fliks-plugin-sdk",
  "fliks-plugin-sdk-provider",
