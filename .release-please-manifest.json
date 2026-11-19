@@ -11,7 +11,7 @@
   "plugins/gutenberg": "0.2.1",
   "plugins/librivox": "0.2.1",
   "plugins/metron": "0.3.1",
-  "plugins/comicvine": "0.3.1",
+  "plugins/comicvine": "1.0.0",
   "plugins/thexem": "0.2.2",
   "plugins/musicbrainz": "0.7.2",
   "plugins/fanarttv": "0.2.1",
