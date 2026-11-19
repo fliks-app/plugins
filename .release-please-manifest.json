@@ -1,6 +1,6 @@
 {
   "plugins/download": "2.10.0",
-  "plugins/notify": "2.0.1",
+  "plugins/notify": "3.0.0",
   "plugins/openlibrary": "0.3.2",
   "plugins/tmdb": "0.3.1",
   "plugins/bnf": "0.3.1",
