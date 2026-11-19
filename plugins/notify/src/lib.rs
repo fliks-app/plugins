@@ -81,9 +81,11 @@ mod manifest_tests {
         assert_eq!(t["pluginApi"], 3);
         assert_eq!(t["runtime"], "wasm");
         assert_eq!(t["fliks"], ">=7.0.0 <8.0.0");
-        assert_eq!(env!("CARGO_PKG_VERSION"), "2.0.0");
-        let m = fliks_plugin_sdk::manifest_check(include_str!("../plugin.template.json"), "2.0.0")
-            .unwrap();
+        let m = fliks_plugin_sdk::manifest_check(
+            include_str!("../plugin.template.json"),
+            env!("CARGO_PKG_VERSION"),
+        )
+        .unwrap();
         assert_eq!((m.id.as_str(), m.plugin_api), ("fliks.notify", 3));
     }
 

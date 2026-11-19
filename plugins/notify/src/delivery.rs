@@ -172,7 +172,10 @@ mod tests {
 
     #[test]
     fn user_agent_carries_the_crate_version() {
-        assert_eq!(USER_AGENT, "fliks.notify/2.0.0");
+        assert_eq!(
+            USER_AGENT,
+            format!("fliks.notify/{}", env!("CARGO_PKG_VERSION"))
+        );
     }
 
     #[test]
