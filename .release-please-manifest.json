@@ -4,7 +4,7 @@
   "plugins/openlibrary": "0.3.2",
   "plugins/tmdb": "1.0.0",
   "plugins/bnf": "1.0.0",
-  "plugins/googlebooks": "0.3.1",
+  "plugins/googlebooks": "1.0.0",
   "plugins/tvdb": "1.0.0",
   "plugins/audible": "1.0.0",
   "plugins/audnexus": "1.0.0",
