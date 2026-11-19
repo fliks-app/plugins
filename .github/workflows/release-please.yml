@@ -8,8 +8,8 @@ on:
   workflow_dispatch:
     inputs:
       paths:
-        description: JSON list of plugin folders to package again, e.g. ["plugins/tmdb"]
-        required: true
+        description: JSON list of plugin folders to package again, e.g. ["plugins/tmdb"]; empty runs release-please
+        required: false
 
 permissions:
   contents: write
@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   release-please:
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || !inputs.paths
     runs-on: ubuntu-latest
     outputs:
       paths: ${{ steps.rp.outputs.paths_released }}
