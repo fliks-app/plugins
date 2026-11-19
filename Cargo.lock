@@ -1295,7 +1295,7 @@ dependencies = [
 
 [[package]]
 name = "fk-plugin-fanarttv"
-version = "0.2.1"
+version = "1.0.0"
 dependencies = [
  "fliks-plugin-sdk",
  "fliks-plugin-sdk-provider",
