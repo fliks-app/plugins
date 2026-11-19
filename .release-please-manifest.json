@@ -14,7 +14,7 @@
   "plugins/comicvine": "1.0.0",
   "plugins/thexem": "1.0.0",
   "plugins/musicbrainz": "1.0.0",
-  "plugins/fanarttv": "0.2.1",
+  "plugins/fanarttv": "1.0.0",
   "plugins/music-lists": "1.0.0",
   "plugins/lrclib": "1.0.0"
 }
