@@ -10,7 +10,7 @@
   "plugins/audnexus": "1.0.0",
   "plugins/gutenberg": "0.2.1",
   "plugins/librivox": "1.0.0",
-  "plugins/metron": "0.3.1",
+  "plugins/metron": "1.0.0",
   "plugins/comicvine": "1.0.0",
   "plugins/thexem": "0.2.2",
   "plugins/musicbrainz": "1.0.0",
