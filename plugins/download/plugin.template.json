@@ -1,10 +1,10 @@
 {
   "id": "fliks.download",
   "pluginApi": 3,
-  "name": "Download",
+  "name": "Torrent manager",
   "fliks": ">=7.0.0 <8.0.0",
   "author": "Fliks",
-  "description": "Indexer search, download-client management and the acquisition grab pipeline for Fliks.",
+  "description": "Torrent search on Torznab indexers, torrent client management and the acquisition grab pipeline for Fliks.",
   "license": "AGPL-3.0-or-later",
   "logo": "logo.svg",
   "kind": "process",
@@ -706,7 +706,7 @@
       "download.config.download_clients.labels.delete_confirm": "Delete this download client?"
     },
     "fr": {
-      "download.description": "Recherche sur les indexeurs, gestion des clients de téléchargement et chaîne d'acquisition de Fliks.",
+      "download.description": "Recherche de torrents sur les indexeurs Torznab, gestion des clients torrent et chaîne d'acquisition de Fliks.",
       "download.config.general.subtitle": "Comportement de récupération et d'import.",
       "download.config.indexers.subtitle": "Trackers Torznab interrogés lors d'une recherche de release.",
       "download.config.download_clients.subtitle": "Clients auxquels une release récupérée est transmise.",
@@ -842,16 +842,16 @@
       "download.config.download_clients.labels.delete_confirm": "Supprimer ce client de téléchargement ?"
     },
     "de": {
-      "download.description": "Indexer-Suche, Verwaltung der Download-Clients und die Beschaffungskette von Fliks."
+      "download.description": "Torrent-Suche auf Torznab-Indexern, Verwaltung der Torrent-Clients und die Beschaffungskette von Fliks."
     },
     "es": {
-      "download.description": "Búsqueda en indexadores, gestión de clientes de descarga y cadena de adquisición de Fliks."
+      "download.description": "Búsqueda de torrents en indexadores Torznab, gestión de clientes torrent y cadena de adquisición de Fliks."
     },
     "it": {
-      "download.description": "Ricerca sugli indicizzatori, gestione dei client di download e catena di acquisizione di Fliks."
+      "download.description": "Ricerca di torrent sugli indicizzatori Torznab, gestione dei client torrent e catena di acquisizione di Fliks."
     },
     "pt": {
-      "download.description": "Pesquisa em indexadores, gestão de clientes de download e cadeia de aquisição do Fliks."
+      "download.description": "Pesquisa de torrents em indexadores Torznab, gestão de clientes torrent e cadeia de aquisição do Fliks."
     }
   }
 }
