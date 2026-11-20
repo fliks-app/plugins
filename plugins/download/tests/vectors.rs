@@ -380,7 +380,10 @@ fn template_matches_the_published_manifest() {
         }
     }
     let (old_i18n, new_i18n) = (old["i18n"].clone(), new["i18n"].clone());
+    // Renamed since to "Torrent manager": `name`, `description` and `download.description` differ.
     for k in [
+        "name",
+        "description",
         "pluginApi",
         "fliks",
         "runtime",
@@ -401,7 +404,8 @@ fn template_matches_the_published_manifest() {
                 || k.starts_with("download.config.queue.")
                 || k.starts_with("download.config.history.")
                 || k.starts_with("download.status.")
-                || k == "download.jobs.search_missing";
+                || k == "download.jobs.search_missing"
+                || k == "download.description";
             if removed || k.starts_with("download.media.") || k.starts_with("download.group.") {
                 continue;
             }
