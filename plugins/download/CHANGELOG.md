@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.1.0](https://github.com/fliks-app/plugins/compare/download-v3.0.0...download-v3.1.0) (2026-11-20)
+
+
+### Features
+
+* **download:** rename the plugin to Torrent manager ([#190](https://github.com/fliks-app/plugins/issues/190)) ([92bc818](https://github.com/fliks-app/plugins/commit/92bc818dc236a1b07ba06774fc18a95303fde5d4))
+
 ## [3.0.0](https://github.com/fliks-app/plugins/compare/download-v2.10.0...download-v3.0.0) (2026-11-19)
 
 
