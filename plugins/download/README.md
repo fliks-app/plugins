@@ -1,4 +1,4 @@
-# Download
+# Torrent manager
 
 Fliks on its own knows what you have and what you want. This plugin is what goes and gets it:
 it searches your trackers, decides which release is the right one, hands it to your download
@@ -36,10 +36,10 @@ them, its username and password. On Transmission, the category is a torrent labe
 
 ## Setting it up
 
-1. **Settings → Download → Indexers**, *New indexer*. Paste the tracker's Torznab URL and its
+1. **Settings → Torrent manager → Indexers**, *New indexer*. Paste the tracker's Torznab URL and its
    API key, then use *Test connection* before saving — it tells you straight away whether the
    URL and the key are right.
-2. **Settings → Download → Download clients**, *New download client*. Pick qBittorrent or Transmission,
+2. **Settings → Torrent manager → Download clients**, *New download client*. Pick qBittorrent or Transmission,
    fill in its address and credentials, and test the connection the same way.
 3. Give a film or a series a **quality profile** and a **language profile**, and mark it
    monitored. That is what tells the plugin what "the right release" means for that title.
@@ -64,7 +64,7 @@ blocking every search behind it. You can see and clear cooldowns from the indexe
 handles, and if a typed search is refused it falls back to a plain text search and remembers that
 for next time.
 
-**Every grab is kept.** *Settings → Download → Download history* lists them newest first, with the
+**Every grab is kept.** *Settings → Torrent manager → Download history* lists them newest first, with the
 tracker, whether it was automatic or yours, and the failure reason when there is one — the queue
 only shows what is still in flight, so a download that failed leaves it at once.
 

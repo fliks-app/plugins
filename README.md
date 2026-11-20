@@ -5,7 +5,7 @@ from the plugin catalogue in **Settings → Advanced → Plugins**.
 
 | Folder | Plugin | License |
 |---|---|---|
-| [`plugins/download`](plugins/download/README.md) | `fliks.download`: indexer search, download clients and the grab pipeline | AGPL-3.0-or-later |
+| [`plugins/download`](plugins/download/README.md) | `fliks.download` (Torrent manager): torrent search on Torznab indexers, torrent clients and the grab pipeline | AGPL-3.0-or-later |
 | [`plugins/notify`](plugins/notify/README.md) | `fliks.notify`: notification delivery | MIT |
 | [`plugins/openlibrary`](plugins/openlibrary/README.md) | `fliks.openlibrary`: book metadata from OpenLibrary | AGPL-3.0-or-later |
 | [`plugins/tmdb`](plugins/tmdb/README.md) | `fliks.tmdb`: movie and series metadata from TMDB | AGPL-3.0-or-later |
