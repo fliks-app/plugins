@@ -376,7 +376,15 @@ fn template_matches_the_published_manifest() {
         .retain(|j| j["name"] != "SearchMissing");
     for page in old["ui"]["configPages"].as_array_mut().unwrap() {
         if let Some(fields) = page.get_mut("fields").and_then(Value::as_array_mut) {
-            fields.retain(|f| f["key"] != "requestsAutoGrabOnApproval");
+            // The stall restart went with the dead `search:<media>` call: the core sweeps on `stalled-removed`.
+            fields.retain(|f| {
+                ![
+                    "requestsAutoGrabOnApproval",
+                    "stall_auto_restart",
+                    "stall_include_manual_grabs",
+                ]
+                .contains(&f["key"].as_str().unwrap())
+            });
         }
     }
     let (old_i18n, new_i18n) = (old["i18n"].clone(), new["i18n"].clone());
@@ -404,6 +412,8 @@ fn template_matches_the_published_manifest() {
                 || k.starts_with("download.config.queue.")
                 || k.starts_with("download.config.history.")
                 || k.starts_with("download.status.")
+                || k.starts_with("download.config.stall.auto_restart")
+                || k.starts_with("download.config.stall.include_manual_grabs")
                 || k == "download.jobs.search_missing"
                 || k == "download.description";
             if removed || k.starts_with("download.media.") || k.starts_with("download.group.") {
