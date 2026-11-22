@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/fliks-app/plugins/compare/music-lists-v1.0.0...music-lists-v1.0.1) (2026-11-22)
+
+
+### Bug Fixes
+
+* **plugins:** guest fixes from the plugin audit ([#205](https://github.com/fliks-app/plugins/issues/205)) ([851ea2c](https://github.com/fliks-app/plugins/commit/851ea2c15b46ec3c8ea1669b5fd5566900a23740))
+
 ## [1.0.0](https://github.com/fliks-app/plugins/compare/music-lists-v0.2.2...music-lists-v1.0.0) (2026-11-19)
 
 
