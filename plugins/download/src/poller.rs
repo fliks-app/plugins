@@ -3,7 +3,7 @@
 use crate::client::{self, Torrent, TorrentFile};
 use crate::config;
 use crate::db::{
-    DownloadClientRow, HistoryRow, blocklist, clients, history, indexer_stats, indexers,
+    DownloadClientRow, HistoryRow, blocklist, clients, core_refs, history, indexer_stats, indexers,
     release_refs, stalled,
 };
 use crate::error::{Error, R};
@@ -1110,8 +1110,9 @@ fn process_one(h: &HistoryRow, t: &Torrent, client: &DownloadClientRow) -> R<()>
 
 // --- CleanStalled ------------------------------------------------------------------------------
 
-/// Removes stalled downloads and publishes `stalled-removed` for each.
+/// Drops rows whose core ids are gone, then removes stalled downloads and publishes `stalled-removed` for each.
 pub fn clean_stalled() -> R<()> {
+    core_refs::prune()?;
     let Some(cfg) = config::stall().map_err(crate::error::Error::Other)? else {
         stall_skip(Some("off, the number of checks before cleanup is not set"));
         return Ok(());
