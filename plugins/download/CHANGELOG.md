@@ -1,5 +1,14 @@
 # Changelog
 
+## [3.1.4](https://github.com/fliks-app/plugins/compare/download-v3.1.3...download-v3.1.4) (2026-11-22)
+
+
+### Bug Fixes
+
+* **download:** require the core release that drops the foreign keys ([#203](https://github.com/fliks-app/plugins/issues/203)) ([96eadd4](https://github.com/fliks-app/plugins/commit/96eadd41f595bfa147944229292fd5757bae30fb))
+* **download:** review fixes for the core-ref prune and release refs ([#213](https://github.com/fliks-app/plugins/issues/213)) ([e449ec3](https://github.com/fliks-app/plugins/commit/e449ec33d2fb2e04a20b3b9b91abda354d12b1e9))
+* **plugins:** guest fixes from the plugin audit ([#205](https://github.com/fliks-app/plugins/issues/205)) ([851ea2c](https://github.com/fliks-app/plugins/commit/851ea2c15b46ec3c8ea1669b5fd5566900a23740))
+
 ## [3.1.3](https://github.com/fliks-app/plugins/compare/download-v3.1.2...download-v3.1.3) (2026-11-22)
 
 
