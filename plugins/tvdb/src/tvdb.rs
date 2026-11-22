@@ -2,7 +2,6 @@
 use crate::map::{
     arr, get, image, js_parse_int, nn, or, pluck, put, score, str_lower_or, text, year_of,
 };
-use fliks_plugin_sdk::rt::join_all;
 use fliks_plugin_sdk_provider::ProviderError;
 use provider_common::lang::normalize_language_code;
 use serde_json::{Map, Value, json};
@@ -14,7 +13,6 @@ const ART_POSTER: i64 = 2;
 const ART_BACKGROUND: i64 = 3;
 const ART_CLEARLOGO_SERIES: i64 = 23;
 const ART_CLEARLOGO_MOVIE: i64 = 25;
-const EPISODE_TRANSLATION_CONCURRENCY: usize = 8;
 /// 50 000 episodes: far above any series, stops an upstream that never returns a short page.
 const MAX_EPISODE_PAGES: u32 = 100;
 /// Valid 30 days, refreshed after 25.
@@ -165,14 +163,22 @@ impl<H: Http> Tvdb<H> {
     }
 
     /// Every episode, following the 500-per-page cursor (a full page asks for the next).
-    async fn all_episodes(&self, id: i64, season: Option<i64>) -> Result<Vec<Value>> {
+    /// With `code`, names and overviews come translated, in one call per page.
+    async fn all_episodes(
+        &self,
+        id: i64,
+        season: Option<i64>,
+        code: Option<&str>,
+    ) -> Result<Vec<Value>> {
+        let path = match code {
+            Some(c) => format!("/series/{id}/episodes/default/{c}"),
+            None => format!("/series/{id}/episodes/default"),
+        };
         let mut all = vec![];
         for page in 0..MAX_EPISODE_PAGES {
             let mut query = vec![("page", page.to_string())];
             query.extend(season.map(|n| ("season", n.to_string())));
-            let d = self
-                .data(&format!("/series/{id}/episodes/default"), &query)
-                .await?;
+            let d = self.data(&path, &query).await?;
             let eps = arr(&d, "episodes");
             all.extend(eps.iter().cloned());
             if eps.len() < 500 {
@@ -184,7 +190,7 @@ impl<H: Http> Tvdb<H> {
 
     pub async fn season_stubs(&self, id: i64) -> Result<Vec<Value>> {
         let mut counts: BTreeMap<i64, i64> = BTreeMap::new();
-        for ep in self.all_episodes(id, None).await? {
+        for ep in self.all_episodes(id, None, None).await? {
             *counts
                 .entry(get(&ep, "seasonNumber").as_i64().unwrap_or_default())
                 .or_default() += 1;
@@ -195,9 +201,13 @@ impl<H: Http> Tvdb<H> {
             .collect())
     }
 
-    /// With `only`, just that season: the episode list is asked for it and its translations alone are read.
+    /// With `only`, just that season.
     pub async fn seasons(&self, id: i64, only: Option<i64>, code: &str) -> Result<Vec<Value>> {
-        let mut episodes = self.all_episodes(id, only).await?;
+        let mut episodes = match self.all_episodes(id, only, Some(code)).await {
+            // The language has no translation: the default names stand.
+            Err(ProviderError::NotFound) => self.all_episodes(id, only, None).await?,
+            r => r?,
+        };
         if let Some(n) = only {
             episodes.retain(|e| get(e, "seasonNumber").as_i64() == Some(n));
         }
@@ -208,28 +218,6 @@ impl<H: Http> Tvdb<H> {
             )
             .await?;
         let bases = aired_seasons(&series);
-        let advertises = |ep: &Value| {
-            ["overviewTranslations", "nameTranslations"]
-                .iter()
-                .any(|k| arr(ep, k).iter().any(|c| c == code))
-        };
-        let wanted: Vec<i64> = episodes
-            .iter()
-            .filter(|e| advertises(e))
-            .filter_map(|e| get(e, "id").as_i64())
-            .collect();
-        let mut translations: BTreeMap<i64, Value> = BTreeMap::new();
-        for chunk in wanted.chunks(EPISODE_TRANSLATION_CONCURRENCY) {
-            let fetched = join_all(chunk.iter().map(|&eid| async move {
-                let d = self
-                    .data(&format!("/episodes/{eid}/translations/{code}"), &[])
-                    .await
-                    .ok()?;
-                Some((eid, d))
-            }))
-            .await;
-            translations.extend(fetched.into_iter().flatten());
-        }
         let mut by_season: BTreeMap<i64, Vec<&Value>> = BTreeMap::new();
         for ep in &episodes {
             by_season
@@ -250,8 +238,7 @@ impl<H: Http> Tvdb<H> {
                 let episodes: Vec<Value> = eps
                     .iter()
                     .map(|ep| {
-                        let tr = get(ep, "id").as_i64().and_then(|i| translations.get(&i));
-                        let pick = |k: &str| tr.and_then(|t| text(t, k)).or_else(|| text(ep, k));
+                        let pick = |k: &str| text(ep, k);
                         json!({
                             "episodeNumber": nn(ep, "number"),
                             "title": pick("name").map_or_else(|| nn(ep, "name"), Value::from),

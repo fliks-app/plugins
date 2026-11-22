@@ -20,7 +20,6 @@ type Reply = (u16, Option<&'static str>, String);
 struct Fake {
     handler: Box<dyn Fn(&str) -> Reply>,
     seen: RefCell<Vec<(String, Query)>>,
-    warns: RefCell<Vec<String>>,
 }
 
 impl Http for Fake {
@@ -29,10 +28,6 @@ impl Http for Fake {
         let (status, retry, body) = (self.handler)(path);
         reply(status, retry, body.as_bytes())
     }
-
-    fn warn(&self, message: &str) {
-        self.warns.borrow_mut().push(message.to_owned());
-    }
 }
 
 fn tmdb(handler: impl Fn(&str) -> Reply + 'static) -> Tmdb<Fake> {
@@ -40,7 +35,6 @@ fn tmdb(handler: impl Fn(&str) -> Reply + 'static) -> Tmdb<Fake> {
         http: Fake {
             handler: Box::new(handler),
             seen: RefCell::default(),
-            warns: RefCell::default(),
         },
     }
 }
@@ -74,32 +68,63 @@ const SHOW: &str = include_str!("../tests/fixtures/tv_2000.json");
 const SEASON_0: &str = include_str!("../tests/fixtures/tv_2000_season_0.json");
 const SEASON_1: &str = include_str!("../tests/fixtures/tv_2000_season_1.json");
 
-/// A two-season series whose second season answers `second`.
-fn seasons_with(second: u16) -> (Tmdb<Fake>, Result<Vec<Value>>) {
-    let t = tmdb(move |path| match path {
-        "/tv/1" => ok(
-            r#"{"seasons":[{"season_number":1,"episode_count":1},{"season_number":2,"episode_count":1}]}"#,
-        ),
-        "/tv/1/season/1" => ok(r#"{"season_number":1,"episodes":[]}"#),
-        _ => (second, Some("0"), "{}".into()),
+/// A series of `n` seasons: the first call answers the stubs, the next ones `chunk`.
+fn seasons_of(n: i64, chunk: impl Fn() -> Reply + 'static) -> (Tmdb<Fake>, Result<Vec<Value>>) {
+    let stubs = (1..=n)
+        .map(|i| format!(r#"{{"season_number":{i},"episode_count":1}}"#))
+        .collect::<Vec<_>>()
+        .join(",");
+    let calls = std::cell::Cell::new(0);
+    let t = tmdb(move |_| {
+        calls.set(calls.get() + 1);
+        if calls.get() == 1 {
+            ok(&format!(r#"{{"seasons":[{stubs}]}}"#))
+        } else {
+            chunk()
+        }
     });
     let r = run(t.seasons(1, None, &en()));
     (t, r)
 }
 
 #[test]
-fn a_missing_season_is_dropped() {
-    let (t, r) = seasons_with(404);
-    assert_eq!(r.unwrap().len(), 1);
-    assert_eq!(t.http.warns.borrow().len(), 1);
+fn a_failed_season_chunk_fails_the_list_instead_of_shortening_it() {
+    for status in [404, 429, 500, 503] {
+        let (_, r) = seasons_of(2, move || (status, Some("0"), "{}".into()));
+        assert!(r.is_err(), "status {status}");
+    }
 }
 
 #[test]
-fn a_throttled_season_fails_the_list_instead_of_shortening_it() {
-    let (_, r) = seasons_with(429);
-    assert!(matches!(r, Err(ProviderError::RateLimited(Some(0)))));
-    let (_, r) = seasons_with(503);
-    assert!(matches!(r, Err(ProviderError::Upstream(u)) if u.status == Some(503)));
+fn a_season_absent_from_the_answer_fails_the_list() {
+    let (_, r) = seasons_of(2, || {
+        ok(r#"{"season/1":{"season_number":1,"episodes":[]}}"#)
+    });
+    assert!(r.is_err());
+}
+
+#[test]
+fn seasons_are_appended_twenty_per_call() {
+    let (t, r) = seasons_of(25, || {
+        let all = (1..=25)
+            .map(|i| format!(r#""season/{i}":{{"season_number":{i},"episodes":[]}}"#))
+            .collect::<Vec<_>>()
+            .join(",");
+        ok(&format!("{{{all}}}"))
+    });
+    assert_eq!(r.unwrap().len(), 25);
+    let seen = t.http.seen.borrow();
+    assert_eq!(seen.len(), 3);
+    let append = |i: usize| {
+        let (_, q) = &seen[i];
+        q.iter()
+            .find(|(k, _)| k == "append_to_response")
+            .unwrap()
+            .1
+            .split(',')
+            .count()
+    };
+    assert_eq!((append(1), append(2)), (20, 5));
 }
 
 use fliks_plugin_sdk_provider::ProviderError;
@@ -307,15 +332,17 @@ fn child_stubs_keep_season_zero_and_default_the_count() {
 
 #[test]
 fn seasons_keep_the_stub_order_and_map_the_episodes() {
-    let t = tmdb(|path| match path {
-        "/tv/2000" => ok(SHOW),
-        "/tv/2000/season/0" => ok(SEASON_0),
-        "/tv/2000/season/1" => ok(SEASON_1),
+    let calls = std::cell::Cell::new(0);
+    let t = tmdb(move |path| match path {
+        "/tv/2000" if calls.replace(1) == 0 => ok(SHOW),
+        "/tv/2000" => ok(&format!(
+            r#"{{"season/0":{SEASON_0},"season/1":{SEASON_1},"season/2":{{"season_number":2,"episodes":[]}}}}"#
+        )),
         _ => (404, None, "{}".into()),
     });
     let seasons = run(t.seasons(2000, None, &en())).unwrap();
     let numbers: Vec<_> = seasons.iter().map(|s| s["seasonNumber"].clone()).collect();
-    assert_eq!(numbers, [json!(0), json!(1)]);
+    assert_eq!(numbers, [json!(0), json!(1), json!(2)]);
     assert_eq!(seasons[1]["episodeCount"], 2);
     assert_eq!(seasons[1]["overview"], "Season 1 overview");
     assert_eq!(seasons[0]["airDate"], Value::Null);

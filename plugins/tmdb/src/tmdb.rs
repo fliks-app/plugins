@@ -3,13 +3,13 @@ use crate::map::{
     arr, get, image, js_parse_float, js_parse_int, nn, num_or_null, or, pluck, put, score,
     str_lower_or, text, text_or_null, year_of,
 };
-use fliks_plugin_sdk::rt::join_all;
 use fliks_plugin_sdk_provider::{Lang, ProviderError};
 use serde_json::{Map, Value, json};
 
 pub const IMAGE_URL: &str = "https://image.tmdb.org/t/p";
 const MAX_ADDITIONAL_FANARTS: usize = 5;
-const SEASON_FETCH_CONCURRENCY: usize = 8;
+/// TMDB's cap on appended sub-requests.
+const SEASONS_PER_CALL: usize = 20;
 
 pub type Query = Vec<(String, String)>;
 pub type Result<T> = std::result::Result<T, ProviderError>;
@@ -17,19 +17,9 @@ pub type Result<T> = std::result::Result<T, ProviderError>;
 /// One TMDB GET: the path under `/3` and its query without the API key.
 pub trait Http {
     async fn get(&self, path: &str, query: Query) -> Result<Value>;
-    fn warn(&self, _message: &str) {}
 }
 
 pub use provider_common::http::{json_reply as reply, upstream};
-
-/// The provider asks for fewer calls: 429 or 503.
-fn throttled(e: &ProviderError) -> bool {
-    match e {
-        ProviderError::RateLimited(_) => true,
-        ProviderError::Upstream(u) => u.status == Some(503),
-        _ => false,
-    }
-}
 
 /// The metadata language in TMDB's dialect.
 pub struct Resolved {
@@ -194,31 +184,11 @@ impl<H: Http> Tmdb<H> {
                 q(&[("language", &lang.locale)]),
             )
             .await?;
-        let episodes: Vec<Value> = arr(&s, "episodes")
-            .iter()
-            .map(|e| {
-                json!({
-                    "episodeNumber": nn(e, "episode_number"),
-                    "title": nn(e, "name"),
-                    "overview": text_or_null(e, "overview"),
-                    "airDate": text_or_null(e, "air_date"),
-                    "runtime": nn(e, "runtime"),
-                    "stillUrl": image(IMAGE_URL, "w780", e, "still_path"),
-                })
-            })
-            .collect();
-        Ok(json!({
-            "seasonNumber": nn(&s, "season_number"),
-            "episodeCount": episodes.len(),
-            "overview": text_or_null(&s, "overview"),
-            "airDate": text_or_null(&s, "air_date"),
-            "posterUrl": image(IMAGE_URL, "w500", &s, "poster_path"),
-            "episodes": episodes,
-        }))
+        Ok(map_season(&s))
     }
 
-    /// Every season, 8 at a time, stub order kept. A failing season is dropped unless the provider
-    /// is throttling: a partial list would make identify delete the missing seasons.
+    /// Every season, stub order kept, up to 20 per call. Any failed call fails the list: a
+    /// partial list would make identify delete the missing seasons.
     /// With `only`, just that season (none when TMDB has no such season).
     pub async fn seasons(&self, id: i64, only: Option<i64>, lang: &Resolved) -> Result<Vec<Value>> {
         if let Some(n) = only {
@@ -228,24 +198,35 @@ impl<H: Http> Tmdb<H> {
                 Err(e) => Err(e),
             };
         }
-        let stubs = self.season_stubs(id, lang).await?;
-        let mut out = Vec::new();
-        for chunk in stubs.chunks(SEASON_FETCH_CONCURRENCY) {
-            let fetched = join_all(chunk.iter().map(|stub| async move {
-                let n = stub["seasonNumber"].as_i64().unwrap_or_default();
-                match self.season(id, n, lang).await {
-                    Ok(s) => Ok(Some(s)),
-                    Err(e) if throttled(&e) => Err(e),
-                    Err(_) => {
-                        self.http
-                            .warn(&format!("failed to fetch season {n} for TV {id}"));
-                        Ok(None)
-                    }
+        let numbers: Vec<i64> = self
+            .season_stubs(id, lang)
+            .await?
+            .iter()
+            .map(|s| s["seasonNumber"].as_i64().unwrap_or_default())
+            .collect();
+        let mut out = Vec::with_capacity(numbers.len());
+        for chunk in numbers.chunks(SEASONS_PER_CALL) {
+            let append = chunk
+                .iter()
+                .map(|n| format!("season/{n}"))
+                .collect::<Vec<_>>()
+                .join(",");
+            let d = self
+                .http
+                .get(
+                    &format!("/tv/{id}"),
+                    q(&[("language", &lang.locale), ("append_to_response", &append)]),
+                )
+                .await?;
+            for n in chunk {
+                let s = get(&d, &format!("season/{n}"));
+                if s.is_null() {
+                    return Err(upstream(
+                        None,
+                        format!("season {n} missing from the TV {id} answer"),
+                    ));
                 }
-            }))
-            .await;
-            for s in fetched {
-                out.extend(s?);
+                out.push(map_season(s));
             }
         }
         Ok(out)
@@ -731,4 +712,28 @@ pub fn tv_status(s: &str) -> &'static str {
         "Planned" => "tba",
         _ => "unknown",
     }
+}
+
+fn map_season(s: &Value) -> Value {
+    let episodes: Vec<Value> = arr(s, "episodes")
+        .iter()
+        .map(|e| {
+            json!({
+                "episodeNumber": nn(e, "episode_number"),
+                "title": nn(e, "name"),
+                "overview": text_or_null(e, "overview"),
+                "airDate": text_or_null(e, "air_date"),
+                "runtime": nn(e, "runtime"),
+                "stillUrl": image(IMAGE_URL, "w780", e, "still_path"),
+            })
+        })
+        .collect();
+    json!({
+        "seasonNumber": nn(s, "season_number"),
+        "episodeCount": episodes.len(),
+        "overview": text_or_null(s, "overview"),
+        "airDate": text_or_null(s, "air_date"),
+        "posterUrl": image(IMAGE_URL, "w500", s, "poster_path"),
+        "episodes": episodes,
+    })
 }

@@ -8,7 +8,7 @@ mod tmdb;
 use fliks_plugin_sdk::bindings::wasi::http::types::Method;
 use fliks_plugin_sdk::http::{Error as HttpError, Request};
 use fliks_plugin_sdk::rt::{Budget, block_on};
-use fliks_plugin_sdk::{ExternalId, Plugin, host, warn};
+use fliks_plugin_sdk::{ExternalId, Plugin, host};
 use fliks_plugin_sdk_provider::{
     Lang, MetadataProvider, ProviderError, SearchQuery, export_provider,
 };
@@ -59,10 +59,6 @@ impl Http for Live {
             resp.header("retry-after").as_deref(),
             &resp.body,
         )
-    }
-
-    fn warn(&self, message: &str) {
-        warn!("{message}");
     }
 }
 
