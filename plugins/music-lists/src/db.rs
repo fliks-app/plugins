@@ -168,7 +168,7 @@ pub struct Live;
 impl Store for Live {
     fn known(&self, list: i64, actions: &str) -> R<HashMap<String, Known>> {
         let r = db::query(
-            r#"SELECT "key", "itemId" FROM "list_entries"
+            r#"SELECT "key", "mediaId", "itemId" FROM "list_entries"
                WHERE "listId" = $1 AND "actions" = $2
                  AND ("mediaId" IS NOT NULL OR "checkedAt" > now() - interval '7 days')"#,
             &[list.into(), actions.into()],
@@ -177,7 +177,8 @@ impl Store for Live {
         Ok((0..r.len())
             .filter_map(|i| {
                 let item = r.int(i, "itemId").and_then(|v| u32::try_from(v).ok());
-                Some((r.text(i, "key")?, Known { item }))
+                let media = r.int(i, "mediaId").and_then(|v| u32::try_from(v).ok());
+                Some((r.text(i, "key")?, Known { media, item }))
             })
             .collect())
     }

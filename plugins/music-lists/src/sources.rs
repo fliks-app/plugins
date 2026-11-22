@@ -317,9 +317,11 @@ fn deezer(net: &impl Net, st: &Settings) -> R<Vec<Entry>> {
 }
 
 /// The ISRC of a Deezer track.
-pub fn deezer_isrc(net: &impl Net, track: &str) -> Option<String> {
-    let v = net.get(&format!("{DEEZER}/track/{track}"), &[]).ok()??;
-    s(&v, "/isrc").and_then(|i| plain_id(&i.to_ascii_uppercase()))
+pub fn deezer_isrc(net: &impl Net, track: &str) -> R<Option<String>> {
+    let Some(v) = net.get(&format!("{DEEZER}/track/{track}"), &[])? else {
+        return Ok(None);
+    };
+    Ok(s(&v, "/isrc").and_then(|i| plain_id(&i.to_ascii_uppercase())))
 }
 
 // --- MusicBrainz collections ---------------------------------------------------------------

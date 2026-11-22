@@ -54,9 +54,12 @@ impl Host for LiveHost {
         host::playlist_sync(user, name, items).map_err(herr)
     }
 
-    fn isrc_of(&self, track: &str) -> Option<String> {
+    fn isrc_of(&self, track: &str) -> Result<Option<String>, HErr> {
         Web.pause(150);
-        sources::deezer_isrc(&Web, track)
+        sources::deezer_isrc(&Web, track).map_err(|message| HErr {
+            code: "ERR_UNAVAILABLE".into(),
+            message,
+        })
     }
 
     fn out_of_time(&self) -> bool {

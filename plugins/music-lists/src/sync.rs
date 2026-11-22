@@ -15,11 +15,12 @@ pub trait Host {
     /// The track the library already owns, without creating or monitoring anything.
     fn find(&self, rec: &Rec) -> Result<Option<(u32, u32)>, HErr>;
     fn playlist(&self, user: u32, name: &str, items: &[u32]) -> Result<u32, HErr>;
-    fn isrc_of(&self, deezer_track: &str) -> Option<String>;
+    fn isrc_of(&self, deezer_track: &str) -> Result<Option<String>, HErr>;
     fn out_of_time(&self) -> bool;
 }
 
 pub struct Known {
+    pub media: Option<u32>,
     pub item: Option<u32>,
 }
 
@@ -92,7 +93,12 @@ pub fn run(
     let mut items = vec![];
     let mut streak = 0;
     for e in entries {
-        if let Some(k) = known.get(&e.key) {
+        // A track of a playlist list is done only once it is in the playlist.
+        let wants_item = playlist && (e.rec.is_some() || e.deezer_track.is_some());
+        let done = known
+            .get(&e.key)
+            .filter(|k| !(wants_item && k.media.is_some() && k.item.is_none()));
+        if let Some(k) = done {
             items.extend(k.item);
             sum.done += 1;
             continue;
@@ -109,13 +115,18 @@ pub fn run(
             }
         }
         if err.as_ref().is_none_or(|x| permanent(&x.code)) && (tracks || playlist) {
-            let rec = e.rec.clone().or_else(|| {
-                e.deezer_track
-                    .as_deref()
-                    .and_then(|t| host.isrc_of(t))
-                    .map(Rec::Isrc)
-            });
-            if let Some(r) = rec {
+            let rec = match (&e.rec, e.deezer_track.as_deref()) {
+                (Some(r), _) => Ok(Some(r.clone())),
+                (None, Some(t)) => host.isrc_of(t).map(|i| i.map(Rec::Isrc)),
+                (None, None) => Ok(None),
+            };
+            if let Err(x) = &rec {
+                err = Some(HErr {
+                    code: x.code.clone(),
+                    message: x.message.clone(),
+                });
+            }
+            if let Ok(Some(r)) = rec {
                 let found = if tracks {
                     host.want(&r, lib).map(Some)
                 } else {
@@ -206,8 +217,8 @@ mod tests {
             self.playlists.borrow_mut().push(items.to_vec());
             Ok(7)
         }
-        fn isrc_of(&self, t: &str) -> Option<String> {
-            Some(format!("ISRC{t}"))
+        fn isrc_of(&self, t: &str) -> Result<Option<String>, HErr> {
+            Ok(Some(format!("ISRC{t}")))
         }
         fn out_of_time(&self) -> bool {
             false
@@ -215,7 +226,9 @@ mod tests {
     }
 
     #[derive(Default)]
-    struct Mem(RefCell<HashMap<String, Option<u32>>>);
+    struct Mem(RefCell<HashMap<String, Saved>>);
+
+    type Saved = (Option<u32>, Option<u32>);
 
     impl Store for Mem {
         fn known(&self, _: i64, _: &str) -> Result<HashMap<String, Known>, String> {
@@ -223,7 +236,15 @@ mod tests {
                 .0
                 .borrow()
                 .iter()
-                .map(|(k, i)| (k.clone(), Known { item: *i }))
+                .map(|(k, (m, i))| {
+                    (
+                        k.clone(),
+                        Known {
+                            media: *m,
+                            item: *i,
+                        },
+                    )
+                })
                 .collect())
         }
         fn save(
@@ -231,10 +252,10 @@ mod tests {
             _: i64,
             k: &str,
             _: &str,
-            _: Option<u32>,
+            m: Option<u32>,
             i: Option<u32>,
         ) -> Result<(), String> {
-            self.0.borrow_mut().insert(k.into(), i);
+            self.0.borrow_mut().insert(k.into(), (m, i));
             Ok(())
         }
     }
@@ -298,6 +319,23 @@ mod tests {
         assert_eq!((sum.done, sum.unresolved, sum.errors), (2, 1, 0));
         assert!(host.wants.borrow().is_empty());
         assert_eq!(host.playlists.borrow()[0], [200]);
+    }
+
+    #[test]
+    fn a_track_missing_from_the_playlist_is_found_again_once_owned() {
+        let (store, s) = (Mem::default(), settings(&["albums", "playlist"]));
+        let list = [Entry::track(
+            Rec::Mbid("a".into()),
+            Some(("musicbrainz", "g")),
+        )];
+        let before = run(&ctx(&s), &list, &Fake::default(), &store).unwrap();
+        assert_eq!(before.playlist, None);
+        let owned = Fake {
+            owned: vec![Rec::Mbid("a".into())],
+            ..Fake::default()
+        };
+        run(&ctx(&s), &list, &owned, &store).unwrap();
+        assert_eq!(owned.playlists.borrow()[0], [200]);
     }
 
     #[test]

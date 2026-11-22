@@ -5,7 +5,7 @@ use crate::db::{IndexerRow, IndexerSourceRow, indexer_sources, indexers};
 use crate::error::{Error, R};
 use crate::net;
 use crate::util::{
-    Settings, encode_uri_component, js_string, merge_secrets, redact_secrets, setting,
+    Settings, base_origin, encode_uri_component, js_string, merge_secrets, redact_secrets, setting,
 };
 use serde_json::{Value, json};
 use std::time::Duration;
@@ -241,7 +241,12 @@ pub fn create(i: Input) -> R<IndexerSourceRow> {
     let saved = indexer_sources::insert(&indexer_sources::Fields {
         name: i.name.unwrap_or_default(),
         implementation,
-        settings: merge_secrets(None, &i.settings.unwrap_or_default(), &SECRET_KEYS),
+        settings: merge_secrets(
+            None,
+            &i.settings.unwrap_or_default(),
+            &SECRET_KEYS,
+            base_origin,
+        ),
         priority: i.priority.unwrap_or(1.0),
         enabled: i.enabled.unwrap_or(true),
     })?;
@@ -264,7 +269,7 @@ pub fn update(id: i64, i: Input) -> R<IndexerSourceRow> {
             implementation: i.implementation.unwrap_or(existing.implementation),
             settings: match &i.settings {
                 None => existing.settings.clone(),
-                Some(s) => merge_secrets(Some(&existing.settings), s, &SECRET_KEYS),
+                Some(s) => merge_secrets(Some(&existing.settings), s, &SECRET_KEYS, base_origin),
             },
             priority: i.priority.unwrap_or(existing.priority as f64),
             enabled: i.enabled.unwrap_or(existing.enabled),
@@ -288,17 +293,18 @@ pub fn test_connection(implementation: &str, settings: &Settings, id: Option<i64
         });
     }
     let base = setting(settings, "baseUrl").trim().to_owned();
-    let key = if settings.get("apiKey") == Some(&Value::Null) {
-        String::new()
-    } else {
-        let submitted = setting(settings, "apiKey").trim().to_owned();
-        match id.filter(|_| submitted.is_empty()) {
-            Some(id) => find(id).map_or(submitted, |s| {
-                setting(&s.settings, "apiKey").trim().to_owned()
-            }),
-            None => submitted,
-        }
-    };
+    let stored = id.and_then(|id| find(id).ok());
+    let key = setting(
+        &merge_secrets(
+            stored.as_ref().map(|s| &s.settings),
+            settings,
+            &SECRET_KEYS,
+            base_origin,
+        ),
+        "apiKey",
+    )
+    .trim()
+    .to_owned();
     if normalize_base(&base).is_empty() {
         return json!({ "ok": false, "messageKey": BASE_URL_MISSING });
     }

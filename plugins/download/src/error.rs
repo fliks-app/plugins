@@ -46,6 +46,10 @@ impl Error {
     pub fn is_unknown_outcome(&self) -> bool {
         matches!(self, Error::Host { code, .. } if code == "ERR_TIMEOUT")
     }
+    /// The core judged the release itself unimportable (truncated, not a regular file, ...).
+    pub fn is_refused(&self) -> bool {
+        matches!(self, Error::Host { code, .. } if code == "ERR_REFUSED")
+    }
     /// The host cannot place the files yet (a series' scene mapping is not known): ask again later.
     pub fn is_retry_later(&self) -> bool {
         matches!(self, Error::Host { code, .. } if code == "ERR_RETRY_LATER")

@@ -458,7 +458,7 @@ pub fn create(i: Input) -> R<DownloadClientRow> {
     let saved = clients::insert(&clients::Fields {
         name: i.name.unwrap_or_default(),
         implementation,
-        settings: merge_secrets(None, &i.settings.unwrap_or_default(), &SECRET_KEYS),
+        settings: merge_secrets(None, &i.settings.unwrap_or_default(), &SECRET_KEYS, target),
         enabled: i.enabled.unwrap_or(true),
         priority: i.priority.unwrap_or(1.0),
     })?;
@@ -476,7 +476,7 @@ pub fn update(id: i64, i: Input) -> R<DownloadClientRow> {
             name: i.name.unwrap_or(e.name),
             implementation: i.implementation.unwrap_or(e.implementation),
             settings: match &i.settings {
-                Some(s) => merge_secrets(Some(&e.settings), s, &SECRET_KEYS),
+                Some(s) => merge_secrets(Some(&e.settings), s, &SECRET_KEYS, target),
                 None => e.settings.clone(),
             },
             enabled: i.enabled.unwrap_or(e.enabled),
@@ -491,22 +491,22 @@ pub fn remove(id: i64) -> R<()> {
     clients::remove(id)
 }
 
-/// A blank password on a saved row tests the stored one; `null` tests without one.
+fn target(s: &Settings) -> String {
+    base_url(s).unwrap_or_default()
+}
+
+/// A blank password on a saved row tests the stored one when the target is unchanged; `null` tests without one.
 pub fn test(implementation: &str, settings: &Settings, id: Option<i64>) -> Value {
     if !IMPLEMENTATIONS.contains(&implementation) {
         return json!({ "ok": false, "messageKey": "download.download_clients.test.unsupported_implementation", "detail": implementation });
     }
-    let mut s = settings.clone();
-    if s.get("password") == Some(&Value::Null) {
-        s.shift_remove("password");
-    } else if !truthy(s.get("password"))
-        && let Some(stored) = id
-            .and_then(|id| find(id).ok())
-            .and_then(|c| c.settings.get("password").cloned())
-            .filter(|p| truthy(Some(p)))
-    {
-        s.insert("password".into(), stored);
-    }
+    let stored = id.and_then(|id| find(id).ok());
+    let s = merge_secrets(
+        stored.as_ref().map(|c| &c.settings),
+        settings,
+        &SECRET_KEYS,
+        target,
+    );
     test_connection(implementation, &s)
 }
 
