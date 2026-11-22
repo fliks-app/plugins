@@ -7,7 +7,7 @@
   "plugins/googlebooks": "1.0.0",
   "plugins/tvdb": "1.0.2",
   "plugins/audible": "1.0.0",
-  "plugins/audnexus": "1.0.0",
+  "plugins/audnexus": "1.0.1",
   "plugins/gutenberg": "1.0.0",
   "plugins/librivox": "1.0.0",
   "plugins/metron": "1.0.0",
