@@ -826,7 +826,7 @@ fn wire_lists_every_release_language() {
         },
     ];
     assert_eq!(
-        grab::to_wire(&r)["languages"],
+        grab::to_wire(&r, "rel-x")["languages"],
         json!([{"id": 5, "name": "Italian"}, {"id": 2, "name": "French"}])
     );
 }

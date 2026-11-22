@@ -8,7 +8,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value as Json};
 
-pub const MIGRATIONS: [(&str, &str); 15] = [
+pub const MIGRATIONS: [(&str, &str); 16] = [
     (
         "0001_initial_schema",
         include_str!("../migrations/0001_initial_schema.sql"),
@@ -68,6 +68,10 @@ pub const MIGRATIONS: [(&str, &str); 15] = [
     (
         "0015_download_history_retry_later",
         include_str!("../migrations/0015_download_history_retry_later.sql"),
+    ),
+    (
+        "0016_release_refs",
+        include_str!("../migrations/0016_release_refs.sql"),
     ),
 ];
 
@@ -432,6 +436,14 @@ pub mod indexers {
 pub mod indexer_stats {
     use super::*;
 
+    /// Rows older than the 30 days `daily` reports on.
+    pub fn prune() -> R<u64> {
+        exec(
+            r#"DELETE FROM "indexer_stats" WHERE "queryDate" < now() - interval '30 days'"#,
+            &[],
+        )
+    }
+
     pub fn insert(
         indexer_id: i64,
         query_type: &str,
@@ -627,6 +639,67 @@ pub mod clients {
             &[int(id)],
         )
         .map(drop)
+    }
+}
+
+/// What a release's wire reference stands for: the wire never carries the indexer's URL.
+pub mod release_refs {
+    use super::*;
+
+    /// How long a listed release stays grabbable.
+    pub const TTL_HOURS: u32 = 48;
+
+    pub struct Entry {
+        pub reference: String,
+        pub download_url: String,
+        pub title: String,
+        pub indexer_id: i64,
+    }
+
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    pub struct Found {
+        pub download_url: String,
+        pub title: String,
+        pub indexer_id: i64,
+    }
+
+    /// Re-listing a release renews its reference.
+    pub fn save(entries: &[Entry]) -> R<()> {
+        if entries.is_empty() {
+            return Ok(());
+        }
+        exec(
+            r#"INSERT INTO "release_refs" ("ref", "downloadUrl", "title", "indexerId")
+       SELECT * FROM unnest($1::text[], $2::text[], $3::text[], $4::int[])
+       ON CONFLICT ("ref") DO UPDATE SET "createdAt" = now()"#,
+            &[
+                Param::TextList(entries.iter().map(|e| e.reference.clone()).collect()),
+                Param::TextList(entries.iter().map(|e| e.download_url.clone()).collect()),
+                Param::TextList(entries.iter().map(|e| e.title.clone()).collect()),
+                Param::IntList(entries.iter().map(|e| e.indexer_id).collect()),
+            ],
+        )
+        .map(drop)
+    }
+
+    pub fn find(reference: &str) -> R<Option<Found>> {
+        first(
+            &format!(
+                r#"SELECT "downloadUrl", "title", "indexerId" FROM "release_refs"
+        WHERE "ref" = $1 AND "createdAt" > now() - interval '{TTL_HOURS} hours'"#
+            ),
+            &[text(reference)],
+        )
+    }
+
+    pub fn prune() -> R<u64> {
+        exec(
+            &format!(
+                r#"DELETE FROM "release_refs" WHERE "createdAt" < now() - interval '{TTL_HOURS} hours'"#
+            ),
+            &[],
+        )
     }
 }
 
@@ -917,7 +990,7 @@ pub mod history {
     pub fn latest_by_hash(hash: &str) -> R<Option<HistoryRow>> {
         first(
             &format!(
-                r#"SELECT {COLUMNS} FROM "download_history" WHERE "torrentHash" = $1 ORDER BY "createdAt" DESC LIMIT 1"#
+                r#"SELECT {COLUMNS} FROM "download_history" WHERE LOWER("torrentHash") = LOWER($1) ORDER BY "createdAt" DESC LIMIT 1"#
             ),
             &[text(hash)],
         )
@@ -1015,10 +1088,11 @@ pub mod history {
         .map(|n| n > 0)
     }
 
-    pub fn complete_import(id: i64) -> R<()> {
+    /// Settles a running import: a row the user removed (or the lease sweep re-armed) meanwhile keeps its status.
+    pub fn finish_import(id: i64, status: &str, message: Option<&str>) -> R<()> {
         exec(
-            r#"UPDATE "download_history" SET "status" = 'completed', "updatedAt" = now() WHERE "id" = $1 AND "status" = 'importing'"#,
-            &[int(id)],
+            r#"UPDATE "download_history" SET "status" = $2, "statusMessage" = $3, "updatedAt" = now() WHERE "id" = $1 AND "status" = 'importing'"#,
+            &[int(id), text(status), opt_text(message)],
         )
         .map(drop)
     }
