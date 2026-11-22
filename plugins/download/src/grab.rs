@@ -251,7 +251,14 @@ pub fn coverage_columns(c: Option<&ReleaseCoverage>) -> Coverage {
 
 /// The opaque reference a release goes by on the wire: its indexer URL can carry a key or a passkey.
 fn reference_of(raw: &Release) -> String {
-    format!("rel-{:x}", Sha1::digest(raw.download_url.as_bytes()))
+    let digest = Sha1::digest(raw.download_url.as_bytes());
+    format!(
+        "rel-{}",
+        digest
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect::<String>()
+    )
 }
 
 /// Stores each release's reference, then renders them all; `downloadUrl` holds the reference.
