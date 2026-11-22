@@ -435,8 +435,9 @@ Requirements on the host `migrate`: it runs each `up` as a multi-statement scrip
 statements, `0006` has comments and an `UPDATE`) inside the per-migration transaction (decided, D6;
 the host docs are corrected elsewhere to say 8 migrations, then 11).
 
-The `public` references (`media`, `episodes`, `seasons`, `users`) and the `REFERENCES`-only grant are
-provisioned by the host from `coreRefs`; `db-cross-schema-fk` and `0001`'s `ON DELETE` actions stay as
+The `public` references (`media`, `items`, `item_groups`, `users`) are readable ids under a
+`SELECT (id)`-only grant the host provisions from `coreRefs`, never foreign keys: `core_refs::prune`
+clears the ids of deleted core rows. `0001`'s `ON DELETE` actions on the plugin's own tables stay as
 they are. Export/import (C103): `fliks.download` is the real FK-order case (`indexers` before
 `indexer_stats`, `download_clients` and `indexers` before `download_history`); the new tables add
 `indexer_throttle` (child of `indexers`) and two parentless ones.

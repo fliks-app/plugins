@@ -442,6 +442,13 @@ fn publish(ev: AcquisitionEvent, what: &str, title: &str) {
     }
 }
 
+/// Prunes rows of deleted core ids; true when `h` went with them, which frees its hash for a re-grab.
+fn media_gone(h: &HistoryRow) -> bool {
+    core_refs::prune()
+        .and_then(|()| history::find(h.id))
+        .is_ok_and(|r| r.is_none())
+}
+
 fn publish_failed(h: &HistoryRow, reason: &str) {
     if let Some(m) = h.media_id {
         let ev = AcquisitionEvent::Failed(Failed {
@@ -543,6 +550,12 @@ pub fn poll() -> R<()> {
                     warn!("Import: \"{}\": {e}; will retry", row.source_title);
                     history::finish_import(row.id, "grabbed", Some(&e.to_string()))?;
                 }
+            }
+            Err(e) if e.is_not_found() && media_gone(&row) => {
+                info!(
+                    "Import: \"{}\" — its media was deleted; dropped",
+                    row.source_title
+                );
             }
             Err(e) if e.is_refused() => {
                 error!("Import: REFUSED \"{}\": {e}", row.source_title);
@@ -1118,7 +1131,9 @@ fn process_one(h: &HistoryRow, t: &Torrent, client: &DownloadClientRow) -> R<()>
 
 /// Drops rows whose core ids are gone, then removes stalled downloads and publishes `stalled-removed` for each.
 pub fn clean_stalled() -> R<()> {
-    core_refs::prune()?;
+    if let Err(e) = core_refs::prune() {
+        warn!("CleanStalled: pruning rows of deleted core ids failed: {e}");
+    }
     let Some(cfg) = config::stall().map_err(crate::error::Error::Other)? else {
         stall_skip(Some("off, the number of checks before cleanup is not set"));
         return Ok(());

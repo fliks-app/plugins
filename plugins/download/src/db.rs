@@ -1162,7 +1162,6 @@ pub mod history {
     }
 }
 
-/// Keyed JSON state the cron jobs carry between runs.
 /// Ids of core rows (`public.*`, readable but never referenced by a foreign key) that no longer exist.
 pub mod core_refs {
     use super::*;
@@ -1186,6 +1185,7 @@ pub mod core_refs {
     }
 }
 
+/// Keyed JSON state the cron jobs carry between runs.
 pub mod state {
     use super::*;
 
