@@ -28,7 +28,7 @@ jobs:
       # More than 3 plugins share one runner and one build instead of a matrix of cold ones.
       bulk: ${{ steps.affected.outputs.bulk }}
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       - id: affected
@@ -43,7 +43,7 @@ jobs:
     if: needs.changes.outputs.release == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: cargo metadata --locked --format-version 1 > /dev/null
 
   # The shared library crates and xtask are native-only: no component to package.
@@ -52,7 +52,7 @@ jobs:
     if: needs.changes.outputs.crates == 'true' && needs.changes.outputs.bulk != 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
         with:
           components: rustfmt, clippy
@@ -88,7 +88,7 @@ jobs:
       # Under CI the harness fails instead of skipping when this is missing.
       FLIKS_HARNESS_PG_URL: postgresql://fliks:fliks@127.0.0.1:5432/postgres
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
         with:
           targets: wasm32-wasip2
@@ -124,7 +124,7 @@ jobs:
       PLUGINS: ${{ join(fromJSON(needs.changes.outputs.plugins), ' ') }}
       FLIKS_HARNESS_PG_URL: postgresql://fliks:fliks@127.0.0.1:5432/postgres
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
         with:
           targets: wasm32-wasip2
@@ -151,7 +151,7 @@ jobs:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
         with:
           targets: wasm32-wasip2
