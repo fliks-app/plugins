@@ -2,7 +2,7 @@
   "id": "fliks.download",
   "pluginApi": 3,
   "name": "Torrent manager",
-  "fliks": ">=7.1.2 <8.0.0",
+  "fliks": ">=7.1.1 <8.0.0",
   "author": "Fliks",
   "description": "Torrent search on Torznab indexers, torrent client management and the acquisition grab pipeline for Fliks.",
   "license": "AGPL-3.0-or-later",
