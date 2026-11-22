@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.1.1](https://github.com/fliks-app/plugins/compare/download-v3.1.0...download-v3.1.1) (2026-11-22)
+
+
+### Bug Fixes
+
+* **download:** opaque release reference and grab/import hardening ([#196](https://github.com/fliks-app/plugins/issues/196)) ([b7ad034](https://github.com/fliks-app/plugins/commit/b7ad034de2b22ada624bc3d80e41e04c2c28756a))
+
 ## [3.1.0](https://github.com/fliks-app/plugins/compare/download-v3.0.0...download-v3.1.0) (2026-11-20)
 
 
