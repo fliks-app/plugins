@@ -544,6 +544,12 @@ pub fn poll() -> R<()> {
                     history::finish_import(row.id, "grabbed", Some(&e.to_string()))?;
                 }
             }
+            Err(e) if e.is_refused() => {
+                error!("Import: REFUSED \"{}\": {e}", row.source_title);
+                auto_blocklist(&row, &format!("Auto-blocklist: import refused: {e}"));
+                history::finish_import(row.id, "failed", Some(&e.to_string()))?;
+                publish_failed(&row, &e.to_string());
+            }
             Err(e) => {
                 // Core's own state (a full disk, a missing root), never a verdict on the release.
                 error!("Import: FAILED for \"{}\": {e}", row.source_title);
@@ -1406,6 +1412,8 @@ mod tests {
         };
         assert!(host("ERR_TIMEOUT").is_unknown_outcome());
         assert!(!host("ERR").is_unknown_outcome());
+        assert!(host("ERR_REFUSED").is_refused());
+        assert!(!host("ERR").is_refused());
         assert!(!host("ERR_DENIED").is_unknown_outcome());
         assert!(!Error::Other("ERR_TIMEOUT".into()).is_unknown_outcome());
     }

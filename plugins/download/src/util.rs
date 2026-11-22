@@ -291,8 +291,22 @@ pub fn redact_secrets(settings: Option<&Settings>, keys: &[&str]) -> Settings {
     out
 }
 
-/// Keeps a stored credential when the incoming one is blank; an explicit `null` erases it.
-pub fn merge_secrets(existing: Option<&Settings>, incoming: &Settings, keys: &[&str]) -> Settings {
+/// The origin of a row's `baseUrl`, or the trimmed text when it is not a URL.
+pub fn base_origin(s: &Settings) -> String {
+    let raw = setting(s, "baseUrl");
+    let raw = raw.trim();
+    url::Url::parse(raw).map_or_else(|_| raw.to_owned(), |u| u.origin().ascii_serialization())
+}
+
+/// Keeps a stored credential when the incoming one is blank and `origin` names the same target;
+/// an explicit `null` erases it. A credential is never sent to a target it was not stored for.
+pub fn merge_secrets(
+    existing: Option<&Settings>,
+    incoming: &Settings,
+    keys: &[&str],
+    origin: impl Fn(&Settings) -> String,
+) -> Settings {
+    let existing = existing.filter(|e| origin(e) == origin(incoming));
     let mut out = incoming.clone();
     out.shift_remove(SECRETS_SET_KEY);
     for key in keys {
@@ -388,6 +402,23 @@ pub fn base64(b: &[u8]) -> String {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn a_stored_secret_follows_its_origin_only() {
+        let stored = json!({ "baseUrl": "http://jackett:9117/a", "apiKey": "k" });
+        let stored = stored.as_object().unwrap();
+        let merge = |url: &str| {
+            let inc = json!({ "baseUrl": url, "apiKey": "" });
+            merge_secrets(
+                Some(stored),
+                inc.as_object().unwrap(),
+                &["apiKey"],
+                base_origin,
+            )
+        };
+        assert_eq!(merge("http://jackett:9117/b")["apiKey"], "k");
+        assert!(merge("http://evil:9117/a").get("apiKey").is_none());
+    }
 
     #[test]
     fn base64_pads() {

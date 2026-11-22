@@ -40,8 +40,7 @@
     },
     "requestTimeoutMs": 15000,
     "snapshotTtlSecs": {
-      "work": 2592000,
-      "person": 2592000
+      "work": 2592000
     },
     "imageHosts": [
       "assets.fanart.tv"

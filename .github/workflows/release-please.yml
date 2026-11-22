@@ -40,7 +40,7 @@ jobs:
       matrix:
         path: ${{ fromJSON(inputs.paths || needs.release-please.outputs.paths) }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 0
       # Several release PRs merged in a row are released by one run: build each from its own tag.
@@ -48,10 +48,10 @@ jobs:
         env:
           RELEASE_PATH: ${{ matrix.path }}
         run: git checkout "$(git tag -l "${RELEASE_PATH##*/}-v*" --sort=-v:refname | head -1)"
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
         with:
           targets: wasm32-wasip2
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           shared-key: plugins
           save-if: false

@@ -4,7 +4,7 @@ use crate::db::{IndexerRow, indexers};
 use crate::error::{Error, R};
 use crate::throttle;
 use crate::torznab::{album_categories, pick_category};
-use crate::util::{Settings, js_number, merge_secrets, redact_secrets, setting};
+use crate::util::{Settings, base_origin, js_number, merge_secrets, redact_secrets, setting};
 use fliks_plugin_sdk::bindings::fliks::plugin::types::{Family, Source};
 use fliks_plugin_sdk::host;
 use serde_json::{Map, Value, json};
@@ -79,7 +79,12 @@ pub fn create(i: Input) -> R<IndexerRow> {
     let saved = indexers::insert(&indexers::Fields {
         name: i.name.unwrap_or_default(),
         implementation,
-        settings: merge_secrets(None, &sanitize(i.settings.as_ref()), &SECRET_KEYS),
+        settings: merge_secrets(
+            None,
+            &sanitize(i.settings.as_ref()),
+            &SECRET_KEYS,
+            base_origin,
+        ),
         enable_rss: i.enable_rss.unwrap_or(true),
         enable_search: i.enable_search.unwrap_or(true),
         enable_interactive_search: i.enable_interactive_search.unwrap_or(true),
@@ -102,7 +107,12 @@ pub fn update(id: i64, i: Input) -> R<IndexerRow> {
         check_implementation(imp)?;
     }
     let settings = match &i.settings {
-        Some(s) => merge_secrets(Some(&e.settings), &sanitize(Some(s)), &SECRET_KEYS),
+        Some(s) => merge_secrets(
+            Some(&e.settings),
+            &sanitize(Some(s)),
+            &SECRET_KEYS,
+            base_origin,
+        ),
         None => e.settings.clone(),
     };
     let saved = indexers::update(
@@ -238,17 +248,18 @@ pub fn test_connection(implementation: &str, settings: &Settings, id: Option<i64
         return json!({ "ok": false, "messageKey": "download.indexers.test.unknown_implementation", "detail": implementation });
     }
     let base = setting(settings, "baseUrl").trim().to_owned();
-    let key = if settings.get("apiKey") == Some(&Value::Null) {
-        String::new()
-    } else {
-        let submitted = setting(settings, "apiKey").trim().to_owned();
-        match id.filter(|_| submitted.is_empty()) {
-            Some(id) => find(id).map_or(submitted, |ix| {
-                setting(&ix.settings, "apiKey").trim().to_owned()
-            }),
-            None => submitted,
-        }
-    };
+    let stored = id.and_then(|id| find(id).ok());
+    let key = setting(
+        &merge_secrets(
+            stored.as_ref().map(|ix| &ix.settings),
+            settings,
+            &SECRET_KEYS,
+            base_origin,
+        ),
+        "apiKey",
+    )
+    .trim()
+    .to_owned();
     crate::torznab::test_connection(&base, &key)
 }
 

@@ -229,7 +229,12 @@ fn secret_settings() {
         let existing = c["input"]["existing"].as_object();
         let incoming = c["input"]["incoming"].as_object().unwrap();
         assert_eq!(
-            Value::Object(util::merge_secrets(existing, incoming, &["apiKey"])),
+            Value::Object(util::merge_secrets(
+                existing,
+                incoming,
+                &["apiKey"],
+                util::base_origin
+            )),
             c["merged"],
             "{c}"
         );
