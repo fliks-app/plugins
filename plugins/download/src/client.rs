@@ -237,6 +237,12 @@ pub(crate) fn fetch(start: &str) -> R<Fetched> {
                 res.status
             )));
         }
+        // An indexer's "limit reached" page answers 200 too: only a torrent file goes on.
+        if info_hash(&res.body).is_none() {
+            return Err(Error::Unobtainable(
+                "the indexer's answer for this release's download is not a torrent file".into(),
+            ));
+        }
         return Ok(Fetched::File(res.body));
     }
     Err(Error::Unobtainable(
@@ -382,6 +388,9 @@ pub const STALL_ELIGIBLE: [&str; 7] = [
     "missingFiles",
 ];
 
+/// States where a torrent at 100 % is not yet at rest in its final path.
+pub const UNSETTLED: [&str; 5] = ["moving", "missingFiles", "error", "metaDL", "forcedMetaDL"];
+
 /// Trailing run of no-progress steps, samples newest first; a lone sample is one strike.
 pub fn stalled_strikes(samples: &[(i64, i64)], min_bytes_per_second: f64) -> i64 {
     if samples.is_empty() {
@@ -503,6 +512,12 @@ pub fn test(implementation: &str, settings: &Settings, id: Option<i64>) -> Value
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn only_a_torrent_file_has_an_info_hash() {
+        assert!(super::info_hash(b"d4:infod4:name1:xee").is_some());
+        assert_eq!(super::info_hash(b"<html>Limit reached</html>"), None);
+    }
+
     #[test]
     fn deep_bencode_is_refused() {
         let mut b = b"d4:info".to_vec();

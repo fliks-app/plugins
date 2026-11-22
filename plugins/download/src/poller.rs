@@ -2,7 +2,10 @@
 
 use crate::client::{self, Torrent, TorrentFile};
 use crate::config;
-use crate::db::{DownloadClientRow, HistoryRow, blocklist, clients, history, indexers, stalled};
+use crate::db::{
+    DownloadClientRow, HistoryRow, blocklist, clients, history, indexer_stats, indexers,
+    release_refs, stalled,
+};
 use crate::error::{Error, R};
 use crate::grab::{
     comic_item, coverage_columns, family_of, family_str, group_item_ids, identify, title_formats,
@@ -15,7 +18,7 @@ use fliks_plugin_sdk::bindings::fliks::plugin::types::{
 };
 use fliks_plugin_sdk::host;
 use regex::Regex;
-use serde_json::{Value, json};
+use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::sync::{LazyLock, Mutex};
 use std::time::{Duration, Instant};
@@ -456,6 +459,12 @@ fn publish_queue_changed(context: &str) {
     }
 }
 
+/// Done downloading and settled in its final path: ready to import.
+fn at_rest(t: &Torrent) -> bool {
+    (t.progress >= 1.0 && !client::UNSETTLED.contains(&t.state.as_str()))
+        || ["seeding", "stalledUP", "stoppedUP"].contains(&t.state.as_str())
+}
+
 pub fn poll() -> R<()> {
     let swept = history::sweep_import_leases()?;
     if swept > 0 {
@@ -478,13 +487,7 @@ pub fn poll() -> R<()> {
     }
     publish_queue(&all)?;
 
-    let completed: Vec<&Held> = all
-        .iter()
-        .filter(|h| {
-            h.t.progress >= 1.0
-                || ["seeding", "stalledUP", "stoppedUP"].contains(&h.t.state.as_str())
-        })
-        .collect();
+    let completed: Vec<&Held> = all.iter().filter(|h| at_rest(&h.t)).collect();
     if completed.is_empty() {
         return Ok(());
     }
@@ -525,7 +528,7 @@ pub fn poll() -> R<()> {
                     "Import: \"{}\" — core did not confirm ({e}); will retry",
                     row.source_title
                 );
-                history::set_status(&[row.id], "grabbed", Some(&e.to_string()))?;
+                history::finish_import(row.id, "grabbed", Some(&e.to_string()))?;
             }
             Err(e) if e.is_retry_later() => {
                 if history::retry_later_expired(row.id)? {
@@ -534,17 +537,17 @@ pub fn poll() -> R<()> {
                         history::RETRY_LATER_CAP_HOURS
                     );
                     error!("Import: FAILED for \"{}\": {msg}", row.source_title);
-                    history::set_status(&[row.id], "import_failed", Some(&msg))?;
+                    history::finish_import(row.id, "import_failed", Some(&msg))?;
                     publish_failed(&row, &msg);
                 } else {
                     warn!("Import: \"{}\": {e}; will retry", row.source_title);
-                    history::set_status(&[row.id], "grabbed", Some(&e.to_string()))?;
+                    history::finish_import(row.id, "grabbed", Some(&e.to_string()))?;
                 }
             }
             Err(e) => {
                 // Core's own state (a full disk, a missing root), never a verdict on the release.
                 error!("Import: FAILED for \"{}\": {e}", row.source_title);
-                history::set_status(&[row.id], "import_failed", Some(&e.to_string()))?;
+                history::finish_import(row.id, "import_failed", Some(&e.to_string()))?;
                 publish_failed(&row, &e.to_string());
             }
         }
@@ -962,11 +965,11 @@ fn process_one(h: &HistoryRow, t: &Torrent, client: &DownloadClientRow) -> R<()>
     let Some(files) = client::files(client, &t.hash) else {
         let message = format!("could not list files for \"{}\"", t.name);
         warn!("Import[{}]: {message}; will retry", h.source_title);
-        return history::set_status(&[h.id], "grabbed", Some(&message));
+        return history::finish_import(h.id, "grabbed", Some(&message));
     };
     let Some(media) = h.media_id else {
-        return history::set_status(
-            &[h.id],
+        return history::finish_import(
+            h.id,
             "import_failed",
             Some("Import failed: no media linked to this download"),
         );
@@ -981,7 +984,7 @@ fn process_one(h: &HistoryRow, t: &Torrent, client: &DownloadClientRow) -> R<()>
                 t.name
             );
             warn!("Import[{}]: {msg}", h.source_title);
-            history::set_status(&[h.id], "import_failed", Some(&msg))?;
+            history::finish_import(h.id, "import_failed", Some(&msg))?;
             publish_failed(h, &msg);
             return Ok(());
         }
@@ -990,7 +993,7 @@ fn process_one(h: &HistoryRow, t: &Torrent, client: &DownloadClientRow) -> R<()>
             t.name
         );
         warn!("Import[{}]: {msg}", h.source_title);
-        history::mark_failed(h.id, &msg)?;
+        history::finish_import(h.id, "failed", Some(&msg))?;
         auto_blocklist(h, "Auto-blocklist: no media file in the download");
         if let Err(e) = client::delete(client, &t.hash, true) {
             warn!(
@@ -1051,7 +1054,7 @@ fn process_one(h: &HistoryRow, t: &Torrent, client: &DownloadClientRow) -> R<()>
                 h.source_title
             );
             warn!("Import[{}]: {msg}", h.source_title);
-            history::mark_failed(h.id, &msg)?;
+            history::finish_import(h.id, "failed", Some(&msg))?;
             auto_blocklist(
                 h,
                 "Auto-blocklist: the file names another issue than the one wanted",
@@ -1093,11 +1096,11 @@ fn process_one(h: &HistoryRow, t: &Torrent, client: &DownloadClientRow) -> R<()>
             t.name
         );
         error!("Import[{}]: {msg}", h.source_title);
-        history::set_status(&[h.id], "import_failed", Some(&msg))?;
+        history::finish_import(h.id, "import_failed", Some(&msg))?;
         publish_failed(h, &msg);
         return Ok(());
     }
-    history::complete_import(h.id)?;
+    history::finish_import(h.id, "completed", None)?;
     info!(
         "Import[{}]: completed successfully ({files_placed} file(s))",
         h.source_title
@@ -1126,7 +1129,6 @@ pub fn clean_stalled() -> R<()> {
     stall_skip(None);
     let mut untracked = HashSet::new();
     let mut rows = history::by_statuses(&["grabbed", "failed", "warning", "importing"])?;
-    let mut research: Vec<i64> = vec![];
     let now = now_ms();
     for client in &enabled {
         let (ok, torrents) = client::torrents(client);
@@ -1175,32 +1177,9 @@ pub fn clean_stalled() -> R<()> {
                     e.message
                 );
             }
-            let restart =
-                cfg.auto_restart && (row.grab_source == "auto" || cfg.include_manual_grabs);
-            if let (true, Some(m)) = (restart, row.media_id)
-                && !research.contains(&m)
-            {
-                research.push(m);
-            }
         }
     }
     remember(&UNTRACKED, untracked);
-    if !research.is_empty() {
-        info!(
-            "StalledCleanup: searching for a replacement for {} media(s)",
-            research.len()
-        );
-        for m in research {
-            if let Err(e) =
-                fliks_plugin_sdk::scheduled::schedule(&format!("search:{m}"), 0, &json!({}))
-            {
-                warn!(
-                    "StalledCleanup: re-search of #{m} not scheduled: {}",
-                    e.message
-                );
-            }
-        }
-    }
     Ok(())
 }
 
@@ -1296,6 +1275,8 @@ fn holds_unimported(row: &HistoryRow, client: &DownloadClientRow, t: &Torrent) -
 }
 
 pub fn clean_seeded() -> R<()> {
+    indexer_stats::prune()?;
+    release_refs::prune()?;
     let enabled: Vec<DownloadClientRow> = clients::list_enabled()?
         .into_iter()
         .filter(client::supports)
@@ -1367,6 +1348,23 @@ mod tests {
     use super::*;
     use crate::error::Error;
     use fliks_plugin_sdk::bindings::fliks::plugin::types::ImportedFile;
+    use serde_json::json;
+
+    #[test]
+    fn a_torrent_still_moving_or_in_error_is_not_imported() {
+        let at = |progress, state: &str| {
+            at_rest(&Torrent {
+                progress,
+                state: state.into(),
+                ..Torrent::default()
+            })
+        };
+        for state in ["moving", "missingFiles", "error", "metaDL"] {
+            assert!(!at(1.0, state), "{state}");
+        }
+        assert!(at(1.0, "uploading") && at(1.0, "checkingUP"));
+        assert!(at(0.5, "seeding") && !at(0.5, "downloading"));
+    }
 
     #[test]
     fn an_ingest_is_classified_by_what_it_placed() {

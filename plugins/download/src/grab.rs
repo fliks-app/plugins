@@ -1,7 +1,9 @@
 //! Search, scoring, grabs and the automatic sweeps (`RssSync`) and the releases the core sweep asks for.
 
 use crate::config;
-use crate::db::{Coverage, DownloadClientRow, IndexerRow, blocklist, clients, history, indexers};
+use crate::db::{
+    Coverage, DownloadClientRow, IndexerRow, blocklist, clients, history, indexers, release_refs,
+};
 use crate::error::{Error, R};
 use crate::torznab::{self, Ids, Kind, Release, Round};
 use crate::util::{
@@ -15,6 +17,7 @@ use fliks_plugin_sdk::bindings::fliks::plugin::types::{
 use fliks_plugin_sdk::host;
 use fliks_plugin_sdk::rt::{self, Budget, FuturesUnordered, StreamExt};
 use serde_json::{Map, Value, json};
+use sha1::{Digest, Sha1};
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
@@ -246,12 +249,36 @@ pub fn coverage_columns(c: Option<&ReleaseCoverage>) -> Coverage {
     }
 }
 
+/// The opaque reference a release goes by on the wire: its indexer URL can carry a key or a passkey.
+fn reference_of(raw: &Release) -> String {
+    format!("rel-{:x}", Sha1::digest(raw.download_url.as_bytes()))
+}
+
+/// Stores each release's reference, then renders them all; `downloadUrl` holds the reference.
+pub fn wire(ranked: &[Ranked]) -> R<Vec<Value>> {
+    release_refs::save(
+        &ranked
+            .iter()
+            .map(|r| release_refs::Entry {
+                reference: reference_of(&r.raw),
+                download_url: r.raw.download_url.clone(),
+                title: r.raw.title.clone(),
+                indexer_id: r.raw.indexer_id,
+            })
+            .collect::<Vec<_>>(),
+    )?;
+    Ok(ranked
+        .iter()
+        .map(|r| to_wire(r, &reference_of(&r.raw)))
+        .collect())
+}
+
 /// The indexer fields, then core's verdict; the source is `sourceId`/`sourceName` on the wire.
-pub fn to_wire(r: &Ranked) -> Value {
+pub fn to_wire(r: &Ranked, reference: &str) -> Value {
     let (raw, s) = (&r.raw, &r.scored);
     let mut o = Map::new();
     o.insert("title".into(), json!(raw.title));
-    o.insert("downloadUrl".into(), json!(raw.download_url));
+    o.insert("downloadUrl".into(), json!(reference));
     if let Some(i) = &raw.info_url {
         o.insert("infoUrl".into(), json!(i));
     }
@@ -630,10 +657,8 @@ pub fn search_scored(
                     if let Some(s) = &mut streamer {
                         s.set(ix, "done");
                         if added {
-                            match rank(target, &all, &raw) {
-                                Ok(r) => {
-                                    s.emit("search.partial", Some(r.iter().map(to_wire).collect()))
-                                }
+                            match rank(target, &all, &raw).and_then(|r| wire(&r)) {
+                                Ok(r) => s.emit("search.partial", Some(r)),
                                 Err(e) => warn!("search stream re-rank failed: {e}"),
                             }
                         } else {
@@ -772,23 +797,36 @@ pub fn search_releases(
 pub struct Manual {
     /// Picked by the core's sweep: recorded as an automatic grab.
     pub auto: bool,
-    pub download_url: String,
+    /// A listed release's reference, or a pasted magnet link.
+    pub release: String,
     pub source_title: Option<String>,
     pub indexer_id: Option<i64>,
     pub info_url: Option<String>,
     pub force: bool,
 }
 
-fn title_from_url(url: &str) -> String {
-    if url.starts_with("magnet:") {
-        static DN: std::sync::LazyLock<regex::Regex> =
-            std::sync::LazyLock::new(|| regex::Regex::new(r"(?i)[?&]dn=([^&]+)").unwrap());
-        if let Some(c) = DN.captures(url) {
-            return decode_uri_component(&c[1].replace('+', " "))
-                .unwrap_or_else(|| c[1].to_owned());
-        }
+fn title_from_magnet(url: &str) -> String {
+    static DN: std::sync::LazyLock<regex::Regex> =
+        std::sync::LazyLock::new(|| regex::Regex::new(r"(?i)[?&]dn=([^&]+)").unwrap());
+    if let Some(c) = DN.captures(url) {
+        return decode_uri_component(&c[1].replace('+', " ")).unwrap_or_else(|| c[1].to_owned());
     }
     url.chars().take(240).collect()
+}
+
+/// What a grab fetches and the release it names: a listed release by its reference (the URL never
+/// came from the client), else a magnet link. Any other URL is refused, never fetched.
+fn resolve(m: &Manual) -> R<(String, Option<i64>, Option<String>)> {
+    if m.release.starts_with("magnet:") {
+        return Ok((m.release.clone(), m.indexer_id, None));
+    }
+    let found = release_refs::find(&m.release)?
+        .ok_or_else(|| Error::grab("download.grab.errors.release_expired"))?;
+    Ok((
+        found.download_url,
+        Some(found.indexer_id),
+        Some(found.title),
+    ))
 }
 
 struct GrabArgs<'a> {
@@ -929,12 +967,15 @@ pub fn grab_release(
         return Err(Error::grab("download.grab.errors.unprofiled"));
     }
 
+    let (download_url, indexer_id, listed_title) = resolve(&m)?;
     let source_title = m
         .source_title
         .as_deref()
         .map(str::trim)
         .filter(|t| !t.is_empty())
-        .map_or_else(|| title_from_url(&m.download_url), str::to_owned);
+        .map(str::to_owned)
+        .or(listed_title)
+        .unwrap_or_else(|| title_from_magnet(&download_url));
     // Without a family, a book release is grabbed for the family its format names.
     let (target, media) = title_family(&source_title)
         .filter(|f| family.is_none() && target.kind == "book" && *f != target.family)
@@ -948,7 +989,7 @@ pub fn grab_release(
         .map_or((target, media), |(media, t)| (t, media));
     let fabricated = Release {
         title: source_title.clone(),
-        download_url: m.download_url.clone(),
+        download_url,
         info_url: None,
         indexer_id: 0,
         indexer_name: String::new(),
@@ -993,8 +1034,12 @@ pub fn grab_release(
     );
     a.reject_if_present = m.auto;
     a.info_url = m.info_url;
-    a.indexer_id = m.indexer_id;
+    a.indexer_id = indexer_id;
     a.source_title = source_title;
+    if m.auto {
+        // The core holds its own claim for this very grab: only another source counts.
+        recheck(&target, media, Some("core"))?;
+    }
     let hash = grab_and_record(a)?;
     Ok(json!({ "torrentHash": hash }))
 }
@@ -1025,6 +1070,30 @@ fn pending(target: &Target) -> R<Option<String>> {
     }
 }
 
+/// Refuses a grab when one for the target landed since the caller last checked; `own` is a claim
+/// that belongs to the caller.
+fn recheck(target: &Target, media: Media, own: Option<&str>) -> R<()> {
+    if let Some(blocking) = pending(target)? {
+        return Err(Error::grab_with(
+            "download.grab.errors.already_in_flight",
+            format!("a grab is already pending (\"{blocking}\")"),
+        ));
+    }
+    // Only video units are whole numbers the host matches; any other kind asks for the whole media.
+    let unit = unit_ref_of(target).filter(|_| media == Media::Series);
+    let elsewhere: Vec<String> = host::acquisition_in_flight(target.media_id, unit.as_ref())?
+        .into_iter()
+        .filter(|id| Some(id.as_str()) != own)
+        .collect();
+    if elsewhere.is_empty() {
+        return Ok(());
+    }
+    Err(Error::grab_with(
+        "download.grab.errors.already_in_flight",
+        format!("a grab is in flight at {}", elsewhere.join(", ")),
+    ))
+}
+
 /// Search, pick and grab one automatic target.
 fn try_auto_grab(target: &Target, client: &DownloadClientRow) -> R<()> {
     let Some(media) = Media::of(&target.kind, target.family) else {
@@ -1048,14 +1117,9 @@ fn try_auto_grab(target: &Target, client: &DownloadClientRow) -> R<()> {
         }
         _ => {}
     }
-    if let Some(blocking) = pending(target)? {
-        return skip(format!("a grab is already pending (\"{blocking}\")"));
-    }
-    // Only video units are whole numbers the host matches; any other kind asks for the whole media.
-    let unit = unit_ref_of(target).filter(|_| media == Media::Series);
-    let elsewhere = host::acquisition_in_flight(target.media_id, unit.as_ref())?;
-    if !elsewhere.is_empty() {
-        return skip(format!("a grab is in flight at {}", elsewhere.join(", ")));
+    match recheck(target, media, None) {
+        Err(Error::Grab { detail, .. }) => return skip(detail.unwrap_or_default()),
+        r => r?,
     }
     let scored = search_scored(target, Kind::Auto, None, None)?;
     if scored.is_empty() {
@@ -1095,6 +1159,11 @@ fn try_auto_grab(target: &Target, client: &DownloadClientRow) -> R<()> {
             "no eligible {what} ({} checked){top}",
             scored.len()
         ));
+    }
+    // The search took up to two minutes: a core sweep may have grabbed meanwhile.
+    match recheck(target, media, None) {
+        Err(Error::Grab { detail, .. }) => return skip(detail.unwrap_or_default()),
+        r => r?,
     }
     for i in picks {
         let mut a = args_for(target, media, client, &scored[i], "auto");

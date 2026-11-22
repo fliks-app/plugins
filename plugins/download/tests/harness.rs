@@ -425,7 +425,7 @@ async fn start_migrates_and_routes_answer() {
         return;
     };
     let mut db = plugin_db(&h).await;
-    assert_eq!(ledger(&mut db).await.len(), 15);
+    assert_eq!(ledger(&mut db).await.len(), 16);
     assert!(h.health().await.unwrap().ok);
     for p in ["/indexers", "/indexer-sources", "/download-clients"] {
         let r = h.proxy("GET", &format!("{p}/implementations"), None).await;
@@ -559,12 +559,12 @@ async fn an_adopted_ledger_runs_only_the_new_migrations() {
     let ix = add_indexer(&mut db, "old", json!({})).await;
     h.restart().await;
     until("the re-run migrations", MAX, async || {
-        ledger(&mut plugin_db(&h).await).await.len() == 15
+        ledger(&mut plugin_db(&h).await).await.len() == 16
     })
     .await;
     assert!(logged(
         &h,
-        "migrations applied: 0009_indexer_throttle, 0010_poller_state, 0011_download_history_import_lease, 0012_item_history, 0013_indexer_caps_books, 0014_download_history_family, 0015_download_history_retry_later"
+        "migrations applied: 0009_indexer_throttle, 0010_poller_state, 0011_download_history_import_lease, 0012_item_history, 0013_indexer_caps_books, 0014_download_history_family, 0015_download_history_retry_later, 0016_release_refs"
     ));
     let backfilled = scalar_i64(
         &mut db,
@@ -1264,6 +1264,256 @@ async fn a_manual_grab_reaches_the_client_and_the_queue_actions_drive_it() {
             json!({ "error": { "key": "download.queue.errors.not_controllable", "detail": "failed" } })
         )
     );
+    h.finish().await;
+}
+
+const SECRET: &str = "indexer-secret-passkey";
+const TORRENT: &[u8] = b"d4:infod4:name1:xee";
+
+/// An indexer whose one result links a torrent file behind a key of its own.
+async fn keyed_tracker(h: &Harness) -> (Stub, Stub) {
+    let feed = format!(
+        r#"<?xml version="1.0"?><rss><channel><item><title>Some.Movie.2020.1080p.WEB</title><link>http://dl.test/get/1.torrent?jackett_apikey={SECRET}</link><size>1000</size></item></channel></rss>"#
+    )
+    .into_bytes();
+    let (index, files) = (
+        Stub::start(move |_, _, _| (200, vec![], feed.clone())),
+        Stub::start(|_, _, _| (200, vec![], TORRENT.to_vec())),
+    );
+    route(h, "ix.test", "10.77.0.1", 80, &index);
+    route(h, "dl.test", "10.77.0.3", 80, &files);
+    add_indexer(
+        &mut plugin_db(h).await,
+        "ix",
+        json!({ "baseUrl": "http://ix.test/api", "apiKey": "k" }),
+    )
+    .await;
+    (index, files)
+}
+
+/// A release leaves the plugin as a reference; a grab by it (as a released web bundle posts it)
+/// fetches the indexer's own link, and no other URL is ever fetched.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_release_goes_by_a_reference_that_carries_no_credential() {
+    let Some(h) = Harness::start(setup()).await else {
+        return;
+    };
+    let (_, files) = keyed_tracker(&h).await;
+    let qbit = fake_qbit();
+    add_qbit(&h, &qbit).await;
+    let foreign = Stub::start(|_, _, _| (200, vec![], TORRENT.to_vec()));
+    route(&h, "foreign.test", "10.77.0.4", 80, &foreign);
+    let media = add_movie(&h, "Some Movie").await;
+
+    let mut events = h.st.hub.subscribe();
+    let r = h
+        .http(request(
+            "GET",
+            &format!("/{media}/releases"),
+            &[("sid", "s1")],
+            b"",
+        ))
+        .await
+        .unwrap();
+    assert_eq!(r.status, 200, "{:?}", body(&r));
+    let listed = body(&r);
+    let release = &listed[0];
+    let reference = release["downloadUrl"].as_str().unwrap().to_owned();
+    assert!(reference.starts_with("rel-"), "{reference}");
+    let mut streamed = vec![];
+    while let Ok(ev) = events.try_recv() {
+        if let Bus::Raw(raw) = &*ev {
+            streamed.push(raw.payload.to_string());
+        }
+    }
+    assert!(
+        streamed.iter().any(|p| p.contains(&reference)),
+        "{streamed:?}"
+    );
+    for wire in streamed
+        .iter()
+        .map(String::as_str)
+        .chain([listed.to_string().as_str()])
+    {
+        for leak in [SECRET, "apikey", "dl.test"] {
+            assert!(!wire.contains(leak), "{leak} leaked in {wire}");
+        }
+    }
+
+    let grab = |url: &str| {
+        let b = json!({
+            "downloadUrl": url, "sourceTitle": release["title"],
+            "sourceId": release["sourceId"], "force": true,
+        });
+        let path = format!("/{media}/grab");
+        let h = &h;
+        async move { h.proxy("POST", &path, Some(&b)).await }
+    };
+    for url in [
+        "http://foreign.test/x.torrent",
+        "http://dl.test/get/1.torrent?jackett_apikey=other",
+        "rel-0000000000000000000000000000000000000000",
+    ] {
+        let r = grab(url).await;
+        assert_eq!(
+            (r.status, body(&r)),
+            (
+                409,
+                json!({ "error": { "key": "download.grab.errors.release_expired" } })
+            ),
+            "{url}"
+        );
+    }
+    assert!(foreign.hits().is_empty() && files.hits().is_empty());
+
+    let r = grab(&reference).await;
+    assert_eq!(
+        (r.status, body(&r)),
+        (
+            200,
+            json!({ "torrentHash": fk_plugin_download::client::info_hash(TORRENT).unwrap() })
+        )
+    );
+    let fetched = files.hits();
+    assert_eq!(fetched.len(), 1);
+    assert!(
+        fetched[0]
+            .target
+            .contains(&format!("jackett_apikey={SECRET}")),
+        "{}",
+        fetched[0].target
+    );
+    let indexer: Option<i32> = sqlx::query_scalar(r#"SELECT "indexerId" FROM "download_history""#)
+        .fetch_one(&mut plugin_db(&h).await)
+        .await
+        .unwrap();
+    assert!(indexer.is_some(), "the indexer comes from the reference");
+    h.finish().await;
+}
+
+/// A second automatic grab of a title that already has one in flight is refused before the client
+/// is asked.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn an_automatic_grab_is_refused_when_one_is_already_pending() {
+    let Some(h) = Harness::start(setup()).await else {
+        return;
+    };
+    let qbit = fake_qbit();
+    add_qbit(&h, &qbit).await;
+    let media = add_movie(&h, "Some Movie").await;
+    let auto = |hash: &str| {
+        let b = json!({
+            "downloadUrl": format!("magnet:?xt=urn:btih:{hash}&dn=Some.Movie.2020.1080p"),
+            "force": true, "method": "auto",
+        });
+        let path = format!("/{media}/grab");
+        let h = &h;
+        async move { h.proxy("POST", &path, Some(&b)).await }
+    };
+    assert_eq!(auto(HASH).await.status, 200);
+    let r = auto("fedcba9876543210fedcba9876543210fedcba98").await;
+    assert_eq!(r.status, 409, "{:?}", body(&r));
+    assert_eq!(
+        body(&r)["error"]["key"],
+        "download.grab.errors.already_in_flight"
+    );
+    assert_eq!(qbit.hits_to("/api/v2/torrents/add").len(), 1);
+    h.finish().await;
+}
+
+/// qBittorrent that already holds a newer torrent of someone else, in a category Fliks does not
+/// manage, and files what it is sent under the category asked.
+fn qbit_with_a_foreign_torrent(foreign: &'static str) -> Stub {
+    let held = Mutex::new(vec![(foreign.to_owned(), "other".to_owned(), 999)]);
+    Stub::start(move |_, target, body| {
+        let ok = |b: &str| (200, vec![], b.as_bytes().to_vec());
+        match target.split('?').next().unwrap_or("") {
+            "/api/v2/auth/login" => (
+                200,
+                vec![("set-cookie", "SID=s; path=/".into())],
+                b"Ok.".to_vec(),
+            ),
+            "/api/v2/torrents/info" => {
+                let asked = target
+                    .split_once("category=")
+                    .map(|(_, c)| c.split('&').next().unwrap_or(""));
+                let list: Vec<Value> = held
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .filter(|(_, c, _)| asked.is_none_or(|a| a == c))
+                    .map(|(h, _, at)| json!({ "hash": h, "name": "n", "added_on": at }))
+                    .collect();
+                ok(&json!(list).to_string())
+            }
+            "/api/v2/torrents/add" => {
+                let category = body
+                    .split_once("category=")
+                    .map(|(_, c)| c.split('&').next().unwrap_or("").to_owned())
+                    .unwrap_or_default();
+                held.lock().unwrap().push((HASH.to_owned(), category, 5));
+                ok("Ok.")
+            }
+            _ => (404, vec![], vec![]),
+        }
+    })
+}
+
+/// A link naming no BitTorrent v1 hash cannot be bound to a torrent by position in the client.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_hash_recovered_after_an_add_is_one_of_the_managed_categories() {
+    const FOREIGN: &str = "ffffffffffffffffffffffffffffffffffffffff";
+    let Some(h) = Harness::start(setup()).await else {
+        return;
+    };
+    add_qbit(&h, &qbit_with_a_foreign_torrent(FOREIGN)).await;
+    let media = add_movie(&h, "Some Movie").await;
+    let r = h
+        .proxy(
+            "POST",
+            &format!("/{media}/grab"),
+            Some(&json!({
+                "downloadUrl": "magnet:?xt=urn:btmh:1220abcd&dn=Some.Movie.2020.1080p",
+                "force": true
+            })),
+        )
+        .await;
+    assert_eq!(
+        (r.status, body(&r)),
+        (200, json!({ "torrentHash": HASH })),
+        "{:?}",
+        body(&r)
+    );
+    h.finish().await;
+}
+
+/// CleanSeeded prunes what only the last days of a search need.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_seed_cleanup_prunes_old_stats_and_references() {
+    let Some(h) = Harness::start(setup()).await else {
+        return;
+    };
+    let mut db = plugin_db(&h).await;
+    let ix = add_indexer(&mut db, "ix", json!({})).await;
+    exec(
+        &mut db,
+        format!(
+            r#"INSERT INTO "indexer_stats" ("indexerId", "queryDate") VALUES ({ix}, now() - interval '31 days'), ({ix}, now());
+               INSERT INTO "release_refs" ("ref", "downloadUrl", "title", "indexerId", "createdAt")
+                 VALUES ('old', 'u', 't', {ix}, now() - interval '3 days'), ('new', 'u', 't', {ix}, now())"#
+        ),
+    )
+    .await;
+    h.job("CleanSeeded", None).await.unwrap();
+    assert_eq!(
+        scalar_i64(&mut db, r#"SELECT count(*) FROM "indexer_stats""#).await,
+        1
+    );
+    let left: Vec<String> = sqlx::query_scalar(r#"SELECT "ref" FROM "release_refs""#)
+        .fetch_all(&mut db)
+        .await
+        .unwrap();
+    assert_eq!(left, ["new"]);
     h.finish().await;
 }
 

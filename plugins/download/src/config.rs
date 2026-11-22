@@ -42,8 +42,6 @@ pub fn search_budget_ms() -> u64 {
 pub struct Stall {
     pub samples: i64,
     pub interval_minutes: i64,
-    pub auto_restart: bool,
-    pub include_manual_grabs: bool,
     pub min_bytes_per_second: f64,
 }
 
@@ -62,8 +60,6 @@ pub fn stall_of(kv: &[(String, String)]) -> Option<Stall> {
     Some(Stall {
         samples,
         interval_minutes: interval,
-        auto_restart: value(kv, "stall_auto_restart").as_deref() != Some("false"),
-        include_manual_grabs: value(kv, "stall_include_manual_grabs").as_deref() == Some("true"),
         min_bytes_per_second: (if speed.is_finite() && speed > 0.0 {
             speed
         } else {
@@ -76,8 +72,6 @@ pub fn stall() -> Result<Option<Stall>, String> {
     let keys = [
         "stall_samples",
         "stall_interval_minutes",
-        "stall_auto_restart",
-        "stall_include_manual_grabs",
         "stall_min_speed_kib",
     ];
     let kv = host::config_get(Some(
@@ -111,28 +105,15 @@ mod tests {
         let s = stall_of(&kv(&[
             ("stall_samples", "3"),
             ("stall_interval_minutes", "0"),
-            ("stall_auto_restart", "no"),
         ]))
         .unwrap();
-        assert_eq!(
-            (
-                s.samples,
-                s.interval_minutes,
-                s.auto_restart,
-                s.include_manual_grabs
-            ),
-            (3, 60, true, false)
-        );
+        assert_eq!((s.samples, s.interval_minutes), (3, 60));
         assert_eq!(s.min_bytes_per_second, 8192.0);
         let s = stall_of(&kv(&[
             ("stall_samples", "2"),
             ("stall_min_speed_kib", "0.5"),
-            ("stall_include_manual_grabs", "true"),
         ]))
         .unwrap();
-        assert_eq!(
-            (s.min_bytes_per_second, s.include_manual_grabs),
-            (512.0, true)
-        );
+        assert_eq!(s.min_bytes_per_second, 512.0);
     }
 }

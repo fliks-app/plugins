@@ -378,20 +378,6 @@
             "default": 8,
             "min": 1,
             "max": 102400
-          },
-          {
-            "key": "stall_auto_restart",
-            "type": "toggle",
-            "labelKey": "download.config.stall.auto_restart",
-            "hint": "download.config.stall.auto_restart_hint",
-            "default": true
-          },
-          {
-            "key": "stall_include_manual_grabs",
-            "type": "toggle",
-            "labelKey": "download.config.stall.include_manual_grabs",
-            "hint": "download.config.stall.include_manual_grabs_hint",
-            "default": false
           }
         ]
       },
@@ -588,10 +574,6 @@
       "download.config.stall.interval_minutes_hint": "How long to wait before sampling a download’s progress again.",
       "download.config.stall.min_speed_kib": "Minimum average speed (KiB/s)",
       "download.config.stall.min_speed_kib_hint": "A check that averages less than this since the previous one counts as stalled, even if the download is still moving.",
-      "download.config.stall.auto_restart": "Search again after cleanup",
-      "download.config.stall.auto_restart_hint": "Look for another release once a stalled download has been removed.",
-      "download.config.stall.include_manual_grabs": "Search again for downloads you started yourself too",
-      "download.config.stall.include_manual_grabs_hint": "A stalled download is removed either way — this only decides whether a replacement is searched for.",
       "download.config.general.title": "General",
       "download.config.general.auto_acquisition_paused": "Pause automatic downloads",
       "download.config.general.auto_acquisition_paused_hint": "No new release is grabbed on its own. Downloads in progress finish and are imported, and you can still grab a release yourself.",
@@ -647,6 +629,8 @@
       "download.queue.errors.no_torrent": "No download client holds this release yet",
       "download.grab.errors.quality_not_allowed": "This release's quality is not allowed by the profile",
       "download.grab.errors.no_eligible_release": "No eligible release was found",
+      "download.grab.errors.release_expired": "This release is no longer listed — search again",
+      "download.grab.errors.already_in_flight": "Another grab of this title is already under way: {{detail}}",
       "download.http.errors.not_found": "Not found",
       "download.http.errors.not_ready": "The plugin is still starting up",
       "download.http.errors.bad_param": "Invalid or missing path parameter",
@@ -724,10 +708,6 @@
       "download.config.stall.interval_minutes_hint": "Délai d’attente avant de vérifier à nouveau la progression d’un téléchargement.",
       "download.config.stall.min_speed_kib": "Vitesse moyenne minimale (Kio/s)",
       "download.config.stall.min_speed_kib_hint": "Une vérification sous cette moyenne depuis la précédente compte comme bloquée, même si le téléchargement avance encore.",
-      "download.config.stall.auto_restart": "Relancer une recherche après nettoyage",
-      "download.config.stall.auto_restart_hint": "Cherche une autre release une fois le téléchargement bloqué supprimé.",
-      "download.config.stall.include_manual_grabs": "Relancer aussi une recherche pour les téléchargements lancés manuellement",
-      "download.config.stall.include_manual_grabs_hint": "Un téléchargement bloqué est supprimé dans tous les cas — ceci décide seulement si une autre release est cherchée.",
       "download.config.general.title": "Général",
       "download.config.general.auto_acquisition_paused": "Suspendre les téléchargements automatiques",
       "download.config.general.auto_acquisition_paused_hint": "Aucune release n’est plus récupérée d’elle-même. Les téléchargements en cours se terminent et sont importés, et vous pouvez toujours en récupérer une vous-même.",
@@ -783,6 +763,8 @@
       "download.queue.errors.no_torrent": "Aucun client de téléchargement ne détient encore cette release",
       "download.grab.errors.quality_not_allowed": "La qualité de cette release n’est pas autorisée par le profil",
       "download.grab.errors.no_eligible_release": "Aucune release éligible n’a été trouvée",
+      "download.grab.errors.release_expired": "Cette release n’est plus listée — relancez la recherche",
+      "download.grab.errors.already_in_flight": "Un autre téléchargement de ce titre est déjà en cours : {{detail}}",
       "download.http.errors.not_found": "Introuvable",
       "download.http.errors.not_ready": "Le plugin est encore en cours de démarrage",
       "download.http.errors.bad_param": "Paramètre d’URL invalide ou manquant",

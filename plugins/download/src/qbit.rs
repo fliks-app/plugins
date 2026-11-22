@@ -93,14 +93,16 @@ fn snapshot(base: &str, cookie: &str, categories: &[String]) -> HashSet<String> 
         .collect()
 }
 
-/// The torrent that appeared since `before`, polled for about 3 s.
-fn recover_new_hash(base: &str, cookie: &str, before: &HashSet<String>) -> Option<String> {
+/// The torrent that appeared since `before` in the managed categories, polled for about 3 s.
+fn recover_new_hash(
+    base: &str,
+    cookie: &str,
+    categories: &[String],
+    before: &HashSet<String>,
+) -> Option<String> {
     for _ in 0..6 {
         std::thread::sleep(Duration::from_millis(500));
-        let Some(after) = net::get(&info_url(base, ""), &[("cookie", cookie)], T60)
-            .ok()
-            .and_then(|r| json_array::<Torrent>(&r))
-        else {
+        let Some(after) = list(base, cookie, categories, T60) else {
             continue;
         };
         let mut fresh: Vec<Torrent> = after
@@ -278,7 +280,8 @@ pub fn delete(c: &DownloadClientRow, hash: &str, delete_files: bool) -> R<()> {
 pub fn add(c: &DownloadClientRow, url: &str, category: &str, reject_if_present: bool) -> R<String> {
     let base = client::base_url(&c.settings).ok_or_else(no_host)?;
     let cookie = login(&base, &c.settings, T60)?;
-    let before = snapshot(&base, &cookie, &client::categories(&c.settings));
+    let categories = client::categories(&c.settings);
+    let before = snapshot(&base, &cookie, &categories);
     let held = |hash: &Option<String>| -> R<Option<String>> {
         match hash {
             Some(h) if before.contains(&h.to_lowercase()) => {
@@ -317,8 +320,14 @@ pub fn add(c: &DownloadClientRow, url: &str, category: &str, reject_if_present: 
             res.status
         )));
     }
+    // qBittorrent 4.x answers 200 `Fails.` for a torrent it cannot read.
+    if res.text().trim() == "Fails." {
+        return Err(Error::Unobtainable(
+            "the download client could not read this torrent".into(),
+        ));
+    }
     if hash.is_none() {
-        hash = recover_new_hash(&base, &cookie, &before);
+        hash = recover_new_hash(&base, &cookie, &categories, &before);
     }
     let hash = hash.ok_or_else(|| {
         Error::Other("could not determine the hash of the torrent that was just added".into())

@@ -2,7 +2,7 @@
 
 use crate::db::{HistoryRow, blocklist, clients, history, indexer_stats};
 use crate::error::{Error, R};
-use crate::grab::{self, Manual, Stream, to_wire};
+use crate::grab::{self, Manual, Stream};
 use crate::util::{Settings, js_number};
 use crate::{client, indexers, poller, sources};
 use fliks_plugin_sdk::bindings::fliks::plugin::types::{AcquisitionEvent, Family, Principal};
@@ -177,7 +177,7 @@ fn search_releases(r: &Request) -> R<Response> {
             stream_of(r).as_ref(),
         )?
     };
-    ok(releases.iter().map(to_wire).collect::<Vec<_>>())
+    ok(grab::wire(&releases)?)
 }
 
 /// Only a delegated viewer with a modal open (`sid`) gets the streamed partial results.
@@ -231,13 +231,14 @@ fn grab_release(r: &Request) -> R<Response> {
     )?)
 }
 
-/// A grab names its release and its method (`auto` from the core's sweep, else `manual`).
+/// A grab names its release (`downloadUrl` holds the reference a search listed it by) and its
+/// method (`auto` from the core's sweep, else `manual`).
 fn manual_of(b: &Map<String, Value>, auto: bool) -> Option<Manual> {
     str_field(b, "downloadUrl")
         .filter(|u| !u.is_empty())
-        .map(|download_url| Manual {
+        .map(|release| Manual {
             auto,
-            download_url,
+            release,
             source_title: str_field(b, "sourceTitle"),
             indexer_id: num_field(b, "sourceId").map(|f| f as i64),
             info_url: info_url(b.get("infoUrl")),
