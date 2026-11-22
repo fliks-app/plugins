@@ -1110,7 +1110,7 @@ fn process_one(h: &HistoryRow, t: &Torrent, client: &DownloadClientRow) -> R<()>
 
 // --- CleanStalled ------------------------------------------------------------------------------
 
-/// Removes stalled downloads; their re-search goes to `search:<mediaId>` calls.
+/// Removes stalled downloads and publishes `stalled-removed` for each.
 pub fn clean_stalled() -> R<()> {
     let Some(cfg) = config::stall().map_err(crate::error::Error::Other)? else {
         stall_skip(Some("off, the number of checks before cleanup is not set"));

@@ -256,20 +256,28 @@ fn reference_of(raw: &Release) -> String {
 
 /// Stores each release's reference, then renders them all; `downloadUrl` holds the reference.
 pub fn wire(ranked: &[Ranked]) -> R<Vec<Value>> {
-    release_refs::save(
-        &ranked
-            .iter()
-            .map(|r| release_refs::Entry {
-                reference: reference_of(&r.raw),
-                download_url: r.raw.download_url.clone(),
-                title: r.raw.title.clone(),
-                indexer_id: r.raw.indexer_id,
-            })
-            .collect::<Vec<_>>(),
-    )?;
+    wire_new(ranked, &mut HashSet::new())
+}
+
+/// Like `wire`, saving only the references not in `seen` (which it then fills).
+fn wire_new(ranked: &[Ranked], seen: &mut HashSet<String>) -> R<Vec<Value>> {
+    let refs: Vec<String> = ranked.iter().map(|r| reference_of(&r.raw)).collect();
+    let fresh: Vec<release_refs::Entry> = ranked
+        .iter()
+        .zip(&refs)
+        .filter(|(_, reference)| seen.insert((*reference).clone()))
+        .map(|(r, reference)| release_refs::Entry {
+            reference: reference.clone(),
+            download_url: r.raw.download_url.clone(),
+            title: r.raw.title.clone(),
+            indexer_id: r.raw.indexer_id,
+        })
+        .collect();
+    release_refs::save(&fresh)?;
     Ok(ranked
         .iter()
-        .map(|r| to_wire(r, &reference_of(&r.raw)))
+        .zip(&refs)
+        .map(|(r, f)| to_wire(r, f))
         .collect())
 }
 
@@ -630,6 +638,7 @@ pub fn search_scored(
     }
 
     let mut raw: Vec<Release> = vec![];
+    let mut saved = HashSet::new();
     let (query, ids) = (&query, &ids);
     let asks = asks(target);
     let asks = &asks;
@@ -657,7 +666,7 @@ pub fn search_scored(
                     if let Some(s) = &mut streamer {
                         s.set(ix, "done");
                         if added {
-                            match rank(target, &all, &raw).and_then(|r| wire(&r)) {
+                            match rank(target, &all, &raw).and_then(|r| wire_new(&r, &mut saved)) {
                                 Ok(r) => s.emit("search.partial", Some(r)),
                                 Err(e) => warn!("search stream re-rank failed: {e}"),
                             }

@@ -407,6 +407,28 @@ fn a_language_without_translation_keeps_the_default_names() {
 }
 
 #[test]
+fn an_untranslated_episode_keeps_its_default_name() {
+    let fra = r#"{"data":{"episodes":[
+        {"id":1,"seasonNumber":1,"number":1,"name":"Pilote"},
+        {"id":2,"seasonNumber":1,"number":2,"name":null}]}}"#;
+    let t = tvdb(move |p| match p {
+        "/login" => ok(LOGIN),
+        "/series/2000/episodes/default" => ok(EPISODES),
+        "/series/2000/episodes/default/fra" => ok(fra),
+        "/series/2000/extended" => ok(SERIES),
+        _ => (404, None, "{}".into()),
+    });
+    let seasons = run(t.seasons(2000, None, "fra")).unwrap();
+    let titles: Vec<_> = seasons[1]["episodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| e["title"].clone())
+        .collect();
+    assert_eq!(titles, [json!("Pilote"), json!("Second Episode")]);
+}
+
+#[test]
 fn a_failing_translated_read_fails_the_seasons() {
     let t = tvdb(|p| match p {
         "/login" => ok(LOGIN),
