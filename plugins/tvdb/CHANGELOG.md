@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/fliks-app/plugins/compare/tvdb-v1.0.0...tvdb-v1.0.1) (2026-11-22)
+
+
+### Bug Fixes
+
+* **tmdb,tvdb,comicvine:** atomic season reads, one-call translated episodes, interactive-safe comicvine limits ([#192](https://github.com/fliks-app/plugins/issues/192)) ([5a0f2b0](https://github.com/fliks-app/plugins/commit/5a0f2b0be9f277610f4a7c8e2c25ae80208de18c))
+
 ## [1.0.0](https://github.com/fliks-app/plugins/compare/tvdb-v0.3.2...tvdb-v1.0.0) (2026-11-19)
 
 
