@@ -206,7 +206,22 @@ impl<H: Http> Tvdb<H> {
         let mut episodes = match self.all_episodes(id, only, Some(code)).await {
             // The language has no translation: the default names stand.
             Err(ProviderError::NotFound) => self.all_episodes(id, only, None).await?,
-            r => r?,
+            r => {
+                let mut eps = r?;
+                if eps.iter().any(|e| text(e, "name").is_none()) {
+                    let default = self.all_episodes(id, only, None).await?;
+                    for ep in &mut eps {
+                        if text(ep, "name").is_some() {
+                            continue;
+                        }
+                        let name = default.iter().find(|d| get(d, "id") == get(ep, "id"));
+                        if let (Some(o), Some(d)) = (ep.as_object_mut(), name) {
+                            o.insert("name".into(), nn(d, "name"));
+                        }
+                    }
+                }
+                eps
+            }
         };
         if let Some(n) = only {
             episodes.retain(|e| get(e, "seasonNumber").as_i64() == Some(n));

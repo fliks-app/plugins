@@ -376,7 +376,7 @@ fn template_matches_the_published_manifest() {
         .retain(|j| j["name"] != "SearchMissing");
     for page in old["ui"]["configPages"].as_array_mut().unwrap() {
         if let Some(fields) = page.get_mut("fields").and_then(Value::as_array_mut) {
-            // The stall restart went with the dead `search:<media>` call: the core sweeps on `stalled-removed`.
+            // The stall restart settings went with the dead `search:<media>` call.
             fields.retain(|f| {
                 ![
                     "requestsAutoGrabOnApproval",
