@@ -1,5 +1,5 @@
 {
-  "plugins/download": "3.1.2",
+  "plugins/download": "3.1.3",
   "plugins/notify": "3.0.0",
   "plugins/openlibrary": "1.0.0",
   "plugins/tmdb": "1.0.1",

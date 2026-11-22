@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.1.3](https://github.com/fliks-app/plugins/compare/download-v3.1.2...download-v3.1.3) (2026-11-22)
+
+
+### Bug Fixes
+
+* **download:** drop the foreign keys into core tables ([#201](https://github.com/fliks-app/plugins/issues/201)) ([0b59f31](https://github.com/fliks-app/plugins/commit/0b59f319770008265ef46822bfc310c11f0524f7))
+
 ## [3.1.2](https://github.com/fliks-app/plugins/compare/download-v3.1.1...download-v3.1.2) (2026-11-22)
 
 
