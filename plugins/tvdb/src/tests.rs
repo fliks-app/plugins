@@ -419,7 +419,7 @@ fn an_untranslated_episode_keeps_its_default_name() {
         _ => (404, None, "{}".into()),
     });
     let seasons = run(t.seasons(2000, None, "fra")).unwrap();
-    let titles: Vec<_> = seasons[1]["episodes"]
+    let titles: Vec<_> = seasons[0]["episodes"]
         .as_array()
         .unwrap()
         .iter()
