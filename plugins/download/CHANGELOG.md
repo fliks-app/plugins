@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.1.2](https://github.com/fliks-app/plugins/compare/download-v3.1.1...download-v3.1.2) (2026-11-22)
+
+
+### Bug Fixes
+
+* **download,tvdb:** review fixes for opaque refs and per-episode names ([#198](https://github.com/fliks-app/plugins/issues/198)) ([df0496b](https://github.com/fliks-app/plugins/commit/df0496bb7af27484291b940ce12890f8b5f57baf))
+
 ## [3.1.1](https://github.com/fliks-app/plugins/compare/download-v3.1.0...download-v3.1.1) (2026-11-22)
 
 
