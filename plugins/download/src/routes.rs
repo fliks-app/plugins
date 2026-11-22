@@ -23,6 +23,13 @@ fn err_body(status: u16, key: &str, detail: Option<&str>) -> Response {
     Response::json(status, &json!({ "error": e }))
 }
 
+fn cooling_body(until: &str) -> Response {
+    Response::json(
+        503,
+        &json!({ "error": { "key": "download.search.errors.all_indexers_cooling", "cooldownUntil": until } }),
+    )
+}
+
 fn bad_param(p: &str) -> R<Response> {
     Ok(err_body(400, "download.http.errors.bad_param", Some(p)))
 }
@@ -51,6 +58,7 @@ pub fn respond(r: R<Response>) -> Response {
             };
             err_body(status, key, detail.as_deref())
         }
+        Err(Error::AllIndexersCooling { until }) => cooling_body(&until),
         Err(Error::NotFound(m)) => err_body(404, "download.http.errors.not_found", Some(&m)),
         Err(Error::UnknownImplementation(_)) => {
             err_body(400, "download.http.errors.bad_body", Some("implementation"))
@@ -802,6 +810,21 @@ pub static ROUTER: LazyLock<Router> = LazyLock::new(|| {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn all_cooling_is_a_503_with_the_earliest_end() {
+        let resp = respond(Err(Error::AllIndexersCooling {
+            until: "2026-11-22T10:15:00.000Z".into(),
+        }));
+        assert_eq!(resp.status, 503);
+        assert_eq!(
+            serde_json::from_slice::<Value>(&resp.body).unwrap(),
+            json!({ "error": {
+                "key": "download.search.errors.all_indexers_cooling",
+                "cooldownUntil": "2026-11-22T10:15:00.000Z"
+            } })
+        );
+    }
 
     #[test]
     fn page_parsing() {

@@ -81,7 +81,9 @@ SELECT (count(*) FILTER (WHERE had))::int AS "cleared" FROM upd"#;
     /// Open windows, with what `GET /indexers` shows of them.
     pub const COOLDOWNS: &str = r#"SELECT "indexerId", "cooldownReason" AS "reason",
   GREATEST(0, floor(EXTRACT(EPOCH FROM ("cooldownUntil" - now())) * 1000))::bigint AS "remainingMs",
-  "cooldownUntil" AS "until", "cooldownFailureCount" AS "failureCount", "cooldownDetail" AS "detail"
+  "cooldownUntil" AS "until",
+  to_char("cooldownUntil" AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "untilIso",
+  "cooldownFailureCount" AS "failureCount", "cooldownDetail" AS "detail"
   FROM "indexer_throttle" WHERE "cooldownUntil" > now()"#;
 }
 
@@ -297,6 +299,8 @@ pub struct Cooldown {
     pub reason: Option<String>,
     pub remaining_ms: i64,
     pub until: String,
+    /// RFC 3339 UTC, fixed width: strings sort as instants.
+    pub until_iso: String,
     pub failure_count: Option<i64>,
     pub detail: Option<String>,
 }
@@ -330,12 +334,50 @@ pub fn filter_ready(indexers: &[IndexerRow]) -> R<Vec<IndexerRow>> {
     Ok(ready)
 }
 
+/// The first instant one of the indexers `ids` leaves its cooldown, among those cooling.
+pub fn earliest_end(cooling: &[Cooldown], ids: &[i64]) -> Option<String> {
+    cooling
+        .iter()
+        .filter(|c| ids.contains(&c.indexer_id))
+        .map(|c| &c.until_iso)
+        .min()
+        .cloned()
+}
+
 pub fn cooling(id: i64) -> bool {
     cooldowns().is_ok_and(|c| c.iter().any(|c| c.indexer_id == id))
 }
 
 #[cfg(test)]
 mod tests {
+    use super::{Cooldown, earliest_end};
+
+    fn cd(id: i64, until: &str) -> Cooldown {
+        Cooldown {
+            indexer_id: id,
+            reason: None,
+            remaining_ms: 0,
+            until: String::new(),
+            until_iso: until.into(),
+            failure_count: None,
+            detail: None,
+        }
+    }
+
+    #[test]
+    fn earliest_cooldown_end() {
+        let cooling = [
+            cd(1, "2026-11-22T10:15:00.000Z"),
+            cd(2, "2026-11-22T09:45:30.000Z"),
+            cd(3, "2026-11-22T08:00:00.000Z"),
+        ];
+        assert_eq!(
+            earliest_end(&cooling, &[1, 2]).as_deref(),
+            Some("2026-11-22T09:45:30.000Z")
+        );
+        assert_eq!(earliest_end(&cooling, &[9]), None);
+    }
+
     #[test]
     fn retry_after() {
         assert_eq!(super::parse_retry_after(" 120 ", 0), 120_000);

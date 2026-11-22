@@ -10,6 +10,10 @@ pub enum Error {
         key: &'static str,
         detail: Option<String>,
     },
+    /// Every enabled indexer is cooling until this RFC 3339 instant: 503.
+    AllIndexersCooling {
+        until: String,
+    },
     NotFound(String),
     /// An implementation this plugin does not run: 400 `bad_body`.
     UnknownImplementation(String),
@@ -73,6 +77,9 @@ impl fmt::Display for Error {
             | Error::Client(m)
             | Error::Unobtainable(m)
             | Error::Other(m) => f.write_str(m),
+            Error::AllIndexersCooling { until } => {
+                write!(f, "every indexer is cooling until {until}")
+            }
             Error::Source { message, .. } => f.write_str(message),
             Error::Host { message, .. } => f.write_str(message),
         }
