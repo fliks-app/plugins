@@ -1163,6 +1163,29 @@ pub mod history {
 }
 
 /// Keyed JSON state the cron jobs carry between runs.
+/// Ids of core rows (`public.*`, readable but never referenced by a foreign key) that no longer exist.
+pub mod core_refs {
+    use super::*;
+
+    pub fn prune() -> R<()> {
+        for sql in [
+            r#"DELETE FROM "download_history" h WHERE "mediaId" IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM public."media" WHERE "id" = h."mediaId")"#,
+            r#"UPDATE "download_history" h SET "itemId" = NULL WHERE "itemId" IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM public."items" WHERE "id" = h."itemId")"#,
+            r#"UPDATE "download_history" h SET "seasonId" = NULL WHERE "seasonId" IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM public."item_groups" WHERE "id" = h."seasonId")"#,
+            r#"UPDATE "blocklist" b SET "mediaId" = NULL WHERE "mediaId" IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM public."media" WHERE "id" = b."mediaId")"#,
+            r#"UPDATE "blocklist" b SET "userId" = NULL WHERE "userId" IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM public."users" WHERE "id" = b."userId")"#,
+        ] {
+            exec(sql, &[])?;
+        }
+        Ok(())
+    }
+}
+
 pub mod state {
     use super::*;
 
