@@ -1434,7 +1434,7 @@ dependencies = [
 
 [[package]]
 name = "fk-plugin-tvdb"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "fliks-plugin-sdk",
  "fliks-plugin-sdk-provider",
