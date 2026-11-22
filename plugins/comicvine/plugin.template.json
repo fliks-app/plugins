@@ -35,12 +35,12 @@
     },
     "limits": {
       "ratePerSec": 0.05,
-      "burst": 2
+      "burst": 10
     },
     "requestTimeoutMs": 15000,
     "snapshotTtlSecs": {
-      "work": 0,
-      "children": 0
+      "work": 86400,
+      "children": 86400
     },
     "imageHosts": [
       "comicvine.gamespot.com"

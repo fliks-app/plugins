@@ -65,7 +65,7 @@ const LOGIN: &str = r#"{"data":{"token":"tok"}}"#;
 const SEARCH: &str = include_str!("../tests/fixtures/search.json");
 const SERIES: &str = include_str!("../tests/fixtures/series_2000_extended.json");
 const EPISODES: &str = include_str!("../tests/fixtures/series_2000_episodes_default.json");
-const TRANSLATION: &str = include_str!("../tests/fixtures/episode_1_translation_fra.json");
+const EPISODES_FRA: &str = include_str!("../tests/fixtures/series_2000_episodes_fra.json");
 const MOVIE: &str = include_str!("../tests/fixtures/movie_1001_extended.json");
 const PERSON_7: &str = include_str!("../tests/fixtures/person_777_extended.json");
 const PERSON_5: &str = include_str!("../tests/fixtures/person_5555_extended.json");
@@ -327,7 +327,7 @@ fn series_with_episodes() -> Tvdb<Fake> {
         "/login" => ok(LOGIN),
         "/series/2000/episodes/default" => ok(EPISODES),
         "/series/2000/extended" => ok(SERIES),
-        "/episodes/1/translations/fra" => ok(TRANSLATION),
+        "/series/2000/episodes/default/fra" => ok(EPISODES_FRA),
         _ => (404, None, "{}".into()),
     })
 }
@@ -395,15 +395,25 @@ fn one_season_asks_for_it_and_keeps_only_its_episodes() {
 }
 
 #[test]
-fn a_failing_translation_keeps_the_episode_untranslated() {
+fn a_language_without_translation_keeps_the_default_names() {
     let t = tvdb(|p| match p {
         "/login" => ok(LOGIN),
         "/series/2000/episodes/default" => ok(EPISODES),
         "/series/2000/extended" => ok(SERIES),
-        _ => (500, None, "{}".into()),
+        _ => (404, None, "{}".into()),
     });
     let seasons = run(t.seasons(2000, None, "fra")).unwrap();
     assert_eq!(seasons[1]["episodes"][0]["title"], "Pilot");
+}
+
+#[test]
+fn a_failing_translated_read_fails_the_seasons() {
+    let t = tvdb(|p| match p {
+        "/login" => ok(LOGIN),
+        "/series/2000/extended" => ok(SERIES),
+        _ => (500, None, "{}".into()),
+    });
+    assert!(run(t.seasons(2000, None, "fra")).is_err());
 }
 
 #[test]
