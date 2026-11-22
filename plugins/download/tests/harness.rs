@@ -2765,6 +2765,71 @@ async fn an_import_core_refuses_is_failed_and_announced() {
     let _ = std::fs::remove_dir_all(base);
 }
 
+/// A completing torrent whose media was just deleted is dropped, so its hash can be grabbed again.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn an_import_for_a_deleted_media_is_dropped_not_failed() {
+    let Some((h, base, id, _qbit)) = import_fixture("deleted-media", true).await else {
+        return;
+    };
+    let mut db = plugin_db(&h).await;
+    let media = scalar_i64(
+        &mut db,
+        &format!(r#"SELECT "mediaId"::bigint FROM "download_history" WHERE "id" = {id}"#),
+    )
+    .await;
+    sqlx::query("DELETE FROM media WHERE id = $1")
+        .bind(media as i32)
+        .execute(&h.pool)
+        .await
+        .unwrap();
+    h.job("ImportCompleted", None).await.unwrap();
+    assert_eq!(
+        scalar_i64(
+            &mut db,
+            r#"SELECT count(*) FROM "download_history" WHERE "torrentHash" IS NOT NULL"#
+        )
+        .await,
+        0
+    );
+    h.finish().await;
+    let _ = std::fs::remove_dir_all(base);
+}
+
+/// The sweep clears ids of deleted core rows through the plugin role's `SELECT (id)` grant.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_stalled_cleanup_prunes_rows_of_deleted_core_ids() {
+    let Some(h) = Harness::start(setup()).await else {
+        return;
+    };
+    let kept = add_movie(&h, "Kept").await;
+    let mut db = plugin_db(&h).await;
+    exec(
+        &mut db,
+        format!(
+            r#"INSERT INTO "download_history" ("sourceTitle", "quality", "status", "mediaId")
+                 VALUES ('gone', 'HD', 'grabbed', 2147483000), ('kept', 'HD', 'grabbed', {kept});
+               INSERT INTO "blocklist" ("sourceTitle", "mediaId", "userId") VALUES ('b', 2147483000, 2147483000)"#
+        ),
+    )
+    .await;
+    h.job("CleanStalled", None).await.unwrap();
+    let left: Vec<String> =
+        sqlx::query_scalar(r#"SELECT "sourceTitle" FROM "download_history" ORDER BY 1"#)
+            .fetch_all(&mut db)
+            .await
+            .unwrap();
+    assert_eq!(left, ["kept"]);
+    assert_eq!(
+        scalar_i64(
+            &mut db,
+            r#"SELECT count(*) FROM "blocklist" WHERE "mediaId" IS NULL AND "userId" IS NULL"#
+        )
+        .await,
+        1
+    );
+    h.finish().await;
+}
+
 /// The second query of a split season runs out of time: the first one's releases are kept.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_later_query_that_lapses_keeps_the_earlier_results() {

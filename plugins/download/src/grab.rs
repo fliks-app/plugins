@@ -265,7 +265,7 @@ fn wire_new(ranked: &[Ranked], seen: &mut HashSet<String>) -> R<Vec<Value>> {
     let fresh: Vec<release_refs::Entry> = ranked
         .iter()
         .zip(&refs)
-        .filter(|(_, reference)| seen.insert((*reference).clone()))
+        .filter(|(_, reference)| !seen.contains(*reference))
         .map(|(r, reference)| release_refs::Entry {
             reference: reference.clone(),
             download_url: r.raw.download_url.clone(),
@@ -274,6 +274,7 @@ fn wire_new(ranked: &[Ranked], seen: &mut HashSet<String>) -> R<Vec<Value>> {
         })
         .collect();
     release_refs::save(&fresh)?;
+    seen.extend(fresh.into_iter().map(|e| e.reference));
     Ok(ranked
         .iter()
         .zip(&refs)
