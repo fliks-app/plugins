@@ -621,6 +621,13 @@ pub fn search_scored(
             target.title
         );
     }
+    let cooling_until = if ready.is_empty() {
+        let ids: Vec<i64> = all.iter().map(|ix| ix.id).collect();
+        let until = throttle::earliest_end(&throttle::cooldowns()?, &ids);
+        Some(until.unwrap_or_else(crate::util::now_iso))
+    } else {
+        None
+    };
     let mut streamer = stream.map(|to| Streamer {
         to,
         entries: vec![],
@@ -634,8 +641,8 @@ pub fn search_scored(
         }
         s.emit("search.state", None);
     }
-    if ready.is_empty() {
-        return Ok(vec![]);
+    if let Some(until) = cooling_until {
+        return Err(Error::AllIndexersCooling { until });
     }
 
     let mut raw: Vec<Release> = vec![];
@@ -1131,7 +1138,12 @@ fn try_auto_grab(target: &Target, client: &DownloadClientRow) -> R<()> {
         Err(Error::Grab { detail, .. }) => return skip(detail.unwrap_or_default()),
         r => r?,
     }
-    let scored = search_scored(target, Kind::Auto, None, None)?;
+    let scored = match search_scored(target, Kind::Auto, None, None) {
+        Err(Error::AllIndexersCooling { .. }) => {
+            return skip("every indexer is in cooldown".into());
+        }
+        r => r?,
+    };
     if scored.is_empty() {
         return skip("no releases returned by indexers".into());
     }
