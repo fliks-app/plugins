@@ -2,13 +2,13 @@
 resolver = "3"
 members = ["plugins/download", "plugins/notify", "plugins/openlibrary", "plugins/tmdb", "plugins/bnf", "plugins/googlebooks", "plugins/tvdb", "plugins/audible", "plugins/audnexus", "xtask", "crates/provider-common", "crates/direct-source", "plugins/gutenberg", "plugins/librivox", "plugins/metron", "plugins/comicvine", "plugins/thexem", "plugins/musicbrainz", "plugins/fanarttv", "plugins/music-lists", "plugins/lrclib"]
 
-# One tag of fliks-app/fliks for every plugin; raising it rebuilds them all.
+# One rev of fliks-app/fliks for every plugin (a tag once 7.2.0 is out); raising it rebuilds them all.
 [workspace.dependencies]
-fliks-plugin-sdk = { git = "https://github.com/fliks-app/fliks", tag = "v7.0.0" }
-fliks-plugin-sdk-provider = { git = "https://github.com/fliks-app/fliks", tag = "v7.0.0" }
-fliks-plugin-manifest = { git = "https://github.com/fliks-app/fliks", tag = "v7.0.0" }
-fliks_domain = { git = "https://github.com/fliks-app/fliks", tag = "v7.0.0" }
-fliks-plugin-route = { git = "https://github.com/fliks-app/fliks", tag = "v7.0.0" }
+fliks-plugin-sdk = { git = "https://github.com/fliks-app/fliks", rev = "e555b00f69802d8452de20d3b4ed9c6a3912aff9" }
+fliks-plugin-sdk-provider = { git = "https://github.com/fliks-app/fliks", rev = "e555b00f69802d8452de20d3b4ed9c6a3912aff9" }
+fliks-plugin-manifest = { git = "https://github.com/fliks-app/fliks", rev = "e555b00f69802d8452de20d3b4ed9c6a3912aff9" }
+fliks_domain = { git = "https://github.com/fliks-app/fliks", rev = "e555b00f69802d8452de20d3b4ed9c6a3912aff9" }
+fliks-plugin-route = { git = "https://github.com/fliks-app/fliks", rev = "e555b00f69802d8452de20d3b4ed9c6a3912aff9" }
 
 [profile.release]
 opt-level = "z"

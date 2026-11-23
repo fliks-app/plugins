@@ -72,7 +72,6 @@ fn add_book(key: &str, p: &Payload) -> Result<(), Fail> {
                 media: p.media_id,
                 family: Family::Audio,
                 language: book.language,
-                key: format!("librivox:{}", p.id),
                 label: "LibriVox",
             };
             flow::conclude(

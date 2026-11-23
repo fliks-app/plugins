@@ -280,7 +280,7 @@ fn template_matches_the_published_manifest() {
         ),
         (
             &json!(3),
-            &json!(">=7.1.1 <8.0.0"),
+            &json!(">=7.2.0 <8.0.0"),
             &json!("wasm"),
             &json!({ "internal": true })
         )
@@ -564,6 +564,8 @@ fn ranked(id: u64, rejections: u64) -> grab::Ranked {
                 params: vec![],
             })
             .collect(),
+        label: "best".into(),
+        lost_on: None,
     };
     grab::Ranked { raw, scored }
 }
