@@ -9,7 +9,7 @@
   "plugins/audible": "1.0.0",
   "plugins/audnexus": "1.0.1",
   "plugins/gutenberg": "1.0.0",
-  "plugins/librivox": "1.0.0",
+  "plugins/librivox": "1.1.0",
   "plugins/metron": "1.0.0",
   "plugins/comicvine": "1.0.1",
   "plugins/thexem": "1.0.0",

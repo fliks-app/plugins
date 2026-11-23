@@ -1372,7 +1372,7 @@ dependencies = [
 
 [[package]]
 name = "fk-plugin-librivox"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "direct-source",
  "fliks-plugin-sdk",
