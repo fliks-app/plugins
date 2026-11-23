@@ -353,6 +353,10 @@ pub fn to_wire(r: &Ranked, reference: &str) -> Value {
         })
         .collect();
     o.insert("rejections".into(), Value::Array(rejections));
+    o.insert("label".into(), json!(s.label));
+    if let Some(l) = &s.lost_on {
+        o.insert("lostOn".into(), json!(l));
+    }
     o.insert("sourceId".into(), json!(raw.indexer_id));
     o.insert("sourceName".into(), json!(raw.indexer_name));
     Value::Object(o)

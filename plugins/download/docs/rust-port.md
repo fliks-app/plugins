@@ -391,9 +391,8 @@ so a stranded `importing` row would stay forever. Fix at the source:
 - `markImporting(id)` also sets `"importLeaseUntil" = now() + interval '35 minutes'` (ingest 30 min plus margin).
 - Top of `poll()` and `start`: `UPDATE download_history SET status='grabbed', "importLeaseUntil"=NULL
   WHERE status='importing' AND ("importLeaseUntil" IS NULL OR "importLeaseUntil" < now())`.
-- `library.ingest` keeps its idempotency key `download-history:<id>`
-  [ts:src/grab/completion-poller.ts:555], so a re-armed row that core already ingested lands in
-  `alreadyPresent` and completes.
+- A re-armed row that core already ingested lands in `alreadyPresent` and completes (the host is
+  idempotent by the files, the call carries no key).
 - `HostCallError.outcome === 'unknown'` maps to host error code `ERR_TIMEOUT` (core never confirmed);
   `'rejected'` to every other code [ts:src/grab/completion-poller.ts:215-221]. The 31 min client-side
   timeout constant [ts:src/grab/completion-poller.ts:29] goes away; the host call deadline is 30 min.

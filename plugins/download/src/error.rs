@@ -50,17 +50,9 @@ impl Error {
     pub fn is_unknown_outcome(&self) -> bool {
         matches!(self, Error::Host { code, .. } if code == "ERR_TIMEOUT")
     }
-    /// The core judged the release itself unimportable (truncated, not a regular file, ...).
-    pub fn is_refused(&self) -> bool {
-        matches!(self, Error::Host { code, .. } if code == "ERR_REFUSED")
-    }
     /// A core row the call names does not exist (a media deleted meanwhile).
     pub fn is_not_found(&self) -> bool {
         matches!(self, Error::Host { code, .. } if code == "ERR_NOT_FOUND")
-    }
-    /// The host cannot place the files yet (a series' scene mapping is not known): ask again later.
-    pub fn is_retry_later(&self) -> bool {
-        matches!(self, Error::Host { code, .. } if code == "ERR_RETRY_LATER")
     }
 }
 

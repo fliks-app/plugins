@@ -2991,8 +2991,8 @@ async fn book_fixture_with(
 /// What the core's sweep does for `media`: for each of its wanted candidates, the System search of
 /// this provider, then a grab of the first release it offers.
 async fn core_sweep(h: &Harness, media: i64) {
+    use fliks_plugin_sdk::harness::fliks_server::acquisition::candidates;
     use fliks_plugin_sdk::harness::fliks_server::plugins::Principal;
-    use fliks_plugin_sdk::harness::fliks_server::plugins::acquisition::candidates;
     use fliks_plugin_sdk::harness::fliks_server::plugins::runtime::fliks::plugin::types::{
         CandidatesQuery, Family, WantDecision,
     };

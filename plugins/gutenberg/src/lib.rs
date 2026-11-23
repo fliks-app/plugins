@@ -60,7 +60,6 @@ fn add_book(p: &Payload) -> Result<(), Fail> {
         media: p.media_id,
         family: Family::Text,
         language: p.language.clone(),
-        key: format!("gutenberg:{}", p.id),
         label: "Project Gutenberg",
     };
     flow::conclude(

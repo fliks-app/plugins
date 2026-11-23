@@ -72,7 +72,6 @@ mod tests {
             media: 1,
             family: Family::Audio,
             language: None,
-            key: "k".into(),
             label: "L",
         }
     }

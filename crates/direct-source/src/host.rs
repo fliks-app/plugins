@@ -52,14 +52,12 @@ pub struct Ingest {
     pub media: u32,
     pub family: Family,
     pub language: Option<String>,
-    pub key: String,
     pub label: &'static str,
 }
 
 /// Hands `paths` (guest paths under `/data`) to the library and lets the host remove them.
 pub fn ingest(req: &Ingest, paths: Vec<String>) -> Result<(), Fail> {
     let r = host::library_ingest(&IngestRequest {
-        idempotency_key: req.key.clone(),
         media_id: req.media,
         family: req.family,
         language: req.language.clone(),
@@ -75,7 +73,16 @@ pub fn ingest(req: &Ingest, paths: Vec<String>) -> Result<(), Fail> {
         r.imported.len(),
         r.already_present.len()
     );
-    Ok(())
+    // A refusal must not reach `conclude`, which removes the directory.
+    if r.refused.is_empty() {
+        return Ok(());
+    }
+    let names: Vec<String> = r
+        .refused
+        .iter()
+        .map(|f| format!("{}: {}", f.file, f.reason))
+        .collect();
+    Err(Fail::Retry(format!("refused: {}", names.join("; "))))
 }
 
 /// Runs `payload` as the scheduled call `key` at once; a second call with the same key replaces it.

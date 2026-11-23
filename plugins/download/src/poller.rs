@@ -13,8 +13,8 @@ use crate::grab::{
 use crate::util::{decode_html_entities, js_number, now_ms, parse_date_ms};
 use fliks_plugin_sdk::bindings::fliks::plugin::types::{
     AcquisitionEvent, Failed, Family, GrabMethod, Imported, IngestRequest, IngestResult,
-    QueueEntry, QueueState, ResolveQuery, SkipReason, StalledRemoved, TransferMode, UnitRef,
-    WantDecision,
+    QueueEntry, QueueState, RefusalClass, ResolveQuery, SkipReason, StalledRemoved, TransferMode,
+    UnitRef, WantDecision,
 };
 use fliks_plugin_sdk::host;
 use regex::Regex;
@@ -537,34 +537,13 @@ pub fn poll() -> R<()> {
                 );
                 history::finish_import(row.id, "grabbed", Some(&e.to_string()))?;
             }
-            Err(e) if e.is_retry_later() => {
-                if history::retry_later_expired(row.id)? {
-                    let msg = format!(
-                        "Import failed: still refused after {} hours: {e}",
-                        history::RETRY_LATER_CAP_HOURS
-                    );
-                    error!("Import: FAILED for \"{}\": {msg}", row.source_title);
-                    history::finish_import(row.id, "import_failed", Some(&msg))?;
-                    publish_failed(&row, &msg);
-                } else {
-                    warn!("Import: \"{}\": {e}; will retry", row.source_title);
-                    history::finish_import(row.id, "grabbed", Some(&e.to_string()))?;
-                }
-            }
             Err(e) if e.is_not_found() && media_gone(&row) => {
                 info!(
                     "Import: \"{}\" — its media was deleted; dropped",
                     row.source_title
                 );
             }
-            Err(e) if e.is_refused() => {
-                error!("Import: REFUSED \"{}\": {e}", row.source_title);
-                auto_blocklist(&row, &format!("Auto-blocklist: import refused: {e}"));
-                history::finish_import(row.id, "failed", Some(&e.to_string()))?;
-                publish_failed(&row, &e.to_string());
-            }
             Err(e) => {
-                // Core's own state (a full disk, a missing root), never a verdict on the release.
                 error!("Import: FAILED for \"{}\": {e}", row.source_title);
                 history::finish_import(row.id, "import_failed", Some(&e.to_string()))?;
                 publish_failed(&row, &e.to_string());
@@ -812,14 +791,53 @@ enum Ingested {
     Imported,
     AlreadyPresent,
     NothingPlaced,
+    /// Something landed, some files were refused (`file: reason` list): a partial pack.
+    Partial(String),
+    /// Nothing landed and the release itself is at fault.
+    Refused(String),
+    /// Nothing landed and core's own state is at fault (a full disk, no free name).
+    Library(String),
+    /// Nothing landed, only for now (a series' scene mapping is not known yet).
+    Retry(String),
 }
 
 fn classify(r: &IngestResult) -> Ingested {
-    match (r.imported.is_empty(), r.already_present.is_empty()) {
-        (false, _) => Ingested::Imported,
-        (true, false) => Ingested::AlreadyPresent,
-        (true, true) => Ingested::NothingPlaced,
+    let placed = !r.imported.is_empty() || !r.already_present.is_empty();
+    let refused = |c| r.refused.iter().any(|f| f.class == c);
+    let names = || {
+        let all: Vec<String> = r
+            .refused
+            .iter()
+            .map(|f| format!("{}: {}", f.file, f.reason))
+            .collect();
+        all.join("; ")
+    };
+    match (placed, r.refused.is_empty()) {
+        (true, true) if r.imported.is_empty() => Ingested::AlreadyPresent,
+        (true, true) => Ingested::Imported,
+        (true, false) => Ingested::Partial(names()),
+        (false, true) => Ingested::NothingPlaced,
+        (false, false) if refused(RefusalClass::Release) => Ingested::Refused(names()),
+        (false, false) if refused(RefusalClass::Library) => Ingested::Library(names()),
+        (false, false) => Ingested::Retry(names()),
     }
+}
+
+/// A refused import is retried for `RETRY_LATER_CAP_HOURS`, then failed.
+fn retry_later(h: &HistoryRow, why: &str) -> R<()> {
+    if history::retry_later_expired(h.id)? {
+        let msg = format!(
+            "Import failed: still refused after {} hours: {why}",
+            history::RETRY_LATER_CAP_HOURS
+        );
+        error!("Import: FAILED for \"{}\": {msg}", h.source_title);
+        history::finish_import(h.id, "import_failed", Some(&msg))?;
+        publish_failed(h, &msg);
+    } else {
+        warn!("Import: \"{}\": {why}; will retry", h.source_title);
+        history::finish_import(h.id, "grabbed", Some(why))?;
+    }
+    Ok(())
 }
 
 fn exts_of(f: Family) -> &'static [&'static str] {
@@ -1028,23 +1046,15 @@ fn process_one(h: &HistoryRow, t: &Torrent, client: &DownloadClientRow) -> R<()>
         .as_deref()
         .and_then(family_of)
         .unwrap_or(plan[0].family);
-    let (mut files_placed, mut own_placed) = (0, false);
+    let (mut files_placed, mut own_placed, mut partial) = (0, false, None);
     for it in plan {
-        let (family, key) = (
-            it.family,
-            if it.family == base {
-                format!("download-history:{}", h.id)
-            } else {
-                format!("download-history:{}:{}", h.id, family_str(it.family))
-            },
-        );
+        let family = it.family;
         let result = match host::library_ingest(&IngestRequest {
-            idempotency_key: key,
             media_id: media as u32,
             family,
             language: it.language,
             paths: it.paths,
-            transfer: TransferMode::Copy,
+            transfer: TransferMode::Link,
             fallback_quality: None,
             source_label: h.source_title.clone(),
         }) {
@@ -1060,6 +1070,40 @@ fn process_one(h: &HistoryRow, t: &Torrent, client: &DownloadClientRow) -> R<()>
             Err(e) => return Err(e.into()),
         };
         let ingested = classify(&result);
+        let own = family == base;
+        match &ingested {
+            Ingested::Refused(m) if own => {
+                let msg = format!("Import refused: {m}");
+                error!("Import[{}]: {msg}", h.source_title);
+                auto_blocklist(h, &format!("Auto-blocklist: {msg}"));
+                history::finish_import(h.id, "failed", Some(&msg))?;
+                publish_failed(h, &msg);
+                return Ok(());
+            }
+            Ingested::Library(m) if own => {
+                let msg = format!("Import failed: {m}");
+                error!("Import[{}]: {msg}", h.source_title);
+                history::finish_import(h.id, "import_failed", Some(&msg))?;
+                publish_failed(h, &msg);
+                return Ok(());
+            }
+            Ingested::Retry(m) if own => return retry_later(h, m),
+            Ingested::Partial(m) if own => partial = Some(m.clone()),
+            Ingested::Refused(m) | Ingested::Library(m) | Ingested::Retry(m) => {
+                warn!(
+                    "Import[{}]: the {} ingest was refused: {m}",
+                    h.source_title,
+                    family_str(family)
+                );
+                continue;
+            }
+            Ingested::Partial(m) => warn!(
+                "Import[{}]: the {} ingest refused some files: {m}",
+                h.source_title,
+                family_str(family)
+            ),
+            _ => {}
+        }
         if family == Family::Image
             && let Some(item) = h.item_id
             && !result
@@ -1089,11 +1133,11 @@ fn process_one(h: &HistoryRow, t: &Torrent, client: &DownloadClientRow) -> R<()>
             );
             continue;
         }
-        if family == base {
+        if own {
             own_placed = true;
         }
         files_placed += result.imported.len();
-        let quality = match (family == base, result.imported.first()) {
+        let quality = match (own, result.imported.first()) {
             (false, Some(f)) => f.quality.clone(),
             _ => h.quality.clone(),
         };
@@ -1114,6 +1158,13 @@ fn process_one(h: &HistoryRow, t: &Torrent, client: &DownloadClientRow) -> R<()>
             "Import failed: no file could be placed under the library root for \"{}\"",
             t.name
         );
+        error!("Import[{}]: {msg}", h.source_title);
+        history::finish_import(h.id, "import_failed", Some(&msg))?;
+        publish_failed(h, &msg);
+        return Ok(());
+    }
+    if let Some(m) = partial {
+        let msg = format!("Import failed: some files were refused: {m}");
         error!("Import[{}]: {msg}", h.source_title);
         history::finish_import(h.id, "import_failed", Some(&msg))?;
         publish_failed(h, &msg);
@@ -1369,7 +1420,7 @@ pub fn clean_seeded() -> R<()> {
 mod tests {
     use super::*;
     use crate::error::Error;
-    use fliks_plugin_sdk::bindings::fliks::plugin::types::ImportedFile;
+    use fliks_plugin_sdk::bindings::fliks::plugin::types::{ImportedFile, Refusal};
     use serde_json::json;
 
     #[test]
@@ -1397,24 +1448,81 @@ mod tests {
             edition_id: 1,
             item_ids: vec![],
         };
-        let result = |imported: Vec<ImportedFile>, present: Vec<&str>| IngestResult {
-            imported,
-            already_present: present.into_iter().map(str::to_owned).collect(),
-            unit: None,
+        let result =
+            |imported: Vec<ImportedFile>, present: Vec<&str>, refused: Vec<Refusal>| IngestResult {
+                imported,
+                already_present: present.into_iter().map(str::to_owned).collect(),
+                refused,
+                unit: None,
+            };
+        let refusal = |class| Refusal {
+            file: "b.mkv".into(),
+            class,
+            reason: "why".into(),
         };
+        let class = |class| classify(&result(vec![], vec![], vec![refusal(class)]));
         assert_eq!(
-            classify(&result(vec![file.clone()], vec![])),
+            classify(&result(vec![file.clone()], vec![], vec![])),
             Ingested::Imported
         );
         assert_eq!(
-            classify(&result(vec![file], vec!["b.mkv"])),
+            classify(&result(vec![file.clone()], vec!["b.mkv"], vec![])),
             Ingested::Imported
         );
         assert_eq!(
-            classify(&result(vec![], vec!["b.mkv"])),
+            classify(&result(vec![], vec!["b.mkv"], vec![])),
             Ingested::AlreadyPresent
         );
-        assert_eq!(classify(&result(vec![], vec![])), Ingested::NothingPlaced);
+        assert_eq!(
+            classify(&result(vec![], vec![], vec![])),
+            Ingested::NothingPlaced
+        );
+        // A partial pack is never a completed or a blocklisted one, whatever the class.
+        for c in [
+            RefusalClass::Release,
+            RefusalClass::Library,
+            RefusalClass::Retry,
+        ] {
+            let partial = Ingested::Partial("b.mkv: why".into());
+            assert_eq!(
+                classify(&result(vec![file.clone()], vec![], vec![refusal(c)])),
+                partial
+            );
+            assert_eq!(
+                classify(&result(vec![], vec!["a.mkv"], vec![refusal(c)])),
+                partial
+            );
+        }
+        assert_eq!(
+            class(RefusalClass::Release),
+            Ingested::Refused("b.mkv: why".into())
+        );
+        assert_eq!(
+            class(RefusalClass::Library),
+            Ingested::Library("b.mkv: why".into())
+        );
+        assert_eq!(
+            class(RefusalClass::Retry),
+            Ingested::Retry("b.mkv: why".into())
+        );
+        let mixed = result(
+            vec![],
+            vec![],
+            vec![refusal(RefusalClass::Retry), refusal(RefusalClass::Library)],
+        );
+        assert_eq!(
+            classify(&mixed),
+            Ingested::Library("b.mkv: why; b.mkv: why".into())
+        );
+        let mixed = result(
+            vec![],
+            vec![],
+            vec![
+                refusal(RefusalClass::Library),
+                refusal(RefusalClass::Release),
+            ],
+        );
+        assert!(matches!(classify(&mixed), Ingested::Refused(_)));
     }
 
     #[test]
@@ -1427,8 +1535,6 @@ mod tests {
         };
         assert!(host("ERR_TIMEOUT").is_unknown_outcome());
         assert!(!host("ERR").is_unknown_outcome());
-        assert!(host("ERR_REFUSED").is_refused());
-        assert!(!host("ERR").is_refused());
         assert!(!host("ERR_DENIED").is_unknown_outcome());
         assert!(!Error::Other("ERR_TIMEOUT".into()).is_unknown_outcome());
     }
