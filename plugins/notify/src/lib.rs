@@ -80,13 +80,23 @@ mod manifest_tests {
         assert_eq!(t["id"], "fliks.notify");
         assert_eq!(t["pluginApi"], 3);
         assert_eq!(t["runtime"], "wasm");
-        assert_eq!(t["fliks"], ">=7.0.0 <8.0.0");
+        assert_eq!(t["fliks"], ">=7.2.0 <8.0.0");
         let m = fliks_plugin_sdk::manifest_check(
             include_str!("../plugin.template.json"),
             env!("CARGO_PKG_VERSION"),
         )
         .unwrap();
         assert_eq!((m.id.as_str(), m.plugin_api), ("fliks.notify", 3));
+    }
+
+    #[test]
+    fn scopes_cover_the_event_handler_and_the_config_it_reads() {
+        let scopes = template()["scopes"].to_string();
+        assert!(
+            scopes.contains("events:receive"),
+            "the host hands events only to holders"
+        );
+        assert!(scopes.contains("config:rw"));
     }
 
     #[test]
