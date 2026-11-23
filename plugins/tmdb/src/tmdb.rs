@@ -448,9 +448,10 @@ fn common_details(d: &Value, lang: &Resolved, tv: bool) -> Map<String, Value> {
         "posterUrl".into(),
         image(IMAGE_URL, "w500", d, "poster_path"),
     );
+    let primary = pick_fanart(get(d, "images"), get(d, "backdrop_path"));
     o.insert(
         "fanartUrl".into(),
-        image(IMAGE_URL, "original", d, "backdrop_path"),
+        image(IMAGE_URL, "original", &json!({ "path": primary }), "path"),
     );
     o.insert(
         "logoUrl".into(),
@@ -458,7 +459,7 @@ fn common_details(d: &Value, lang: &Resolved, tv: bool) -> Map<String, Value> {
     );
     o.insert(
         "additionalFanartUrls".into(),
-        pick_additional_fanarts(IMAGE_URL, get(d, "images"), get(d, "backdrop_path")).into(),
+        pick_additional_fanarts(IMAGE_URL, get(d, "images"), &primary).into(),
     );
     o.insert("rating".into(), or(d, "vote_average", json!(0)));
     o.insert("genres".into(), pluck(arr(d, "genres"), "name").into());
@@ -642,13 +643,44 @@ pub fn pick_logo(base: &str, images: &Value, prefer: &str) -> Value {
         })
 }
 
-/// The top backdrops other than the primary one, by vote.
+/// A backdrop with no language has no title baked into the picture.
+fn textless(b: &Value) -> bool {
+    text(b, "iso_639_1").is_none()
+}
+
+/// The primary backdrop: TMDB's default when it is textless, else the best-voted textless one, else the default.
+pub fn pick_fanart(images: &Value, default: &Value) -> Value {
+    let backdrops = arr(images, "backdrops");
+    if backdrops
+        .iter()
+        .any(|b| textless(b) && get(b, "file_path") == default)
+    {
+        return default.clone();
+    }
+    backdrops
+        .iter()
+        .filter(|b| textless(b) && text(b, "file_path").is_some())
+        .reduce(|best, b| {
+            if score(b, "vote_average") > score(best, "vote_average") {
+                b
+            } else {
+                best
+            }
+        })
+        .map_or_else(|| default.clone(), |b| get(b, "file_path").clone())
+}
+
+/// The top backdrops other than the primary one: textless first, then by vote.
 pub fn pick_additional_fanarts(base: &str, images: &Value, primary: &Value) -> Vec<Value> {
     let mut c: Vec<&Value> = arr(images, "backdrops")
         .iter()
         .filter(|b| text(b, "file_path").is_some() && get(b, "file_path") != primary)
         .collect();
-    c.sort_by(|a, b| score(b, "vote_average").total_cmp(&score(a, "vote_average")));
+    c.sort_by(|a, b| {
+        textless(b)
+            .cmp(&textless(a))
+            .then(score(b, "vote_average").total_cmp(&score(a, "vote_average")))
+    });
     c.into_iter()
         .take(MAX_ADDITIONAL_FANARTS)
         .map(|b| image(base, "original", b, "file_path"))

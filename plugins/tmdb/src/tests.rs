@@ -307,10 +307,12 @@ fn series_details_follow_the_server_mapping() {
     );
     assert_eq!(d["keywords"], json!(["keyword two"]));
     assert_eq!(d["alternativeTitles"], json!(["Sample Show (US)"]));
+    // No default backdrop: the one textless backdrop becomes the primary.
     assert_eq!(
-        d["additionalFanartUrls"],
-        json!(["https://image.tmdb.org/t/p/original/bb2.jpg"])
+        d["fanartUrl"],
+        "https://image.tmdb.org/t/p/original/bb2.jpg"
     );
+    assert_eq!(d["additionalFanartUrls"], json!([]));
     for k in ["inCinemas", "budget", "tmdbCollectionId"] {
         assert_eq!(d[k], Value::Null, "{k}");
     }
@@ -561,5 +563,53 @@ fn an_svg_logo_is_fetched_as_png() {
     assert_eq!(
         pick_logo("https://img", &images, "en"),
         json!("https://img/original/a.png")
+    );
+}
+
+fn backdrops() -> Value {
+    json!({"backdrops": [
+        {"file_path": "/titled.jpg", "vote_average": 9, "iso_639_1": "en"},
+        {"file_path": "/clean_low.jpg", "vote_average": 3},
+        {"file_path": "/clean_high.jpg", "vote_average": 6, "iso_639_1": null},
+        {"file_path": "/titled_fr.jpg", "vote_average": 8, "iso_639_1": "fr"},
+    ]})
+}
+
+#[test]
+fn the_default_backdrop_stays_primary_when_it_is_textless() {
+    assert_eq!(
+        pick_fanart(&backdrops(), &json!("/clean_low.jpg")),
+        json!("/clean_low.jpg")
+    );
+}
+
+#[test]
+fn a_titled_default_backdrop_gives_way_to_the_best_textless_one() {
+    assert_eq!(
+        pick_fanart(&backdrops(), &json!("/titled.jpg")),
+        json!("/clean_high.jpg")
+    );
+}
+
+#[test]
+fn the_default_backdrop_is_kept_when_none_is_textless() {
+    let images = json!({"backdrops": [{"file_path": "/titled.jpg", "iso_639_1": "en"}]});
+    assert_eq!(
+        pick_fanart(&images, &json!("/titled.jpg")),
+        json!("/titled.jpg")
+    );
+    assert_eq!(pick_fanart(&json!({}), &json!("/d.jpg")), json!("/d.jpg"));
+}
+
+#[test]
+fn additional_backdrops_list_the_textless_ones_first() {
+    let urls = pick_additional_fanarts("https://img", &backdrops(), &json!("/clean_high.jpg"));
+    assert_eq!(
+        urls,
+        vec![
+            json!("https://img/original/clean_low.jpg"),
+            json!("https://img/original/titled.jpg"),
+            json!("https://img/original/titled_fr.jpg"),
+        ]
     );
 }
