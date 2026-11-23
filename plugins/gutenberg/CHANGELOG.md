@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.0](https://github.com/fliks-app/plugins/compare/gutenberg-v1.0.0...gutenberg-v1.1.0) (2026-11-23)
+
+
+### Features
+
+* **download:** ingest contract v2: link transfer, per-file refusals, release labels ([#216](https://github.com/fliks-app/plugins/issues/216)) ([9120843](https://github.com/fliks-app/plugins/commit/91208438cf4ac9926570e4efd55c8ded01553d9f))
+
 ## [1.0.0](https://github.com/fliks-app/plugins/compare/gutenberg-v0.2.1...gutenberg-v1.0.0) (2026-11-19)
 
 
