@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.0](https://github.com/fliks-app/plugins/compare/tmdb-v1.0.1...tmdb-v1.1.0) (2026-11-23)
+
+
+### Features
+
+* **tmdb:** prefer a textless backdrop for the fanart ([#221](https://github.com/fliks-app/plugins/issues/221)) ([774f01d](https://github.com/fliks-app/plugins/commit/774f01d32b51978e6507d4825b3458381853581d))
+
 ## [1.0.1](https://github.com/fliks-app/plugins/compare/tmdb-v1.0.0...tmdb-v1.0.1) (2026-11-22)
 
 
