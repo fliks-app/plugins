@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.2.0](https://github.com/fliks-app/plugins/compare/download-v3.1.4...download-v3.2.0) (2026-11-23)
+
+
+### Features
+
+* **download:** ingest contract v2: link transfer, per-file refusals, release labels ([#216](https://github.com/fliks-app/plugins/issues/216)) ([9120843](https://github.com/fliks-app/plugins/commit/91208438cf4ac9926570e4efd55c8ded01553d9f))
+
+
+### Bug Fixes
+
+* **download:** answer a search with 503 and cooldownUntil when every indexer cools ([#214](https://github.com/fliks-app/plugins/issues/214)) ([9980e25](https://github.com/fliks-app/plugins/commit/9980e25e0619ab8b7cefbaf462d85c7388563bae))
+
 ## [3.1.4](https://github.com/fliks-app/plugins/compare/download-v3.1.3...download-v3.1.4) (2026-11-22)
 
 
