@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.1](https://github.com/fliks-app/plugins/compare/notify-v3.0.0...notify-v3.0.1) (2026-11-23)
+
+
+### Bug Fixes
+
+* **notify:** declare events:receive, the grant the 7.2.0 host needs to deliver events ([#219](https://github.com/fliks-app/plugins/issues/219)) ([ad1115c](https://github.com/fliks-app/plugins/commit/ad1115c3628c8cb7aa6c60f606887fab81b15fcc))
+
 ## [3.0.0](https://github.com/fliks-app/plugins/compare/notify-v2.0.1...notify-v3.0.0) (2026-11-19)
 
 
