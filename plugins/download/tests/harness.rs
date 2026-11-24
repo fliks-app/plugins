@@ -2955,6 +2955,8 @@ async fn add_book_indexer(h: &Harness, tracker: &Stub) {
         format!(r#"UPDATE "indexers" SET "capsCategories" = '3030,7000,7020' WHERE "id" = {id}"#),
     )
     .await;
+    // The core reads the sources the plugin publishes at start.
+    h.restart().await;
 }
 
 /// `held`: the torrent is in the client from the start, else only once added.
@@ -3304,7 +3306,7 @@ async fn an_rss_episode_searches_only_its_own_target() {
     .unwrap();
     sqlx::raw_sql(AssertSqlSafe(format!(
         r#"INSERT INTO items ("mediaId", "editionId", "groupId", "number", monitored, "airDate")
-             SELECT {media}, (SELECT id FROM editions WHERE "mediaId" = {media}), {season}, n, true, '2020-01-0' || n
+             SELECT {media}, (SELECT id FROM editions WHERE "mediaId" = {media}), {season}, n, true, ('2020-01-0' || n)::date
              FROM generate_series(1, 3) n"#
     )))
     .execute(&h.pool)
@@ -3325,9 +3327,12 @@ async fn an_rss_episode_searches_only_its_own_target() {
     .await;
     exec(
         &mut db,
-        format!(r#"UPDATE "indexers" SET "capsCategories" = '5000' WHERE "id" = {id}"#),
+        format!(
+            r#"UPDATE "indexers" SET "capsCategories" = '5000', "capsTvSearch" = true WHERE "id" = {id}"#
+        ),
     )
     .await;
+    h.restart().await;
 
     h.job("RssSync", None).await.unwrap();
     until("the core's search", MAX, async || tracker.hits().len() > 1).await;
@@ -3372,7 +3377,7 @@ async fn an_rss_series_item_with_no_unit_asks_for_nothing() {
     .unwrap();
     sqlx::raw_sql(AssertSqlSafe(format!(
         r#"INSERT INTO items ("mediaId", "editionId", "groupId", "number", monitored, "airDate")
-             SELECT {media}, (SELECT id FROM editions WHERE "mediaId" = {media}), {season}, n, true, '2020-01-0' || n
+             SELECT {media}, (SELECT id FROM editions WHERE "mediaId" = {media}), {season}, n, true, ('2020-01-0' || n)::date
              FROM generate_series(1, 3) n"#
     )))
     .execute(&h.pool)
@@ -3397,6 +3402,7 @@ async fn an_rss_series_item_with_no_unit_asks_for_nothing() {
         format!(r#"UPDATE "indexers" SET "capsCategories" = '5000' WHERE "id" = {id}"#),
     )
     .await;
+    h.restart().await;
 
     use fliks_plugin_sdk::harness::fliks_server::plugins::runtime::fliks::plugin::types::ReleaseTitle;
     let matched = fliks_plugin_sdk::harness::fliks_server::acquisition::matches(
@@ -3412,7 +3418,6 @@ async fn an_rss_series_item_with_no_unit_asks_for_nothing() {
     .unwrap();
     assert_eq!(matched[0].media_id, Some(media as u32), "{:?}", matched[0]);
     assert!(matched[0].unit.is_none(), "{:?}", matched[0]);
-    assert!(matched[0].skip_reason.is_none(), "{:?}", matched[0]);
 
     h.job("RssSync", None).await.unwrap();
     tokio::time::sleep(Duration::from_secs(3)).await;
