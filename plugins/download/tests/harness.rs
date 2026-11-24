@@ -3332,22 +3332,22 @@ async fn an_rss_episode_searches_only_its_own_target() {
     h.job("RssSync", None).await.unwrap();
     until("the core's search", MAX, async || tracker.hits().len() > 1).await;
     tokio::time::sleep(Duration::from_secs(3)).await;
+    let param = |t: &str, k: &str| {
+        t.split(['?', '&'])
+            .find_map(|p| p.strip_prefix(k).and_then(|v| v.strip_prefix('=')))
+            .map(str::to_owned)
+    };
     let searches: Vec<String> = tracker
         .hits()
         .into_iter()
         .skip(1)
-        .map(|h| h.target.to_uppercase())
+        .map(|h| h.target)
         .collect();
-    assert!(
-        searches.iter().any(|t| t.contains("S01E02")),
-        "{searches:?}"
-    );
-    assert!(
-        !searches
-            .iter()
-            .any(|t| t.contains("S01E01") || t.contains("S01E03")),
-        "{searches:?}"
-    );
+    assert!(!searches.is_empty());
+    for t in &searches {
+        assert_eq!(param(t, "season").as_deref(), Some("1"), "{searches:?}");
+        assert_eq!(param(t, "ep").as_deref(), Some("2"), "{searches:?}");
+    }
     h.finish().await;
     let _ = std::fs::remove_dir_all(dl);
 }
@@ -3397,6 +3397,22 @@ async fn an_rss_series_item_with_no_unit_asks_for_nothing() {
         format!(r#"UPDATE "indexers" SET "capsCategories" = '5000' WHERE "id" = {id}"#),
     )
     .await;
+
+    use fliks_plugin_sdk::harness::fliks_server::plugins::runtime::fliks::plugin::types::ReleaseTitle;
+    let matched = fliks_plugin_sdk::harness::fliks_server::acquisition::matches(
+        &h.st,
+        vec![ReleaseTitle {
+            id: "0".into(),
+            title: release.into(),
+            publish_date: chrono::Utc::now().to_rfc3339(),
+        }],
+        None,
+    )
+    .await
+    .unwrap();
+    assert_eq!(matched[0].media_id, Some(media as u32), "{:?}", matched[0]);
+    assert!(matched[0].unit.is_none(), "{:?}", matched[0]);
+    assert!(matched[0].skip_reason.is_none(), "{:?}", matched[0]);
 
     h.job("RssSync", None).await.unwrap();
     tokio::time::sleep(Duration::from_secs(3)).await;

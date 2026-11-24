@@ -1315,22 +1315,36 @@ impl Asks {
     }
 
     /// Asks the core to sweep them, a page at a time; a refused page is retried ask by ask so one
-    /// bad feed item blocks no other.
-    pub fn send_with(&self, mut call: impl FnMut(&[AcquisitionAsk]) -> R<()>) -> R<()> {
+    /// bad feed item blocks no other, until `expired`.
+    pub fn send_with(
+        &self,
+        mut call: impl FnMut(&[AcquisitionAsk]) -> R<()>,
+        expired: impl Fn() -> bool,
+    ) -> R<()> {
         let refused = |e: &Error| matches!(e, Error::Host { code, .. } if code == "ERR_VALIDATION");
         for chunk in self.list.chunks(REQUEST_PAGE) {
             match call(chunk) {
                 Err(e) if refused(&e) => {
                     for ask in chunk {
+                        if expired() {
+                            warn!(
+                                "RssSync: out of time, the refused page's other asks are dropped"
+                            );
+                            break;
+                        }
                         match call(std::slice::from_ref(ask)) {
                             Err(e) if refused(&e) => {
-                                warn!("RssSync: ask for #{} refused — {e}", ask.media_id)
+                                warn!("RssSync: ask for #{} refused: {e}", ask.media_id)
                             }
                             r => r?,
                         }
                     }
                 }
-                r => r?,
+                Err(e) => {
+                    warn!("RssSync: asking the core failed, the remaining asks are dropped: {e}");
+                    return Err(e);
+                }
+                Ok(()) => {}
             }
         }
         Ok(())
@@ -1342,8 +1356,17 @@ impl Asks {
 pub fn rss_sync() -> R<()> {
     let mut asks = Asks::default();
     let run = collect_feed(&mut asks);
-    let sent = asks.send_with(|c| Ok(host::acquisition_request(c)?));
-    run.and(sent)
+    let sent = asks.send_with(
+        |c| Ok(host::acquisition_request(c)?),
+        || net::budget().expired(),
+    );
+    match (run, sent) {
+        (Err(run), Err(sent)) => {
+            warn!("RssSync: the feeds failed and so did asking the core: {sent}");
+            Err(run)
+        }
+        (run, sent) => run.and(sent),
+    }
 }
 
 fn collect_feed(asks: &mut Asks) -> R<()> {

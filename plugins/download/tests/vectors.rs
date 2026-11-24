@@ -1023,22 +1023,25 @@ fn a_refused_ask_page_is_retried_one_by_one() {
         asks.add("Title", &m);
     }
     let mut calls: Vec<Vec<u32>> = vec![];
-    let r = asks.send_with(|c| {
-        let ids: Vec<u32> = c.iter().map(|a| a.media_id).collect();
-        calls.push(ids.clone());
-        if ids.contains(&2) {
-            return Err(Error::Host {
-                code: "ERR_VALIDATION".into(),
-                message: "bad unit".into(),
-            });
-        }
-        Ok(())
-    });
+    let r = asks.send_with(
+        |c| {
+            let ids: Vec<u32> = c.iter().map(|a| a.media_id).collect();
+            calls.push(ids.clone());
+            if ids.contains(&2) {
+                return Err(Error::Host {
+                    code: "ERR_VALIDATION".into(),
+                    message: "bad unit".into(),
+                });
+            }
+            Ok(())
+        },
+        || false,
+    );
     assert!(r.is_ok());
     assert_eq!(calls, [vec![1, 2, 3], vec![1], vec![2], vec![3]]);
     assert!(
         grab::Asks::default()
-            .send_with(|_| panic!("empty call"))
+            .send_with(|_| panic!("empty call"), || false)
             .is_ok()
     );
 }
