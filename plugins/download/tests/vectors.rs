@@ -1036,5 +1036,9 @@ fn a_refused_ask_page_is_retried_one_by_one() {
     });
     assert!(r.is_ok());
     assert_eq!(calls, [vec![1, 2, 3], vec![1], vec![2], vec![3]]);
-    assert!(grab::Asks::default().send_with(|_| panic!("empty call")).is_ok());
+    assert!(
+        grab::Asks::default()
+            .send_with(|_| panic!("empty call"))
+            .is_ok()
+    );
 }
