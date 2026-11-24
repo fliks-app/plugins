@@ -1508,7 +1508,7 @@ dependencies = [
 [[package]]
 name = "fliks-plugin-manifest"
 version = "7.2.0"
-source = "git+https://github.com/fliks-app/fliks?rev=5fcd6fd0394ba4b55ca025f4ec5e030eb19fc21f#5fcd6fd0394ba4b55ca025f4ec5e030eb19fc21f"
+source = "git+https://github.com/fliks-app/fliks?rev=16276ccc32e4902122038386d8de52352978923d#16276ccc32e4902122038386d8de52352978923d"
 dependencies = [
  "base64 0.23.1",
  "ed25519-dalek 3.0.0",
@@ -1525,7 +1525,7 @@ dependencies = [
 [[package]]
 name = "fliks-plugin-route"
 version = "0.1.0"
-source = "git+https://github.com/fliks-app/fliks?rev=5fcd6fd0394ba4b55ca025f4ec5e030eb19fc21f#5fcd6fd0394ba4b55ca025f4ec5e030eb19fc21f"
+source = "git+https://github.com/fliks-app/fliks?rev=16276ccc32e4902122038386d8de52352978923d#16276ccc32e4902122038386d8de52352978923d"
 dependencies = [
  "fancy-regex",
 ]
@@ -1533,7 +1533,7 @@ dependencies = [
 [[package]]
 name = "fliks-plugin-sdk"
 version = "0.1.0"
-source = "git+https://github.com/fliks-app/fliks?rev=5fcd6fd0394ba4b55ca025f4ec5e030eb19fc21f#5fcd6fd0394ba4b55ca025f4ec5e030eb19fc21f"
+source = "git+https://github.com/fliks-app/fliks?rev=16276ccc32e4902122038386d8de52352978923d#16276ccc32e4902122038386d8de52352978923d"
 dependencies = [
  "axum",
  "base64 0.23.1",
@@ -1557,7 +1557,7 @@ dependencies = [
 [[package]]
 name = "fliks-plugin-sdk-provider"
 version = "0.1.0"
-source = "git+https://github.com/fliks-app/fliks?rev=5fcd6fd0394ba4b55ca025f4ec5e030eb19fc21f#5fcd6fd0394ba4b55ca025f4ec5e030eb19fc21f"
+source = "git+https://github.com/fliks-app/fliks?rev=16276ccc32e4902122038386d8de52352978923d#16276ccc32e4902122038386d8de52352978923d"
 dependencies = [
  "fliks-plugin-sdk",
  "wasip2",
@@ -1567,7 +1567,7 @@ dependencies = [
 [[package]]
 name = "fliks-server"
 version = "7.2.0"
-source = "git+https://github.com/fliks-app/fliks?rev=5fcd6fd0394ba4b55ca025f4ec5e030eb19fc21f#5fcd6fd0394ba4b55ca025f4ec5e030eb19fc21f"
+source = "git+https://github.com/fliks-app/fliks?rev=16276ccc32e4902122038386d8de52352978923d#16276ccc32e4902122038386d8de52352978923d"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -1642,7 +1642,7 @@ dependencies = [
 [[package]]
 name = "fliks_domain"
 version = "7.2.0"
-source = "git+https://github.com/fliks-app/fliks?rev=5fcd6fd0394ba4b55ca025f4ec5e030eb19fc21f#5fcd6fd0394ba4b55ca025f4ec5e030eb19fc21f"
+source = "git+https://github.com/fliks-app/fliks?rev=16276ccc32e4902122038386d8de52352978923d#16276ccc32e4902122038386d8de52352978923d"
 dependencies = [
  "chrono",
  "encoding_rs",
@@ -2418,7 +2418,7 @@ dependencies = [
 [[package]]
 name = "kepub"
 version = "7.2.0"
-source = "git+https://github.com/fliks-app/fliks?rev=5fcd6fd0394ba4b55ca025f4ec5e030eb19fc21f#5fcd6fd0394ba4b55ca025f4ec5e030eb19fc21f"
+source = "git+https://github.com/fliks-app/fliks?rev=16276ccc32e4902122038386d8de52352978923d#16276ccc32e4902122038386d8de52352978923d"
 dependencies = [
  "encoding_rs",
  "percent-encoding",

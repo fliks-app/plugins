@@ -31,15 +31,6 @@ fn logged(h: &Harness, text: &str) -> bool {
     h.logs().iter().any(|l| l.contains(text))
 }
 
-/// Polls `cond` until it holds, for at most `MAX`.
-async fn until(what: &str, cond: impl Fn() -> bool) {
-    let end = Instant::now() + MAX;
-    while !cond() {
-        assert!(Instant::now() < end, "timed out waiting for {what}");
-        tokio::time::sleep(Duration::from_millis(100)).await;
-    }
-}
-
 /// A superuser session inside the plugin schema.
 async fn plugin_db(h: &Harness) -> PgConnection {
     let mut c = PgConnection::connect_with(&h.pool.connect_options())
@@ -3164,7 +3155,7 @@ async fn the_rss_sweep_grabs_a_book_through_its_targets() {
         "{:?}",
         hits[0].target
     );
-    until("the core's grab", || {
+    until("the core's grab", MAX, async || {
         !qbit.hits_to("/api/v2/torrents/add").is_empty()
     })
     .await;
@@ -3210,7 +3201,7 @@ async fn a_download_in_flight_at_another_provider_blocks_the_rss_grab() {
         .await
         .unwrap();
     h.job("RssSync", None).await.unwrap();
-    until("the core's grab", || {
+    until("the core's grab", MAX, async || {
         !qbit.hits_to("/api/v2/torrents/add").is_empty()
     })
     .await;
@@ -3235,7 +3226,7 @@ async fn an_rss_item_during_a_sweep_claim_is_requested_not_lost() {
     tokio::time::sleep(Duration::from_secs(2)).await;
     assert!(qbit.hits_to("/api/v2/torrents/add").is_empty());
     drop(claim);
-    until("the core's grab", || {
+    until("the core's grab", MAX, async || {
         !qbit.hits_to("/api/v2/torrents/add").is_empty()
     })
     .await;
@@ -3339,7 +3330,7 @@ async fn an_rss_episode_searches_only_its_own_target() {
     .await;
 
     h.job("RssSync", None).await.unwrap();
-    until("the core's search", || tracker.hits().len() > 1).await;
+    until("the core's search", MAX, async || tracker.hits().len() > 1).await;
     tokio::time::sleep(Duration::from_secs(3)).await;
     let searches: Vec<String> = tracker
         .hits()

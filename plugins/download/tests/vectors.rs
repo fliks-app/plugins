@@ -985,7 +985,7 @@ fn an_rss_run_asks_each_unit_once_and_nothing_the_host_skips() {
         unit,
         coverage: None,
     };
-    let ep = |item: f64| Some(unit(Some(1), Some(item)));
+    let ep = |item: f64| Some(unit(Some(1), Some(item)).ref_);
     let mut asks = grab::Asks::default();
     asks.add("Show S01E01", &m(1, ep(1.0), None));
     asks.add("Show S01E01 again", &m(1, ep(1.0), None));
@@ -1005,4 +1005,36 @@ fn an_rss_run_asks_each_unit_once_and_nothing_the_host_skips() {
     books.add("Dune", &m(4, None, None));
     let families: Vec<Option<Family>> = books.list().iter().map(|a| a.family).collect();
     assert_eq!(families, [Some(Family::Text), Some(Family::Audio), None]);
+}
+
+#[test]
+fn a_refused_ask_page_is_retried_one_by_one() {
+    use fk_plugin_download::error::Error;
+    let mut asks = grab::Asks::default();
+    for media in 1..=3 {
+        let m = grab::Match {
+            skip: None,
+            media_id: media,
+            season_number: None,
+            episode_number: None,
+            unit: None,
+            coverage: None,
+        };
+        asks.add("Title", &m);
+    }
+    let mut calls: Vec<Vec<u32>> = vec![];
+    let r = asks.send_with(|c| {
+        let ids: Vec<u32> = c.iter().map(|a| a.media_id).collect();
+        calls.push(ids.clone());
+        if ids.contains(&2) {
+            return Err(Error::Host {
+                code: "ERR_VALIDATION".into(),
+                message: "bad unit".into(),
+            });
+        }
+        Ok(())
+    });
+    assert!(r.is_ok());
+    assert_eq!(calls, [vec![1, 2, 3], vec![1], vec![2], vec![3]]);
+    assert!(grab::Asks::default().send_with(|_| panic!("empty call")).is_ok());
 }

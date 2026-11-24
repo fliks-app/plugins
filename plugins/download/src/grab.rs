@@ -1314,10 +1314,24 @@ impl Asks {
         &self.list
     }
 
-    /// Asks the core to sweep them, a page at a time; the claim, ranking and grab are the core's.
-    fn send(&self) -> R<()> {
+    /// Asks the core to sweep them, a page at a time; a refused page is retried ask by ask so one
+    /// bad feed item blocks no other.
+    pub fn send_with(&self, mut call: impl FnMut(&[AcquisitionAsk]) -> R<()>) -> R<()> {
+        let refused = |e: &Error| matches!(e, Error::Host { code, .. } if code == "ERR_VALIDATION");
         for chunk in self.list.chunks(REQUEST_PAGE) {
-            host::acquisition_request(chunk)?;
+            match call(chunk) {
+                Err(e) if refused(&e) => {
+                    for ask in chunk {
+                        match call(std::slice::from_ref(ask)) {
+                            Err(e) if refused(&e) => {
+                                warn!("RssSync: ask for #{} refused — {e}", ask.media_id)
+                            }
+                            r => r?,
+                        }
+                    }
+                }
+                r => r?,
+            }
         }
         Ok(())
     }
@@ -1328,27 +1342,8 @@ impl Asks {
 pub fn rss_sync() -> R<()> {
     let mut asks = Asks::default();
     let run = collect_feed(&mut asks);
-    let sent = asks.send();
+    let sent = asks.send_with(|c| Ok(host::acquisition_request(c)?));
     run.and(sent)
-}
-
-/// Whether the media has a whole-work target (a movie, a book): a feed item naming no unit asks for
-/// nothing else, never for the episodes or issues of a series or a comic. Cached per run.
-fn whole_work(media_id: u32, seen: &mut HashMap<u32, bool>) -> R<bool> {
-    if let Some(known) = seen.get(&media_id) {
-        return Ok(*known);
-    }
-    let page = host::acquisition_candidates(&CandidatesQuery {
-        kind: None,
-        family: None,
-        media_ids: Some(vec![media_id]),
-        available_on: today(),
-        limit: 500,
-        cursor: None,
-    })?;
-    let whole = page.items.iter().any(|t| numbers(t) == (None, None));
-    seen.insert(media_id, whole);
-    Ok(whole)
 }
 
 fn collect_feed(asks: &mut Asks) -> R<()> {
@@ -1368,7 +1363,6 @@ fn collect_feed(asks: &mut Asks) -> R<()> {
         return Ok(());
     }
     let out_of_time = || net::budget().expired();
-    let mut whole = HashMap::new();
     for ix in &ready {
         if out_of_time() {
             info!("RssSync: out of time, the next tick re-reads the feeds");
@@ -1398,9 +1392,6 @@ fn collect_feed(asks: &mut Asks) -> R<()> {
             if out_of_time() {
                 info!("RssSync: out of time, the next tick re-reads the feeds");
                 return Ok(());
-            }
-            if m.unit.is_none() && !whole_work(m.media_id, &mut whole)? {
-                continue;
             }
             asks.add(&release.title, m);
         }

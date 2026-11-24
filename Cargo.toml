@@ -2,13 +2,13 @@
 resolver = "3"
 members = ["plugins/download", "plugins/notify", "plugins/openlibrary", "plugins/tmdb", "plugins/bnf", "plugins/googlebooks", "plugins/tvdb", "plugins/audible", "plugins/audnexus", "xtask", "crates/provider-common", "crates/direct-source", "plugins/gutenberg", "plugins/librivox", "plugins/metron", "plugins/comicvine", "plugins/thexem", "plugins/musicbrainz", "plugins/fanarttv", "plugins/music-lists", "plugins/lrclib"]
 
-# One core tag of fliks-app/fliks for every plugin; raising it rebuilds them all.
+# One core revision of fliks-app/fliks for every plugin (fliks#3029 head, re-pin to v7.2.1); raising it rebuilds them all.
 [workspace.dependencies]
-fliks-plugin-sdk = { git = "https://github.com/fliks-app/fliks", rev = "5fcd6fd0394ba4b55ca025f4ec5e030eb19fc21f" }
-fliks-plugin-sdk-provider = { git = "https://github.com/fliks-app/fliks", rev = "5fcd6fd0394ba4b55ca025f4ec5e030eb19fc21f" }
-fliks-plugin-manifest = { git = "https://github.com/fliks-app/fliks", rev = "5fcd6fd0394ba4b55ca025f4ec5e030eb19fc21f" }
-fliks_domain = { git = "https://github.com/fliks-app/fliks", rev = "5fcd6fd0394ba4b55ca025f4ec5e030eb19fc21f" }
-fliks-plugin-route = { git = "https://github.com/fliks-app/fliks", rev = "5fcd6fd0394ba4b55ca025f4ec5e030eb19fc21f" }
+fliks-plugin-sdk = { git = "https://github.com/fliks-app/fliks", rev = "16276ccc32e4902122038386d8de52352978923d" }
+fliks-plugin-sdk-provider = { git = "https://github.com/fliks-app/fliks", rev = "16276ccc32e4902122038386d8de52352978923d" }
+fliks-plugin-manifest = { git = "https://github.com/fliks-app/fliks", rev = "16276ccc32e4902122038386d8de52352978923d" }
+fliks_domain = { git = "https://github.com/fliks-app/fliks", rev = "16276ccc32e4902122038386d8de52352978923d" }
+fliks-plugin-route = { git = "https://github.com/fliks-app/fliks", rev = "16276ccc32e4902122038386d8de52352978923d" }
 
 [profile.release]
 opt-level = "z"
