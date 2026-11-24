@@ -4,11 +4,11 @@ members = ["plugins/download", "plugins/notify", "plugins/openlibrary", "plugins
 
 # One core tag of fliks-app/fliks for every plugin; raising it rebuilds them all.
 [workspace.dependencies]
-fliks-plugin-sdk = { git = "https://github.com/fliks-app/fliks", tag = "v7.2.0" }
-fliks-plugin-sdk-provider = { git = "https://github.com/fliks-app/fliks", tag = "v7.2.0" }
-fliks-plugin-manifest = { git = "https://github.com/fliks-app/fliks", tag = "v7.2.0" }
-fliks_domain = { git = "https://github.com/fliks-app/fliks", tag = "v7.2.0" }
-fliks-plugin-route = { git = "https://github.com/fliks-app/fliks", tag = "v7.2.0" }
+fliks-plugin-sdk = { git = "https://github.com/fliks-app/fliks", rev = "5fcd6fd0394ba4b55ca025f4ec5e030eb19fc21f" }
+fliks-plugin-sdk-provider = { git = "https://github.com/fliks-app/fliks", rev = "5fcd6fd0394ba4b55ca025f4ec5e030eb19fc21f" }
+fliks-plugin-manifest = { git = "https://github.com/fliks-app/fliks", rev = "5fcd6fd0394ba4b55ca025f4ec5e030eb19fc21f" }
+fliks_domain = { git = "https://github.com/fliks-app/fliks", rev = "5fcd6fd0394ba4b55ca025f4ec5e030eb19fc21f" }
+fliks-plugin-route = { git = "https://github.com/fliks-app/fliks", rev = "5fcd6fd0394ba4b55ca025f4ec5e030eb19fc21f" }
 
 [profile.release]
 opt-level = "z"

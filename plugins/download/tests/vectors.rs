@@ -5,8 +5,8 @@ use fk_plugin_download::db::{HistoryRow, IndexerRow, MIGRATIONS};
 use fk_plugin_download::{client, grab, poller, routes, throttle, torznab, util};
 use fliks_plugin_route::{Matcher, ParamValue};
 use fliks_plugin_sdk::bindings::fliks::plugin::types::{
-    Creator, ExternalId, Family, Rejection, ReleaseCoverage, ReleaseLanguage, ScoredRelease, Span,
-    Target, Unit, UnitRef, Want, WantDecision,
+    Creator, ExternalId, Family, Rejection, ReleaseCoverage, ReleaseLanguage, ScoredRelease,
+    SkipReason, Span, Target, Unit, UnitRef, Want, WantDecision,
 };
 use serde_json::{Map, Value, json};
 use std::collections::HashSet;
@@ -280,7 +280,7 @@ fn template_matches_the_published_manifest() {
         ),
         (
             &json!(3),
-            &json!(">=7.2.0 <8.0.0"),
+            &json!(">=7.2.1 <8.0.0"),
             &json!("wasm"),
             &json!({ "internal": true })
         )
@@ -935,9 +935,6 @@ fn a_track_want_is_the_album_work_not_an_episode() {
     assert_eq!(grab::piece(&t), Piece::Work);
     t.scope = vec![unit(Some(0), Some(1.0))];
     assert_eq!(grab::piece(&t), Piece::Work);
-    let mut searched = grab::Searched::default();
-    assert!(searched.first(&track(1, 1.0)));
-    assert!(!searched.first(&track(1, 2.0)), "tracks share one search");
 }
 
 #[test]
@@ -979,37 +976,33 @@ fn a_comic_match_is_the_issue_with_the_same_decimal_number_and_label() {
 }
 
 #[test]
-fn an_rss_run_searches_each_target_once() {
-    let mut run = grab::Searched::default();
-    let ep = |media: u32, item: u32| {
-        let mut t = target(Some(WantDecision::Missing));
-        t.media_id = media;
-        let mut u = unit(Some(1), Some(f64::from(item)));
-        u.item_id = Some(item);
-        t.scope = vec![u];
-        t
+fn an_rss_run_asks_each_unit_once_and_nothing_the_host_skips() {
+    let m = |media: u32, unit: Option<UnitRef>, skip: Option<SkipReason>| grab::Match {
+        skip,
+        media_id: media,
+        season_number: unit.as_ref().and_then(|u| u.group),
+        episode_number: unit.as_ref().and_then(|u| u.number).map(|n| n as u32),
+        unit,
+        coverage: None,
     };
-    assert!(run.first(&ep(1, 1)));
-    assert!(!run.first(&ep(1, 1)), "same target from a second feed");
-    assert!(run.first(&ep(1, 2)));
-    assert!(run.first(&ep(2, 1)));
+    let ep = |item: f64| Some(unit(Some(1), Some(item)));
+    let mut asks = grab::Asks::default();
+    asks.add("Show S01E01", &m(1, ep(1.0), None));
+    asks.add("Show S01E01 again", &m(1, ep(1.0), None));
+    asks.add("Show S01E02", &m(1, ep(2.0), None));
+    asks.add("Other S01E01", &m(2, ep(1.0), None));
+    asks.add("Skipped S01E01", &m(3, ep(1.0), Some(SkipReason::OnDisk)));
+    let got: Vec<(u32, Option<f64>)> = asks
+        .list()
+        .iter()
+        .map(|a| (a.media_id, a.unit.as_ref().and_then(|u| u.number)))
+        .collect();
+    assert_eq!(got, [(1, Some(1.0)), (1, Some(2.0)), (2, Some(1.0))]);
 
-    let mut pack = ep(3, 1);
-    pack.scope[0].item_id = None;
-    let mut episode = ep(3, 1);
-    episode.scope[0].group_id = pack.scope[0].group_id;
-    assert!(run.first(&pack), "a season pack");
-    assert!(run.first(&episode), "an episode of the same group");
-
-    let book = |family, language: &str| {
-        let mut t = ep(4, 1);
-        t.kind = "book".into();
-        t.family = family;
-        t.language = Some(language.into());
-        t
-    };
-    assert!(run.first(&book(Family::Text, "fr")));
-    assert!(run.first(&book(Family::Text, "en")));
-    assert!(run.first(&book(Family::Audio, "fr")));
-    assert!(!run.first(&book(Family::Text, "fr")));
+    let mut books = grab::Asks::default();
+    books.add("Dune (EPUB)", &m(4, None, None));
+    books.add("Dune [M4B]", &m(4, None, None));
+    books.add("Dune", &m(4, None, None));
+    let families: Vec<Option<Family>> = books.list().iter().map(|a| a.family).collect();
+    assert_eq!(families, [Some(Family::Text), Some(Family::Audio), None]);
 }
