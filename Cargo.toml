@@ -2,13 +2,13 @@
 resolver = "3"
 members = ["plugins/download", "plugins/notify", "plugins/openlibrary", "plugins/tmdb", "plugins/bnf", "plugins/googlebooks", "plugins/tvdb", "plugins/audible", "plugins/audnexus", "xtask", "crates/provider-common", "crates/direct-source", "plugins/gutenberg", "plugins/librivox", "plugins/metron", "plugins/comicvine", "plugins/thexem", "plugins/musicbrainz", "plugins/fanarttv", "plugins/music-lists", "plugins/lrclib"]
 
-# One core tag of fliks-app/fliks for every plugin; raising it rebuilds them all.
+# One core revision of fliks-app/fliks for every plugin: the fliks#3029 merge commit; re-pin to v7.2.1 once tagged. Raising it rebuilds them all.
 [workspace.dependencies]
-fliks-plugin-sdk = { git = "https://github.com/fliks-app/fliks", tag = "v7.2.0" }
-fliks-plugin-sdk-provider = { git = "https://github.com/fliks-app/fliks", tag = "v7.2.0" }
-fliks-plugin-manifest = { git = "https://github.com/fliks-app/fliks", tag = "v7.2.0" }
-fliks_domain = { git = "https://github.com/fliks-app/fliks", tag = "v7.2.0" }
-fliks-plugin-route = { git = "https://github.com/fliks-app/fliks", tag = "v7.2.0" }
+fliks-plugin-sdk = { git = "https://github.com/fliks-app/fliks", rev = "295fc9a50476bebae7b6d85d0f0515aab0acf885" }
+fliks-plugin-sdk-provider = { git = "https://github.com/fliks-app/fliks", rev = "295fc9a50476bebae7b6d85d0f0515aab0acf885" }
+fliks-plugin-manifest = { git = "https://github.com/fliks-app/fliks", rev = "295fc9a50476bebae7b6d85d0f0515aab0acf885" }
+fliks_domain = { git = "https://github.com/fliks-app/fliks", rev = "295fc9a50476bebae7b6d85d0f0515aab0acf885" }
+fliks-plugin-route = { git = "https://github.com/fliks-app/fliks", rev = "295fc9a50476bebae7b6d85d0f0515aab0acf885" }
 
 [profile.release]
 opt-level = "z"

@@ -99,12 +99,12 @@ before percent-decoding each segment, first match wins, case-sensitive
 
 ### 1.3 Jobs (5, historical: `SearchMissing` is gone) [ts:scripts/manifest-template.ts:227-233, ts:src/seams/jobs.ts:25-43]
 
-> Since the core runs automatic acquisition, the plugin has no `SearchMissing` job, no `search:<id>` call, no `media.acquisition.requested` handler and no `requestsAutoGrabOnApproval` key: the core calls the `search` route (answering what this provider would grab) and the `grab` route. `RssSync` remains.
+> Since the core runs automatic acquisition, the plugin has no `SearchMissing` job, no `search:<id>` call, no `media.acquisition.requested` handler and no `requestsAutoGrabOnApproval` key: the core calls the `search` route (answering what this provider would grab) and the `grab` route. `RssSync` remains: it reads the feeds and asks the core (`acquisition-request`, one ask per matched media, family and unit) to sweep what they name; the claim, the search and the grab are the core's.
 
 | Job | Cron (server zone) | Body | Triggerable |
 |---|---|---|---|
 | `SearchMissing` | `0 0-23/6 * * *` | `searchMissing(args.mediaIds?)` [ts:src/grab/scheduler.ts:39-68] | yes |
-| `RssSync` | `*/15 * * * *` | `rssSync()` [ts:src/grab/scheduler.ts:102-145] | yes |
+| `RssSync` | `*/15 * * * *` | `rssSync()`: feeds, `releases.match`, then `acquisition-request` (no search or grab of its own) | yes |
 | `ImportCompleted` | `*/1 * * * *` | `poll()` [ts:src/grab/completion-poller.ts:159-230] | yes |
 | `CleanStalled` | `0 */5 * * * *` (6 fields) | `cleanStalled()` [ts:src/grab/completion-poller.ts:625-690] | yes |
 | `CleanSeeded` | `0 */5 * * * *` (6 fields) | `cleanSeeded()` [ts:src/grab/completion-poller.ts:734-775] | yes |
@@ -375,9 +375,8 @@ Budgets are fractions of the host deadlines (`plugins.md` rule 43); the SDK carr
 
 Resuming is safe because auto-grab is idempotent: a target that was grabbed is skipped by the
 pending-grab check [ts:src/grab/scheduler.ts:72-85], so replaying a slice only re-searches targets
-that found nothing. `RssSync` is not bounded by the indexer count: every matched release runs a
-full `searchScored` round [ts:src/grab/scheduler.ts:142], so a large feed can outlast the deadline;
-it stops at its budget. `CleanStalled` hands its re-search to `search:<mediaId>` scheduled calls
+that found nothing. `RssSync` is bounded by the feeds it reads and the `releases.match` call; the searches are the
+core's. It stops at its budget and asks for what it matched so far. `CleanStalled` hands its re-search to `search:<mediaId>` scheduled calls
 instead of awaiting `searchMissing` inline [ts:src/grab/completion-poller.ts:686-689]; it and
 `CleanSeeded` are then bounded by the client count and need no budget logic.
 

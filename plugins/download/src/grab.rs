@@ -11,8 +11,9 @@ use crate::util::{
 };
 use crate::{client, net, throttle};
 use fliks_plugin_sdk::bindings::fliks::plugin::types::{
-    AcquisitionEvent, Audience, CandidateRelease, CandidatesQuery, Family, Grabbed, ParamValue,
-    ReleaseCoverage, ReleaseTitle, ScoredRelease, SkipReason, Target, UnitRef, WantDecision,
+    AcquisitionAsk, AcquisitionEvent, Audience, CandidateRelease, CandidatesQuery, Family, Grabbed,
+    ParamValue, ReleaseCoverage, ReleaseTitle, ScoredRelease, SkipReason, Target, UnitRef,
+    WantDecision,
 };
 use fliks_plugin_sdk::host;
 use fliks_plugin_sdk::rt::{self, Budget, FuturesUnordered, StreamExt};
@@ -1122,106 +1123,6 @@ fn recheck(target: &Target, media: Media, own: Option<&str>) -> R<()> {
     ))
 }
 
-/// Search, pick and grab one automatic target.
-fn try_auto_grab(target: &Target, client: &DownloadClientRow) -> R<()> {
-    let Some(media) = Media::of(&target.kind, target.family) else {
-        info!(
-            "AutoGrab[{}]: \"{}\" skipped — this plugin acquires movies, series, books, comics and albums only",
-            target.kind, target.title
-        );
-        return Ok(());
-    };
-    let kind = media.as_str();
-    let skip = |reason: String| {
-        info!("AutoGrab[{kind}]: \"{}\" skipped — {reason}", target.title);
-        Ok(())
-    };
-    match &target.want {
-        None => {
-            return skip("no quality/language profile on media".into());
-        }
-        Some(w) if w.decision == WantDecision::Skip => {
-            return skip("media already satisfies its profile".into());
-        }
-        _ => {}
-    }
-    match recheck(target, media, None) {
-        Err(Error::Grab { detail, .. }) => return skip(detail.unwrap_or_default()),
-        r => r?,
-    }
-    let scored = match search_scored(target, Kind::Auto, None, None) {
-        Err(Error::AllIndexersCooling { .. }) => {
-            return skip("every indexer is in cooldown".into());
-        }
-        r => r?,
-    };
-    if scored.is_empty() {
-        return skip("no releases returned by indexers".into());
-    }
-    let picks = pick(&scored, target);
-    if picks.is_empty() {
-        let sample: Vec<String> = scored
-            .iter()
-            .take(3)
-            .map(|r| {
-                let codes: Vec<&str> = r
-                    .scored
-                    .rejections
-                    .iter()
-                    .map(|x| x.code.as_str())
-                    .collect();
-                let tail = if codes.is_empty() {
-                    String::new()
-                } else {
-                    format!(" [{}]", codes.join(", "))
-                };
-                format!("\"{}\" → rank {}{tail}", r.raw.title, r.scored.rank)
-            })
-            .collect();
-        let top = if sample.is_empty() {
-            String::new()
-        } else {
-            format!(" — top: {}", sample.join(" | "))
-        };
-        let what = if is_season(target) {
-            "season pack"
-        } else {
-            "release"
-        };
-        return skip(format!(
-            "no eligible {what} ({} checked){top}",
-            scored.len()
-        ));
-    }
-    // The search took up to two minutes: a core sweep may have grabbed meanwhile.
-    match recheck(target, media, None) {
-        Err(Error::Grab { detail, .. }) => return skip(detail.unwrap_or_default()),
-        r => r?,
-    }
-    for i in picks {
-        let mut a = args_for(target, media, client, &scored[i], "auto");
-        a.reject_if_present = true;
-        match grab_and_record(a) {
-            Ok(_) => return Ok(()),
-            Err(e) => warn!(
-                "AutoGrab[{kind}]: grab failed for \"{}\": {e}",
-                target.title
-            ),
-        }
-    }
-    skip("every eligible release was unobtainable".into())
-}
-
-/// One target's failure is logged and skipped: it must not end the sweep of the rest.
-fn auto_grab_or_skip(target: &Target, client: &DownloadClientRow) {
-    try_auto_grab(target, client).unwrap_or_else(|e| {
-        warn!(
-            "AutoGrab[{}]: \"{}\" failed, the sweep goes on — {e}",
-            target.kind, target.title
-        );
-    })
-}
-
 /// What the core's sweep asks of a provider: the releases this one would grab for the target, best
 /// first. Nothing while automatic acquisition is paused, no client is set up, the media wants nothing
 /// or a grab of its own is pending.
@@ -1269,27 +1170,6 @@ pub struct Match {
     /// The unit as the host sent it: a comic issue's number is decimal and its label says its kind.
     pub unit: Option<UnitRef>,
     pub coverage: Option<ReleaseCoverage>,
-}
-
-/// The targets one RSS run has already searched: a feed release only triggers the search.
-#[derive(Default)]
-pub struct Searched(HashSet<SearchedKey>);
-
-type SearchedKey = (u32, Option<u32>, Option<u32>, &'static str, Option<String>);
-
-impl Searched {
-    /// True the first time a target is seen in this run.
-    pub fn first(&mut self, t: &Target) -> bool {
-        // The tracks of an album share one search.
-        let own = t.kind != "album";
-        self.0.insert((
-            t.media_id,
-            group_id(t).filter(|_| own),
-            item_id(t).filter(|_| own),
-            family_str(t.family),
-            book_language(t).map(str::to_owned),
-        ))
-    }
 }
 
 /// One `releases.match` call; `None` for a title core found no media for.
@@ -1389,16 +1269,115 @@ pub fn group_item_ids(
     ))
 }
 
-/// Each ready indexer's feed, identified by `releases.match`, grabbed through the auto path.
+/// The core's page of asks (`acquisition-request`).
+const REQUEST_PAGE: usize = 200;
+
+type AskKey = (
+    u32,
+    Option<&'static str>,
+    Option<u32>,
+    Option<u64>,
+    Option<String>,
+);
+
+/// What one RSS run asks the core for, each ask once.
+#[derive(Default)]
+pub struct Asks {
+    seen: HashSet<AskKey>,
+    list: Vec<AcquisitionAsk>,
+}
+
+impl Asks {
+    /// The targets a feed release names, unless the host says to skip it.
+    pub fn add(&mut self, title: &str, m: &Match) {
+        if m.skip.is_some() {
+            return;
+        }
+        let family = title_family(title);
+        let key = (
+            m.media_id,
+            family.map(family_str),
+            m.unit.as_ref().and_then(|u| u.group),
+            m.unit.as_ref().and_then(|u| u.number).map(f64::to_bits),
+            m.unit.as_ref().and_then(|u| u.label.clone()),
+        );
+        if self.seen.insert(key) {
+            self.list.push(AcquisitionAsk {
+                media_id: m.media_id,
+                family,
+                unit: m.unit.clone(),
+            });
+        }
+    }
+
+    pub fn list(&self) -> &[AcquisitionAsk] {
+        &self.list
+    }
+
+    /// Asks the core to sweep them, a page at a time; a refused page is retried ask by ask so one
+    /// bad feed item blocks no other, until `expired`.
+    pub fn send_with(
+        &self,
+        mut call: impl FnMut(&[AcquisitionAsk]) -> R<()>,
+        expired: impl Fn() -> bool,
+    ) -> R<()> {
+        let refused = |e: &Error| matches!(e, Error::Host { code, .. } if code == "ERR_VALIDATION");
+        for chunk in self.list.chunks(REQUEST_PAGE) {
+            match call(chunk) {
+                Err(e) if refused(&e) => {
+                    for ask in chunk {
+                        if expired() {
+                            warn!(
+                                "RssSync: out of time, the refused page's other asks are dropped"
+                            );
+                            break;
+                        }
+                        match call(std::slice::from_ref(ask)) {
+                            Err(e) if refused(&e) => {
+                                warn!("RssSync: ask for #{} refused: {e}", ask.media_id)
+                            }
+                            r => r?,
+                        }
+                    }
+                }
+                Err(e) => {
+                    warn!("RssSync: asking the core failed, the remaining asks are dropped: {e}");
+                    return Err(e);
+                }
+                Ok(()) => {}
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Each ready indexer's feed, identified by `releases.match`; what the feed names is asked of the
+/// core, even when the run ends early.
 pub fn rss_sync() -> R<()> {
+    let mut asks = Asks::default();
+    let run = collect_feed(&mut asks);
+    let sent = asks.send_with(
+        |c| Ok(host::acquisition_request(c)?),
+        || net::budget().expired(),
+    );
+    match (run, sent) {
+        (Err(run), Err(sent)) => {
+            warn!("RssSync: the feeds failed and so did asking the core: {sent}");
+            Err(run)
+        }
+        (run, sent) => run.and(sent),
+    }
+}
+
+fn collect_feed(asks: &mut Asks) -> R<()> {
     if config::auto_acquisition_paused("RssSync").map_err(Error::Other)? {
         return Ok(());
     }
     let all = indexers::list_enabled()?;
-    let Some(client) = pick_client()? else {
+    if pick_client()?.is_none() {
         warn!("RssSync: no enabled download client configured");
         return Ok(());
-    };
+    }
     let ready = throttle::filter_ready(&all)?;
     if ready.is_empty() {
         if !all.is_empty() {
@@ -1407,7 +1386,6 @@ pub fn rss_sync() -> R<()> {
         return Ok(());
     }
     let out_of_time = || net::budget().expired();
-    let mut searched = Searched::default();
     for ix in &ready {
         if out_of_time() {
             info!("RssSync: out of time, the next tick re-reads the feeds");
@@ -1434,49 +1412,11 @@ pub fn rss_sync() -> R<()> {
             let Some(Some(m)) = matched.get(&release.title) else {
                 continue;
             };
-            if m.skip.is_some() {
-                continue;
-            }
             if out_of_time() {
                 info!("RssSync: out of time, the next tick re-reads the feeds");
                 return Ok(());
             }
-            let page = host::acquisition_candidates(&CandidatesQuery {
-                kind: None,
-                family: None,
-                media_ids: Some(vec![m.media_id]),
-                available_on: today(),
-                limit: 500,
-                cursor: None,
-            })?;
-            // `releases.match` names no family: a book is tried on each target of the family the
-            // title names, else on each target it has.
-            let named = title_family(&release.title);
-            let targets: Vec<&Target> = page
-                .items
-                .iter()
-                .filter(|it| match (it.kind == "comic", &m.unit) {
-                    (true, Some(u)) => same_issue(it, u),
-                    (true, None) => false,
-                    (false, _) => numbers(it) == (m.season_number, m.episode_number),
-                })
-                .filter(|it| named.is_none_or(|f| it.kind != "book" || it.family == f))
-                .collect();
-            if targets.is_empty() && page.cursor.is_some() {
-                warn!(
-                    "RssSync: \"{}\" matched #{} but its candidate was past the first page — skipped",
-                    release.title, m.media_id
-                );
-            }
-            for t in targets {
-                if t.want
-                    .as_ref()
-                    .is_some_and(|w| w.decision != WantDecision::Skip)
-                    && searched.first(t)
-                {
-                    auto_grab_or_skip(t, &client);
-                }
-            }
+            asks.add(&release.title, m);
         }
     }
     Ok(())

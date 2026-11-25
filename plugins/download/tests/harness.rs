@@ -2670,6 +2670,17 @@ async fn the_poller_states_every_transfer_to_the_core() {
 /// A qBittorrent whose one finished torrent `name` (holding `files`) is there from the start, or
 /// from the moment it is added when `after_add`; `delete` empties it.
 fn finished_qbit(save: &std::path::Path, name: &str, files: &[&str], after_add: bool) -> Stub {
+    slow_qbit(save, name, files, after_add, Duration::ZERO)
+}
+
+/// `finished_qbit` whose add takes `add_delay` to answer.
+fn slow_qbit(
+    save: &std::path::Path,
+    name: &str,
+    files: &[&str],
+    after_add: bool,
+    add_delay: Duration,
+) -> Stub {
     let (save, name) = (save.to_string_lossy().into_owned(), name.to_owned());
     let files: Vec<Value> = files
         .iter()
@@ -2685,6 +2696,7 @@ fn finished_qbit(save: &std::path::Path, name: &str, files: &[&str], after_add: 
                 b"Ok.".to_vec(),
             ),
             "/api/v2/torrents/add" => {
+                std::thread::sleep(add_delay);
                 *held.lock().unwrap() = true;
                 ok("Ok.".into())
             }
@@ -2943,6 +2955,8 @@ async fn add_book_indexer(h: &Harness, tracker: &Stub) {
         format!(r#"UPDATE "indexers" SET "capsCategories" = '3030,7000,7020' WHERE "id" = {id}"#),
     )
     .await;
+    // The core reads the sources the plugin publishes at start.
+    h.restart().await;
 }
 
 /// `held`: the torrent is in the client from the start, else only once added.
@@ -3124,8 +3138,8 @@ async fn a_book_is_acquired_from_want_to_import() {
     let _ = std::fs::remove_dir_all(base);
 }
 
-/// The feed names no family: the book's RSS reads its categories from the caps and tries each
-/// target the host lists.
+/// The feed names no family: the book's RSS reads its categories from the caps and asks the core
+/// for each target it lists.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn the_rss_sweep_grabs_a_book_through_its_targets() {
     let Some((h, base, media, qbit)) =
@@ -3143,6 +3157,10 @@ async fn the_rss_sweep_grabs_a_book_through_its_targets() {
         "{:?}",
         hits[0].target
     );
+    until("the core's grab", MAX, async || {
+        !qbit.hits_to("/api/v2/torrents/add").is_empty()
+    })
+    .await;
     assert_eq!(qbit.hits_to("/api/v2/torrents/add").len(), 1);
     let mut db = plugin_db(&h).await;
     let family: Option<String> =
@@ -3156,21 +3174,16 @@ async fn the_rss_sweep_grabs_a_book_through_its_targets() {
     let _ = std::fs::remove_dir_all(base);
 }
 
-/// Another provider's download of the media stops the RSS auto-grab; once it is gone the sync grabs.
+/// Another provider's download of the media stops the core's grab of an RSS item; once it is gone
+/// the next sync asks again and the core grabs.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn a_download_in_flight_at_another_provider_blocks_the_auto_grab() {
+async fn a_download_in_flight_at_another_provider_blocks_the_rss_grab() {
     let Some((h, base, media, qbit)) =
         book_fixture("book-in-flight", &["text"], false, &["Mirelune.epub"]).await
     else {
         return;
     };
-    let feed = format!(
-        r#"<?xml version="1.0"?><rss xmlns:torznab="http://torznab.com/schemas/2015/feed"><channel>
-<item><title>{BOOK_RELEASE}</title><link>magnet:?xt=urn:btih:{HASH}&amp;dn={BOOK_RELEASE}</link><size>2000000</size><torznab:attr name="seeders" value="5"/></item>
-</channel></rss>"#
-    )
-    .into_bytes();
-    let tracker = Stub::start(move |_, _, _| (200, vec![], feed.clone()));
+    let tracker = book_tracker();
     add_book_indexer(&h, &tracker).await;
     sqlx::query(
         r#"INSERT INTO acquisition_queue ("pluginId", "ref", "mediaId", "sourceId", "sourceName", title, quality, method, state, progress)
@@ -3182,7 +3195,7 @@ async fn a_download_in_flight_at_another_provider_blocks_the_auto_grab() {
     .unwrap();
 
     h.job("RssSync", None).await.unwrap();
-    assert!(logged(&h, "a grab is in flight at other.provider"));
+    tokio::time::sleep(Duration::from_secs(2)).await;
     assert!(qbit.hits_to("/api/v2/torrents/add").is_empty());
 
     sqlx::query(r#"UPDATE acquisition_queue SET state = 'removed', "finishedAt" = now() WHERE "pluginId" = 'other.provider'"#)
@@ -3190,9 +3203,228 @@ async fn a_download_in_flight_at_another_provider_blocks_the_auto_grab() {
         .await
         .unwrap();
     h.job("RssSync", None).await.unwrap();
+    until("the core's grab", MAX, async || {
+        !qbit.hits_to("/api/v2/torrents/add").is_empty()
+    })
+    .await;
+    tokio::time::sleep(Duration::from_secs(1)).await;
     assert_eq!(qbit.hits_to("/api/v2/torrents/add").len(), 1);
     h.finish().await;
     let _ = std::fs::remove_dir_all(base);
+}
+
+/// A feed item that arrives while a core sweep holds the media's claim is asked for, not lost: the
+/// core grabs it once the claim frees.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn an_rss_item_during_a_sweep_claim_is_requested_not_lost() {
+    let Some((h, base, media, qbit)) =
+        book_fixture("book-claim", &["text"], false, &["Mirelune.epub"]).await
+    else {
+        return;
+    };
+    add_book_indexer(&h, &book_tracker()).await;
+    let claim = h.st.plugins.sweeps.claims.lock(media as i32).await;
+    h.job("RssSync", None).await.unwrap();
+    tokio::time::sleep(Duration::from_secs(2)).await;
+    assert!(qbit.hits_to("/api/v2/torrents/add").is_empty());
+    drop(claim);
+    until("the core's grab", MAX, async || {
+        !qbit.hits_to("/api/v2/torrents/add").is_empty()
+    })
+    .await;
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    assert_eq!(qbit.hits_to("/api/v2/torrents/add").len(), 1);
+    h.finish().await;
+    let _ = std::fs::remove_dir_all(base);
+}
+
+/// A feed item and a sweep of the same media, started together while the client is slow to add,
+/// download it once: the core's claim serialises them.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn an_rss_item_and_a_concurrent_sweep_grab_once() {
+    use fliks_plugin_sdk::harness::fliks_server::acquisition::candidates;
+    use fliks_plugin_sdk::harness::fliks_server::plugins::runtime::fliks::plugin::types::CandidatesQuery;
+    let slow = |dl: &std::path::Path| {
+        slow_qbit(
+            dl,
+            BOOK_RELEASE,
+            &["Mirelune.epub"],
+            true,
+            Duration::from_secs(1),
+        )
+    };
+    let Some((h, base, media, qbit)) =
+        book_fixture_with("book-race", &["text"], &["Mirelune.epub"], slow).await
+    else {
+        return;
+    };
+    add_book_indexer(&h, &book_tracker()).await;
+    let today = chrono::Local::now().date_naive();
+    let q = CandidatesQuery {
+        kind: None,
+        family: None,
+        media_ids: Some(vec![media as u32]),
+        available_on: today.to_string(),
+        limit: 10,
+        cursor: None,
+    };
+    let target = candidates(&h.st.db, q, today)
+        .await
+        .unwrap()
+        .items
+        .remove(0);
+    let sweep = async {
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        h.st.plugins.acquire(&target, false).await
+    };
+    let (rss, _) = tokio::join!(h.job("RssSync", None), sweep);
+    rss.unwrap();
+    tokio::time::sleep(Duration::from_secs(4)).await;
+    assert_eq!(qbit.hits_to("/api/v2/torrents/add").len(), 1);
+    h.finish().await;
+    let _ = std::fs::remove_dir_all(base);
+}
+
+/// A feed item names one episode: the core searches that episode only, not the other missing ones.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn an_rss_episode_searches_only_its_own_target() {
+    let Some(h) = Harness::start(setup()).await else {
+        return;
+    };
+    let dl = std::env::temp_dir().join(format!("rss-episode-{}", std::process::id()));
+    std::fs::create_dir_all(&dl).unwrap();
+    let release = "Some.Show.S01E02.1080p.WEB-GRP";
+    let qbit = finished_qbit(&dl, release, &[], true);
+    add_qbit(&h, &qbit).await;
+    let media = add_work(&h, "Some Show", "series", None).await;
+    let season: i32 = sqlx::query_scalar(
+        r#"INSERT INTO item_groups ("mediaId", "number", monitored) VALUES ($1, 1, true) RETURNING id"#,
+    )
+    .bind(media as i32)
+    .fetch_one(&h.pool)
+    .await
+    .unwrap();
+    sqlx::raw_sql(AssertSqlSafe(format!(
+        r#"INSERT INTO items ("mediaId", "editionId", "groupId", "number", monitored, "airDate")
+             SELECT {media}, (SELECT id FROM editions WHERE "mediaId" = {media}), {season}, n, true, ('2020-01-0' || n)::date
+             FROM generate_series(1, 3) n"#
+    )))
+    .execute(&h.pool)
+    .await
+    .unwrap();
+    let feed = format!(
+        r#"<?xml version="1.0"?><rss xmlns:torznab="http://torznab.com/schemas/2015/feed"><channel><item><title>{release}</title><link>magnet:?xt=urn:btih:{HASH}&amp;dn={release}</link><size>2000000000</size><torznab:attr name="seeders" value="5"/></item></channel></rss>"#
+    )
+    .into_bytes();
+    let tracker = Stub::start(move |_, _, _| (200, vec![], feed.clone()));
+    route(&h, "tv.test", "10.77.0.1", 80, &tracker);
+    let mut db = plugin_db(&h).await;
+    let id = add_indexer(
+        &mut db,
+        "tv",
+        json!({ "baseUrl": "http://tv.test/api", "apiKey": "k" }),
+    )
+    .await;
+    exec(
+        &mut db,
+        format!(
+            r#"UPDATE "indexers" SET "capsCategories" = '5000', "capsTvSearch" = true WHERE "id" = {id}"#
+        ),
+    )
+    .await;
+    h.restart().await;
+
+    h.job("RssSync", None).await.unwrap();
+    until("the core's search", MAX, async || tracker.hits().len() > 1).await;
+    tokio::time::sleep(Duration::from_secs(3)).await;
+    let param = |t: &str, k: &str| {
+        t.split(['?', '&'])
+            .find_map(|p| p.strip_prefix(k).and_then(|v| v.strip_prefix('=')))
+            .map(str::to_owned)
+    };
+    let searches: Vec<String> = tracker
+        .hits()
+        .into_iter()
+        .skip(1)
+        .map(|h| h.target)
+        .collect();
+    assert!(!searches.is_empty());
+    for t in &searches {
+        assert_eq!(param(t, "season").as_deref(), Some("1"), "{searches:?}");
+        assert_eq!(param(t, "ep").as_deref(), Some("2"), "{searches:?}");
+    }
+    h.finish().await;
+    let _ = std::fs::remove_dir_all(dl);
+}
+
+/// A feed item naming a series and no episode asks for nothing: it would sweep every missing episode.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn an_rss_series_item_with_no_unit_asks_for_nothing() {
+    let Some(h) = Harness::start(setup()).await else {
+        return;
+    };
+    let dl = std::env::temp_dir().join(format!("rss-pack-{}", std::process::id()));
+    std::fs::create_dir_all(&dl).unwrap();
+    let qbit = finished_qbit(&dl, "Some.Show.Complete.1080p", &[], true);
+    add_qbit(&h, &qbit).await;
+    let media = add_work(&h, "Some Show", "series", None).await;
+    let season: i32 = sqlx::query_scalar(
+        r#"INSERT INTO item_groups ("mediaId", "number", monitored) VALUES ($1, 1, true) RETURNING id"#,
+    )
+    .bind(media as i32)
+    .fetch_one(&h.pool)
+    .await
+    .unwrap();
+    sqlx::raw_sql(AssertSqlSafe(format!(
+        r#"INSERT INTO items ("mediaId", "editionId", "groupId", "number", monitored, "airDate")
+             SELECT {media}, (SELECT id FROM editions WHERE "mediaId" = {media}), {season}, n, true, ('2020-01-0' || n)::date
+             FROM generate_series(1, 3) n"#
+    )))
+    .execute(&h.pool)
+    .await
+    .unwrap();
+    let release = "Some.Show.Complete.1080p.WEB-GRP";
+    let feed = format!(
+        r#"<?xml version="1.0"?><rss xmlns:torznab="http://torznab.com/schemas/2015/feed"><channel><item><title>{release}</title><link>magnet:?xt=urn:btih:{HASH}&amp;dn={release}</link><size>2000000000</size><torznab:attr name="seeders" value="5"/></item></channel></rss>"#
+    )
+    .into_bytes();
+    let tracker = Stub::start(move |_, _, _| (200, vec![], feed.clone()));
+    route(&h, "tv.test", "10.77.0.1", 80, &tracker);
+    let mut db = plugin_db(&h).await;
+    let id = add_indexer(
+        &mut db,
+        "tv",
+        json!({ "baseUrl": "http://tv.test/api", "apiKey": "k" }),
+    )
+    .await;
+    exec(
+        &mut db,
+        format!(r#"UPDATE "indexers" SET "capsCategories" = '5000' WHERE "id" = {id}"#),
+    )
+    .await;
+    h.restart().await;
+
+    use fliks_plugin_sdk::harness::fliks_server::plugins::runtime::fliks::plugin::types::ReleaseTitle;
+    let matched = fliks_plugin_sdk::harness::fliks_server::acquisition::matches(
+        &h.st,
+        vec![ReleaseTitle {
+            id: "0".into(),
+            title: release.into(),
+            publish_date: chrono::Utc::now().to_rfc3339(),
+        }],
+        None,
+    )
+    .await
+    .unwrap();
+    assert_eq!(matched[0].media_id, Some(media as u32), "{:?}", matched[0]);
+    assert!(matched[0].unit.is_none(), "{:?}", matched[0]);
+
+    h.job("RssSync", None).await.unwrap();
+    tokio::time::sleep(Duration::from_secs(3)).await;
+    assert_eq!(tracker.hits().len(), 1, "only the feed was read");
+    assert!(qbit.hits_to("/api/v2/torrents/add").is_empty());
+    h.finish().await;
+    let _ = std::fs::remove_dir_all(dl);
 }
 
 /// A tracker that refuses `t=book` is asked with `t=search` from then on.
