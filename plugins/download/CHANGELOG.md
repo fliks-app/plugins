@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.2.1](https://github.com/fliks-app/plugins/compare/download-v3.2.0...download-v3.2.1) (2026-11-25)
+
+
+### Bug Fixes
+
+* **download:** the feed asks the core to acquire instead of grabbing ([#224](https://github.com/fliks-app/plugins/issues/224)) ([7626168](https://github.com/fliks-app/plugins/commit/7626168615b4a9a4a4100bb7c959d798b9321ef2))
+
 ## [3.2.0](https://github.com/fliks-app/plugins/compare/download-v3.1.4...download-v3.2.0) (2026-11-23)
 
 
