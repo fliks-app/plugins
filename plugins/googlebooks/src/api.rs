@@ -21,8 +21,8 @@ pub struct Reply {
 }
 
 pub trait Http {
-    /// A transport failure is its message, which must carry no URL.
-    fn get(&self, url: &str) -> Result<Reply, String>;
+    /// A failure must carry no URL: it holds the API key.
+    fn get(&self, url: &str) -> R<Reply>;
 }
 
 fn parse_err(e: ParseError) -> ProviderError {
@@ -33,12 +33,31 @@ fn parse_err(e: ParseError) -> ProviderError {
     }
 }
 
+/// A key Google refuses outright: invalid, blocked, Books API disabled, or a zero daily quota.
+fn key_refused(body: &str) -> bool {
+    let Ok(v) = serde_json::from_str::<Value>(body) else {
+        return false;
+    };
+    let details = v.pointer("/error/details").and_then(Value::as_array);
+    details.into_iter().flatten().any(|d| {
+        let reason = d["reason"].as_str().unwrap_or("");
+        reason.starts_with("API_KEY_")
+            || reason == "SERVICE_DISABLED"
+            || d.pointer("/metadata/quota_limit_value")
+                .and_then(Value::as_str)
+                == Some("0")
+    })
+}
+
 /// Google also reports an exhausted quota as a 403 whose body names the reason.
 fn get(h: &impl Http, url: &str) -> R<String> {
-    let r = h.get(url).map_err(|m| upstream(None, m))?;
+    let r = h.get(url)?;
     let s = r.status;
     if (200..300).contains(&s) {
         return Ok(r.body);
+    }
+    if key_refused(&r.body) {
+        return Err(ProviderError::Unauthorized);
     }
     if s != 404 && gb::parse_volumes(&r.body) == Err(ParseError::RateLimited) {
         return Err(ProviderError::RateLimited(r.retry_after));
@@ -161,7 +180,7 @@ mod tests {
     }
 
     impl Http for Fake {
-        fn get(&self, url: &str) -> Result<Reply, String> {
+        fn get(&self, url: &str) -> R<Reply> {
             self.seen.borrow_mut().push(url.to_owned());
             Ok(self.reply.clone())
         }
@@ -281,11 +300,17 @@ mod tests {
     #[test]
     fn upstream_failures_map_to_the_provider_errors() {
         let get = |r: Reply| search(&Fake::new(r), &query("x")).unwrap_err();
-        let mut limited = reply(429, fixture!("error-quota.json"));
+        let spent = fixture!("error-quota.json").replace(
+            r#""quota_limit_value": "0""#,
+            r#""quota_limit_value": "1000""#,
+        );
+        let mut limited = reply(429, &spent);
         limited.retry_after = Some(7);
         assert!(matches!(get(limited), ProviderError::RateLimited(Some(7))));
-        let quota = reply(403, fixture!("error-quota.json"));
-        assert!(matches!(get(quota), ProviderError::RateLimited(None)));
+        assert!(matches!(
+            get(reply(403, &spent)),
+            ProviderError::RateLimited(None)
+        ));
         let e = get(reply(400, fixture!("error-badrequest.json")));
         assert!(matches!(e, ProviderError::Upstream(u) if u.status == Some(400)));
         let e = get(reply(503, "maintenance"));
@@ -295,11 +320,20 @@ mod tests {
     }
 
     #[test]
+    fn a_refused_key_is_unauthorized() {
+        let get = |r: Reply| search(&Fake::new(r), &query("x")).unwrap_err();
+        let zero = reply(429, fixture!("error-quota.json"));
+        assert!(matches!(get(zero), ProviderError::Unauthorized));
+        let invalid = reply(400, fixture!("error-key-invalid.json"));
+        assert!(matches!(get(invalid), ProviderError::Unauthorized));
+    }
+
+    #[test]
     fn a_transport_failure_is_an_upstream_error() {
         struct Down;
         impl Http for Down {
-            fn get(&self, _: &str) -> Result<Reply, String> {
-                Err("connection refused".into())
+            fn get(&self, _: &str) -> R<Reply> {
+                Err(upstream(None, "connection refused"))
             }
         }
         let e = search(&Down, &query("x")).unwrap_err();

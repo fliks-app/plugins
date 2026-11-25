@@ -9,18 +9,31 @@ use api::{Http, Reply};
 use fliks_plugin_sdk::bindings::wasi::http::types::Method;
 use fliks_plugin_sdk::http::Request;
 use fliks_plugin_sdk::rt::Budget;
-use fliks_plugin_sdk::{ExternalId, Plugin};
+use fliks_plugin_sdk::{ExternalId, Plugin, host};
 use fliks_plugin_sdk_provider::{
     Lang, MetadataProvider, ProviderError, SearchQuery, export_provider,
 };
+use provider_common::http::upstream;
 use std::time::Duration;
 
 const USER_AGENT: &str = concat!("Fliks-GoogleBooks/", env!("CARGO_PKG_VERSION"));
 
 struct Live;
 
+fn api_key() -> Result<String, ProviderError> {
+    let all = host::config_get(Some(&["apiKey".to_owned()]))
+        .map_err(|e| upstream(None, format!("{}: {}", e.code, e.message)))?;
+    all.into_iter()
+        .find(|(k, _)| k == "apiKey")
+        .map(|(_, v)| v.trim().to_owned())
+        .filter(|v| !v.is_empty())
+        .ok_or(ProviderError::Unauthorized)
+}
+
 impl Http for Live {
-    fn get(&self, url: &str) -> Result<Reply, String> {
+    fn get(&self, url: &str) -> Result<Reply, ProviderError> {
+        let mut url = url::Url::parse(url).map_err(|_| upstream(None, "not a valid URL"))?;
+        url.query_pairs_mut().append_pair("key", &api_key()?);
         let r = Request::new(Method::Get, url)
             .header("user-agent", USER_AGENT)
             .header("accept", "application/json")
@@ -28,7 +41,7 @@ impl Http for Live {
             .body_cap(4 << 20)
             .budget(&Budget::host())
             .send()
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| upstream(None, e.to_string()))?;
         Ok(Reply {
             status: r.status,
             retry_after: r.header("retry-after").and_then(|v| v.trim().parse().ok()),

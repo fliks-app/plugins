@@ -4,39 +4,104 @@
   "name": "Google Books",
   "fliks": ">=7.0.0 <8.0.0",
   "author": "Fliks",
-  "description": "Book metadata from Google Books: search and editions by ISBN or volume id.",
+  "description": "Book metadata from Google Books: search and editions by ISBN or volume id. Needs a Google Cloud API key.",
   "license": "AGPL-3.0-or-later",
   "logo": "logo.svg",
   "kind": "process",
   "runtime": "wasm",
   "memoryMb": 64,
-  "database": { "schema": false, "coreRefs": [] },
+  "database": {
+    "schema": false,
+    "coreRefs": []
+  },
   "scopes": [],
   "ingestRoots": [],
   "routes": [],
   "provider": {
-    "namespaces": [{ "name": "googlebooks" }],
-    "kinds": { "book": ["search", "edition"] },
-    "editionNamespaces": ["isbn", "googlebooks"],
-    "limits": { "ratePerSec": 1, "burst": 1 },
-    "snapshotTtlSecs": { "edition": 2592000 },
-    "imageHosts": ["books.google.com"]
+    "namespaces": [
+      {
+        "name": "googlebooks"
+      }
+    ],
+    "kinds": {
+      "book": [
+        "search",
+        "edition"
+      ]
+    },
+    "editionNamespaces": [
+      "isbn",
+      "googlebooks"
+    ],
+    "limits": {
+      "ratePerSec": 1,
+      "burst": 1
+    },
+    "snapshotTtlSecs": {
+      "edition": 2592000
+    },
+    "imageHosts": [
+      "books.google.com"
+    ],
+    "requires": [
+      "apiKey"
+    ]
+  },
+  "ui": {
+    "contributions": [
+      {
+        "id": "fliks-googlebooks.settings.general",
+        "slot": "settings.page",
+        "weight": 100,
+        "labelKey": "googlebooks.config.title",
+        "action": {
+          "kind": "route",
+          "path": "/admin/settings/plugins/fliks.googlebooks/general"
+        }
+      }
+    ],
+    "configPages": [
+      {
+        "id": "general",
+        "labelKey": "googlebooks.config.title",
+        "subtitleKey": "googlebooks.config.subtitle",
+        "fields": [
+          {
+            "key": "apiKey",
+            "type": "text",
+            "labelKey": "googlebooks.config.apiKey",
+            "hint": "googlebooks.config.apiKey_hint",
+            "secret": true
+          }
+        ]
+      }
+    ]
   },
   "i18n": {
+    "en": {
+      "googlebooks.config.title": "Google Books",
+      "googlebooks.config.subtitle": "Book metadata from Google Books.",
+      "googlebooks.config.apiKey": "API key",
+      "googlebooks.config.apiKey_hint": "A Google Cloud API key with the Books API enabled. Google refuses requests without one."
+    },
     "fr": {
-      "googlebooks.description": "Métadonnées de livres depuis Google Books : recherche et éditions par ISBN ou identifiant de volume."
+      "googlebooks.description": "Métadonnées de livres depuis Google Books : recherche et éditions par ISBN ou identifiant de volume. Nécessite une clé d'API Google Cloud.",
+      "googlebooks.config.title": "Google Books",
+      "googlebooks.config.subtitle": "Métadonnées de livres depuis Google Books.",
+      "googlebooks.config.apiKey": "Clé d'API",
+      "googlebooks.config.apiKey_hint": "Une clé d'API Google Cloud avec l'API Books activée. Google refuse les requêtes sans clé."
     },
     "de": {
-      "googlebooks.description": "Buch-Metadaten von Google Books: Suche und Ausgaben nach ISBN oder Band-ID."
+      "googlebooks.description": "Buch-Metadaten von Google Books: Suche und Ausgaben nach ISBN oder Band-ID. Erfordert einen Google-Cloud-API-Schlüssel."
     },
     "es": {
-      "googlebooks.description": "Metadatos de libros de Google Books: búsqueda y ediciones por ISBN o identificador de volumen."
+      "googlebooks.description": "Metadatos de libros de Google Books: búsqueda y ediciones por ISBN o identificador de volumen. Requiere una clave de API de Google Cloud."
     },
     "it": {
-      "googlebooks.description": "Metadati di libri da Google Books: ricerca ed edizioni per ISBN o identificativo del volume."
+      "googlebooks.description": "Metadati di libri da Google Books: ricerca ed edizioni per ISBN o identificativo del volume. Richiede una chiave API di Google Cloud."
     },
     "pt": {
-      "googlebooks.description": "Metadados de livros do Google Books: pesquisa e edições por ISBN ou identificador de volume."
+      "googlebooks.description": "Metadados de livros do Google Books: pesquisa e edições por ISBN ou identificador de volume. Requer uma chave de API do Google Cloud."
     }
   }
 }
