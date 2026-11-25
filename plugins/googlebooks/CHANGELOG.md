@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/fliks-app/plugins/compare/googlebooks-v1.0.0...googlebooks-v1.0.1) (2026-11-25)
+
+
+### Bug Fixes
+
+* **googlebooks:** require a Google Cloud API key ([#228](https://github.com/fliks-app/plugins/issues/228)) ([1970e87](https://github.com/fliks-app/plugins/commit/1970e872be775a73aa733aa8f1d79e3f32b58c81)), closes [#227](https://github.com/fliks-app/plugins/issues/227)
+
 ## [1.0.0](https://github.com/fliks-app/plugins/compare/googlebooks-v0.3.1...googlebooks-v1.0.0) (2026-11-19)
 
 
