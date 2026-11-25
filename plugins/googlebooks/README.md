@@ -1,13 +1,15 @@
 # Google Books
 
-A book metadata provider for Fliks, backed by the [Google Books API](https://developers.google.com/books)
-without a key. It answers the `googlebooks` namespace for the `book` kind: search by ISBN, title and
+A book metadata provider for Fliks, backed by the [Google Books API](https://developers.google.com/books).
+It answers the `googlebooks` namespace for the `book` kind: search by ISBN, title and
 author, and an edition by ISBN or volume id. Every record is an edition.
 
-Requests are anonymous and identified by a `Fliks-GoogleBooks/<version>` user agent. The host paces
-them at one per second. Google documents no keyless quota and has answered every keyless request with
-a 429 for a zero daily quota (observed 2026-11-01); that, or a quota error body, maps to
-`rate-limited` and the provider is skipped. Covers come from `books.google.com`.
+It needs a Google Cloud API key with the Books API enabled, set in the plugin settings: Google gives
+keyless requests a daily quota of zero. Until the key is set the host skips the provider. A key Google
+refuses (invalid, blocked, API disabled, zero quota) maps to `unauthorized`, which sets the provider
+aside until its settings change; a spent daily quota maps to `rate-limited`. Requests carry a
+`Fliks-GoogleBooks/<version>` user agent and the host paces them at one per second. Covers come from
+`books.google.com`.
 
 Requires Fliks 7.0.0 or later.
 
