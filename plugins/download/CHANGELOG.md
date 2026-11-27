@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.2.2](https://github.com/fliks-app/plugins/compare/download-v3.2.1...download-v3.2.2) (2026-11-27)
+
+
+### Bug Fixes
+
+* **download:** answer an unobtainable release with a 409, not a 500 ([#230](https://github.com/fliks-app/plugins/issues/230)) ([2ebd9cf](https://github.com/fliks-app/plugins/commit/2ebd9cfc63e710d18f71996fee3d9b3f9c007f7e))
+
 ## [3.2.1](https://github.com/fliks-app/plugins/compare/download-v3.2.0...download-v3.2.1) (2026-11-25)
 
 
