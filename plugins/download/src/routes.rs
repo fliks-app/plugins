@@ -71,6 +71,11 @@ pub fn respond(r: R<Response>) -> Response {
             error!("indexer source import refused: {message}");
             err_body(400, key, detail.as_deref())
         }
+        // 409 without `already_in_flight`: the core moves on to its next candidate.
+        Err(Error::Unobtainable(m)) => {
+            warn!("release unobtainable: {m}");
+            err_body(409, "download.grab.errors.release_unobtainable", Some(&m))
+        }
         Err(Error::Client(m)) => {
             error!("download client refused the request: {m}");
             err_body(502, "download.http.errors.download_client", Some(&m))
@@ -810,6 +815,19 @@ pub static ROUTER: LazyLock<Router> = LazyLock::new(|| {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_unobtainable_release_is_a_409_with_its_reason() {
+        let resp = respond(Err(client::already_held("abc")));
+        assert_eq!(resp.status, 409);
+        assert_eq!(
+            serde_json::from_slice::<Value>(&resp.body).unwrap(),
+            json!({ "error": {
+                "key": "download.grab.errors.release_unobtainable",
+                "detail": "torrent abc is already in the download client",
+            }})
+        );
+    }
 
     #[test]
     fn all_cooling_is_a_503_with_the_earliest_end() {

@@ -185,7 +185,7 @@ pub(crate) fn auth_failed() -> Error {
 }
 
 pub(crate) fn already_held(hash: &str) -> Error {
-    Error::Other(format!("torrent {hash} is already in the download client"))
+    Error::Unobtainable(format!("torrent {hash} is already in the download client"))
 }
 
 /// Fliks does not take over a torrent someone else put in the client.
