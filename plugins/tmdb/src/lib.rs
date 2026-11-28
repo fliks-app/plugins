@@ -1,5 +1,6 @@
 //! `fliks.tmdb`: the TMDB metadata provider for movies and series.
 
+mod images;
 mod map;
 #[cfg(test)]
 mod tests;
@@ -10,7 +11,7 @@ use fliks_plugin_sdk::http::{Error as HttpError, Request};
 use fliks_plugin_sdk::rt::{Budget, block_on};
 use fliks_plugin_sdk::{ExternalId, Plugin, host};
 use fliks_plugin_sdk_provider::{
-    Lang, MetadataProvider, ProviderError, SearchQuery, export_provider,
+    ImageScope, Lang, MetadataProvider, ProviderError, SearchQuery, export_provider, images_json,
 };
 use serde_json::Value;
 use std::time::Duration;
@@ -137,6 +138,13 @@ impl MetadataProvider for Provider {
         json(block_on(
             client().credits(numeric(&id)?, &Resolved::of(&lang)),
         )?)
+    }
+
+    fn fetch_images(kind: String, id: ExternalId, scope: ImageScope, _lang: Lang) -> Res<String> {
+        let path =
+            images::path(tv(&kind), numeric(&id)?, &scope).ok_or(ProviderError::Unsupported)?;
+        let v = block_on(Live.get(&path, Query::new()))?;
+        Ok(images_json(&images::candidates(&v)))
     }
 
     fn list(kind: String, name: String, params: Vec<(String, String)>, lang: Lang) -> Res<String> {
