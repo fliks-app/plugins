@@ -1,7 +1,7 @@
 //! The Audnexus lookups over an injected transport, so recorded bodies can stand in for the network.
 use crate::parse::{self as audnexus};
 use fliks_plugin_sdk::ExternalId;
-use fliks_plugin_sdk_provider::ProviderError;
+use fliks_plugin_sdk_provider::{ImageCandidate, ImageScope, ProviderError};
 use provider_common::book::region::Region;
 use provider_common::book::{ParseError, to_record};
 use provider_common::http::{status_error, upstream};
@@ -85,6 +85,28 @@ pub fn fetch_chapters(h: &impl Http, edition: &ExternalId, region: Region) -> R<
         audnexus::parse_chapters,
     )?;
     Ok(r.map(|c| serde_json::json!(c).to_string()))
+}
+
+/// The cover of an edition; every other scope is unsupported.
+pub fn fetch_images(
+    h: &impl Http,
+    id: &ExternalId,
+    scope: &ImageScope,
+    region: Region,
+) -> R<Vec<ImageCandidate>> {
+    if !matches!(scope, ImageScope::Edition) {
+        return Err(ProviderError::Unsupported);
+    }
+    let r = lookup(h, id, region, audnexus::book_url, audnexus::parse_book)?;
+    Ok(r.map(|r| r.covers)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|url| ImageCandidate {
+            url,
+            slot: "cover".into(),
+            ..Default::default()
+        })
+        .collect())
 }
 
 #[cfg(test)]
@@ -172,6 +194,25 @@ mod tests {
         assert_eq!(
             h.asked(),
             ["https://api.audnex.us/books/B0QZ7LM4NV/chapters?region=uk"]
+        );
+    }
+
+    #[test]
+    fn images_are_the_cover_of_the_edition() {
+        let h = Fake::new(reply(200, fixture!("book-fr.json")));
+        let c = fetch_images(
+            &h,
+            &id("asin", "B0QZ7LM4NV"),
+            &ImageScope::Edition,
+            Region::Fr,
+        )
+        .unwrap();
+        assert!(
+            c.iter()
+                .all(|i| i.slot == "cover" && i.url.starts_with("https://"))
+        );
+        assert!(
+            fetch_images(&h, &id("asin", "B0QZ7LM4NV"), &ImageScope::Work, Region::Fr).is_err()
         );
     }
 

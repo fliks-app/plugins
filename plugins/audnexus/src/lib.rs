@@ -10,7 +10,9 @@ use fliks_plugin_sdk::bindings::wasi::http::types::Method;
 use fliks_plugin_sdk::http::Request;
 use fliks_plugin_sdk::rt::Budget;
 use fliks_plugin_sdk::{ExternalId, Plugin};
-use fliks_plugin_sdk_provider::{Lang, MetadataProvider, ProviderError, export_provider};
+use fliks_plugin_sdk_provider::{
+    ImageScope, Lang, MetadataProvider, ProviderError, export_provider, images_json,
+};
 use provider_common::book::region::Region;
 use std::time::Duration;
 
@@ -47,6 +49,19 @@ impl Plugin for Audnexus {}
 impl MetadataProvider for Audnexus {
     fn fetch_edition(edition: ExternalId, lang: Lang) -> Result<Option<String>, ProviderError> {
         api::fetch_edition(&Live, &edition, region(&lang))
+    }
+    fn fetch_images(
+        _kind: String,
+        id: ExternalId,
+        scope: ImageScope,
+        lang: Lang,
+    ) -> Result<String, ProviderError> {
+        Ok(images_json(&api::fetch_images(
+            &Live,
+            &id,
+            &scope,
+            region(&lang),
+        )?))
     }
     fn fetch_chapters(edition: ExternalId, lang: Lang) -> Result<Option<String>, ProviderError> {
         api::fetch_chapters(&Live, &edition, region(&lang))

@@ -16,7 +16,7 @@
   "routes": [],
   "provider": {
     "namespaces": [{ "name": "audnexus" }],
-    "kinds": { "book": ["edition", "chapters"] },
+    "kinds": { "book": ["edition", "chapters", "images"] },
     "editionNamespaces": ["asin"],
     "chapterNamespaces": ["asin"],
     "limits": { "ratePerSec": 1, "burst": 1 },
