@@ -16,7 +16,7 @@
   "routes": [],
   "provider": {
     "namespaces": [{ "name": "openlibrary" }],
-    "kinds": { "book": ["search", "work", "children", "childStubs", "edition", "findBy"] },
+    "kinds": { "book": ["search", "work", "children", "childStubs", "edition", "findBy", "images"] },
     "findBy": ["isbn"],
     "editionNamespaces": ["isbn", "openlibrary"],
     "limits": { "ratePerSec": 1, "burst": 1 },
