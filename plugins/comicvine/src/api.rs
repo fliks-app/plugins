@@ -1,5 +1,5 @@
 //! The ComicVine lookups over an injected transport, so recorded bodies can stand in for the network.
-use fliks_plugin_sdk_provider::ProviderError;
+use fliks_plugin_sdk_provider::{ImageCandidate, ImageScope, ProviderError};
 use provider_common::comic::{RawIssue, Volume, date, https, issues, volume};
 use provider_common::http::{json_reply, upstream};
 use serde_json::Value;
@@ -116,6 +116,39 @@ pub fn work(h: &impl Http, id: &str) -> R<Value> {
         .filter(|r| r.is_object())
         .ok_or(ProviderError::NotFound)?;
     Ok(volume(&to_volume(r, id.to_owned())))
+}
+
+/// The covers of an image object: the original scan, then the largest rendition.
+pub fn covers(img: &Value) -> Vec<ImageCandidate> {
+    let mut urls: Vec<String> = ["original_url", "super_url"]
+        .iter()
+        .filter_map(|k| https(img.get(*k)?.as_str()?))
+        .collect();
+    urls.dedup();
+    urls.into_iter()
+        .map(|url| ImageCandidate {
+            url,
+            slot: "cover".into(),
+            ..Default::default()
+        })
+        .collect()
+}
+
+/// The covers of a volume; every other scope is unsupported.
+pub fn images(h: &impl Http, id: &str, scope: &ImageScope) -> R<Vec<ImageCandidate>> {
+    if !matches!(scope, ImageScope::Work) {
+        return Err(ProviderError::Unsupported);
+    }
+    let id = volume_id(id)?;
+    let body = h.get(
+        &format!("/volume/4050-{id}/"),
+        &[("field_list", "id,image".to_owned())],
+    )?;
+    let r = body
+        .get("results")
+        .filter(|r| r.is_object())
+        .ok_or(ProviderError::NotFound)?;
+    Ok(r.get("image").map(covers).unwrap_or_default())
 }
 
 pub fn children(h: &impl Http, id: &str) -> R<Vec<Value>> {

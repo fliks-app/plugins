@@ -135,3 +135,23 @@ fn replies_map_to_provider_errors() {
     ));
     assert!(reply(200, body("volume.json").as_bytes()).is_ok());
 }
+
+#[test]
+fn images_are_the_original_and_the_large_rendition_over_https() {
+    let img = json!({"original_url": "http://comicvine.gamespot.com/a/uploads/original/1/1.jpg",
+        "super_url": "https://comicvine.gamespot.com/a/uploads/scale_large/1/1.jpg",
+        "medium_url": "https://comicvine.gamespot.com/a/uploads/scale_medium/1/1.jpg"});
+    let c = covers(&img);
+    assert_eq!(c.len(), 2);
+    assert!(c[0].url.starts_with("https://") && c[0].url.contains("/original/"));
+    assert!(c.iter().all(|i| i.slot == "cover"));
+    assert!(covers(&json!({})).is_empty());
+    assert!(matches!(
+        images(
+            &fake("volume.json"),
+            "1",
+            &fliks_plugin_sdk_provider::ImageScope::Person
+        ),
+        Err(ProviderError::Unsupported)
+    ));
+}
