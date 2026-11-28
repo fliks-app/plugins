@@ -717,6 +717,9 @@ pub mod reports {
         pub size: i64,
         /// `imported`, `refused` or `skipped`.
         pub verdict: String,
+        /// Stable machine key of `reason`, the human text.
+        #[serde(default)]
+        pub code: String,
         pub reason: String,
     }
 

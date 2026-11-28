@@ -2827,7 +2827,10 @@ async fn an_import_report_serves_the_refusal_and_a_manual_import_rearms_the_row(
             .unwrap()
             .ends_with("Some.Movie.2020.1080p.mkv")
     );
-    assert_eq!(file["verdict"], "refused");
+    assert_eq!(
+        (&file["verdict"], &file["code"]),
+        (&json!("refused"), &json!("host_refused"))
+    );
     assert!(
         file["reason"]
             .as_str()

@@ -1004,21 +1004,21 @@ const ARCHIVE_EXTS: [&str; 7] = [".rar", ".zip", ".7z", ".tar", ".gz", ".iso", "
 static SAMPLE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?i)(^|[^a-z])sample([^a-z]|$)").unwrap());
 
-/// Why the plugin never offers a torrent file to the ingest.
-fn skip_reason(f: &TorrentFile) -> &'static str {
+/// Why the plugin never offers a torrent file to the ingest: (code, reason).
+fn skip_reason(f: &TorrentFile) -> (&'static str, &'static str) {
     let ext = ext_of(&f.name);
     let archive = ARCHIVE_EXTS.contains(&ext.as_str())
         || ext.len() == 4 && ext.starts_with(".r") && ext[2..].bytes().all(|b| b.is_ascii_digit());
     if archive {
-        "archive not extracted"
+        ("archive_not_extracted", "archive not extracted")
     } else if SAMPLE.is_match(&f.name) {
-        "sample"
+        ("sample", "sample")
     } else if f.progress < 1.0 {
-        "not downloaded yet"
+        ("not_downloaded", "not downloaded yet")
     } else if holds_media(std::slice::from_ref(f)) {
-        "not a file this media wishes"
+        ("not_wished", "not a file this media wishes")
     } else {
-        "not a media file"
+        ("not_media", "not a media file")
     }
 }
 
@@ -1027,11 +1027,15 @@ fn scan(files: &[TorrentFile], save: &str) -> Report {
     Report {
         files: files
             .iter()
-            .map(|f| ReportFile {
-                path: join_path(save, &f.name),
-                size: f.size,
-                verdict: "skipped".into(),
-                reason: skip_reason(f).into(),
+            .map(|f| {
+                let (code, reason) = skip_reason(f);
+                ReportFile {
+                    path: join_path(save, &f.name),
+                    size: f.size,
+                    verdict: "skipped".into(),
+                    code: code.into(),
+                    reason: reason.into(),
+                }
             })
             .collect(),
         log: vec![],
@@ -1043,9 +1047,10 @@ impl Report {
         self.log.push(line);
     }
 
-    fn mark(&mut self, path: &str, verdict: &str, reason: &str) {
+    fn mark(&mut self, path: &str, verdict: &str, code: &str, reason: &str) {
         if let Some(f) = self.files.iter_mut().find(|f| f.path == path) {
             f.verdict = verdict.into();
+            f.code = code.into();
             f.reason = reason.into();
         }
     }
@@ -1056,12 +1061,17 @@ impl Report {
         for p in sent {
             let refusal = r.refused.iter().find(|f| &f.file == p);
             match refusal {
-                Some(f) => self.mark(p, "refused", &f.reason),
+                Some(f) => self.mark(p, "refused", "host_refused", &f.reason),
                 None if r.already_present.contains(p) => {
-                    self.mark(p, "imported", "already in the library")
+                    self.mark(p, "imported", "imported", "already in the library")
                 }
-                None if placed => self.mark(p, "imported", "placed in the library"),
-                None => self.mark(p, "skipped", "the host placed nothing"),
+                None if placed => self.mark(p, "imported", "imported", "placed in the library"),
+                None => self.mark(
+                    p,
+                    "skipped",
+                    "host_placed_nothing",
+                    "the host placed nothing",
+                ),
             }
         }
     }
@@ -1587,16 +1597,16 @@ mod tests {
             f("a/Song.flac", 1.0),
         ];
         let mut rep = scan(&files, "/dl");
-        let reasons: Vec<&str> = rep.files.iter().map(|f| f.reason.as_str()).collect();
+        let codes: Vec<&str> = rep.files.iter().map(|f| f.code.as_str()).collect();
         assert_eq!(
-            reasons,
+            codes,
             [
-                "not a file this media wishes",
+                "not_wished",
                 "sample",
-                "archive not extracted",
-                "not a media file",
-                "not downloaded yet",
-                "not a file this media wishes"
+                "archive_not_extracted",
+                "not_media",
+                "not_downloaded",
+                "not_wished"
             ]
         );
         let sent = vec!["/dl/a/Movie.mkv".to_owned(), "/dl/a/Late.mkv".to_owned()];
