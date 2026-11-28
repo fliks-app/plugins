@@ -1,6 +1,6 @@
 //! The proxied routes. Bodies and statuses are the TypeScript plugin's, frozen by its tests.
 
-use crate::db::{HistoryRow, blocklist, clients, history, indexer_stats};
+use crate::db::{HistoryRow, blocklist, clients, history, indexer_stats, reports};
 use crate::error::{Error, R};
 use crate::grab::{self, Manual, Stream};
 use crate::util::{Settings, js_number};
@@ -656,6 +656,47 @@ fn retry_import(r: &Request) -> R<Response> {
     ok(json!({}))
 }
 
+/// What the last import of a transfer scanned and decided, from this plugin's own history.
+fn import_report(r: &Request) -> R<Response> {
+    let row = match target(r) {
+        Ok(row) => row,
+        Err(resp) => return resp,
+    };
+    ok(reports::find(row.id)?.unwrap_or_default())
+}
+
+/// Hands an `import_failed` transfer back to the next `ImportCompleted` tick, restricted to the
+/// chosen files of its report.
+fn manual_import(r: &Request) -> R<Response> {
+    let row = match controllable(r, &["import_failed"]) {
+        Ok(row) => row,
+        Err(resp) => return resp,
+    };
+    let chosen: Option<Vec<String>> = body(r).get("files").and_then(Value::as_array).map(|a| {
+        a.iter()
+            .filter_map(|v| v.as_str().map(str::to_owned))
+            .collect()
+    });
+    let Some(chosen) = chosen.filter(|c| !c.is_empty()) else {
+        return bad_param("files");
+    };
+    let known = reports::find(row.id)?.unwrap_or_default().files;
+    if chosen.iter().any(|p| !known.iter().any(|f| &f.path == p)) {
+        return bad_param("files");
+    }
+    if !reports::arm_manual(row.id, &chosen)? {
+        return Ok(err_body(
+            409,
+            "download.queue.errors.not_controllable",
+            Some(&row.status),
+        ));
+    }
+    if let Err(e) = host::events_publish(&[AcquisitionEvent::QueueChanged]) {
+        warn!("queue-changed publish failed: {}", e.message);
+    }
+    ok(json!({}))
+}
+
 // --- implementations -----------------------------------------------------------------------
 
 static INDEXER_IMPLEMENTATIONS: LazyLock<Value> = LazyLock::new(|| {
@@ -803,6 +844,8 @@ pub fn table() -> Vec<(&'static str, &'static str, Handler)> {
         ("POST", "/queue/resume", h!(resume)),
         ("POST", "/queue/remove", h!(remove_queued)),
         ("POST", "/queue/retry-import", h!(retry_import)),
+        ("POST", "/queue/import-report", h!(import_report)),
+        ("POST", "/queue/manual-import", h!(manual_import)),
     ]
 }
 

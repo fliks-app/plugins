@@ -1802,7 +1802,7 @@ const BAD_BODY: &str = "download.http.errors.bad_body";
 const NOT_FOUND: &str = "download.http.errors.not_found";
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn all_35_routes_answer_the_frozen_statuses() {
+async fn all_37_routes_answer_the_frozen_statuses() {
     let Some(h) = Harness::start(setup()).await else {
         return;
     };
@@ -2328,6 +2328,27 @@ async fn all_35_routes_answer_the_frozen_statuses() {
             "download.queue.errors.not_retryable",
             Some("failed"),
         ),
+        action(
+            "/queue/import-report",
+            json!({ "ref": "999" }),
+            404,
+            NOT_FOUND,
+            Some("999"),
+        ),
+        action(
+            "/queue/manual-import",
+            json!({ "ref": "999" }),
+            404,
+            NOT_FOUND,
+            Some("999"),
+        ),
+        action(
+            "/queue/manual-import",
+            json!({ "ref": failed_ref }),
+            409,
+            not_controllable,
+            Some("failed"),
+        ),
         okc(
             "GET",
             "/blocklist",
@@ -2389,7 +2410,7 @@ async fn all_35_routes_answer_the_frozen_statuses() {
         .into_iter()
         .map(|(m, p, _)| (m.to_owned(), p.to_owned()))
         .collect();
-    assert_eq!(table.len(), 35);
+    assert_eq!(table.len(), 37);
     for (m, p) in &table {
         assert!(
             cases.iter().any(|c| c.method == m && c.route == p),
@@ -2773,6 +2794,78 @@ async fn an_import_core_refuses_is_failed_and_announced() {
             .any(|b| format!("{b:?}").contains("ImportFailed")),
         "no acquisition.failed reached the hub"
     );
+    h.finish().await;
+    let _ = std::fs::remove_dir_all(base);
+}
+
+/// The report of a refused import names the file, the host's reason and the log; a manual import
+/// re-arms only an `import_failed` row, restricted to files of that report.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn an_import_report_serves_the_refusal_and_a_manual_import_rearms_the_row() {
+    let Some((h, base, id, _qbit)) = import_fixture("report", false).await else {
+        return;
+    };
+    h.job("ImportCompleted", None).await.unwrap();
+    let mut db = plugin_db(&h).await;
+    let closed = scalar_i64(
+        &mut db,
+        r#"INSERT INTO "download_history" ("sourceTitle", "quality", "status") VALUES ('y', 'HD', 'failed') RETURNING "id"::bigint"#,
+    )
+    .await;
+    let r = act(&h, "import-report", closed).await;
+    assert_eq!(
+        (r.status, body(&r)),
+        (200, json!({ "files": [], "log": [] }))
+    );
+    let r = act(&h, "import-report", id).await;
+    assert_eq!(r.status, 200);
+    let rep = body(&r);
+    let file = &rep["files"][0];
+    assert!(
+        file["path"]
+            .as_str()
+            .unwrap()
+            .ends_with("Some.Movie.2020.1080p.mkv")
+    );
+    assert_eq!(
+        (&file["verdict"], &file["code"]),
+        (&json!("refused"), &json!("host_refused"))
+    );
+    assert!(
+        file["reason"]
+            .as_str()
+            .unwrap()
+            .contains("not anchored to a library folder"),
+        "{rep}"
+    );
+    assert!(
+        rep["log"].as_array().is_some_and(|l| !l.is_empty()),
+        "{rep}"
+    );
+
+    let path = file["path"].clone();
+    let manual = async |files: Value| {
+        let b = json!({ "ref": ref_of(&h, id).await, "files": files });
+        h.proxy("POST", "/queue/manual-import", Some(&b)).await
+    };
+    assert_eq!(manual(json!([])).await.status, 400);
+    assert_eq!(manual(json!(["/etc/passwd"])).await.status, 400);
+    let r = manual(json!([path])).await;
+    assert_eq!((r.status, body(&r)), (200, json!({})));
+    assert_eq!(status_of(&mut db, id).await, ("grabbed".into(), None));
+    assert_eq!(manual(json!([path])).await.status, 409);
+
+    h.job("ImportCompleted", None).await.unwrap();
+    let rep = body(&act(&h, "import-report", id).await);
+    assert!(
+        rep["log"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|l| l.as_str().unwrap().contains("Manual import")),
+        "{rep}"
+    );
+    assert_eq!(status_of(&mut db, id).await.0, "import_failed");
     h.finish().await;
     let _ = std::fs::remove_dir_all(base);
 }

@@ -8,7 +8,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value as Json};
 
-pub const MIGRATIONS: [(&str, &str); 16] = [
+pub const MIGRATIONS: [(&str, &str); 17] = [
     (
         "0001_initial_schema",
         include_str!("../migrations/0001_initial_schema.sql"),
@@ -72,6 +72,10 @@ pub const MIGRATIONS: [(&str, &str); 16] = [
     (
         "0016_release_refs",
         include_str!("../migrations/0016_release_refs.sql"),
+    ),
+    (
+        "0017_import_reports",
+        include_str!("../migrations/0017_import_reports.sql"),
     ),
 ];
 
@@ -700,6 +704,82 @@ pub mod release_refs {
             ),
             &[],
         )
+    }
+}
+
+/// What the last import of a history row scanned and decided, kept for the queue's `importReport`.
+pub mod reports {
+    use super::*;
+
+    #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+    pub struct File {
+        pub path: String,
+        pub size: i64,
+        /// `imported`, `refused` or `skipped`.
+        pub verdict: String,
+        /// Stable machine key of `reason`, the human text.
+        #[serde(default)]
+        pub code: String,
+        pub reason: String,
+    }
+
+    #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+    pub struct Report {
+        pub files: Vec<File>,
+        pub log: Vec<String>,
+    }
+
+    pub fn save(id: i64, r: &Report) -> R<()> {
+        exec(
+            r#"INSERT INTO "import_reports" ("historyId", "files", "log") VALUES ($1, $2, $3)
+       ON CONFLICT ("historyId") DO UPDATE SET "files" = $2, "log" = $3, "updatedAt" = now()"#,
+            &[
+                int(id),
+                Param::Json(serde_json::to_string(&r.files).unwrap_or_default()),
+                Param::Json(serde_json::to_string(&r.log).unwrap_or_default()),
+            ],
+        )
+        .map(drop)
+    }
+
+    pub fn find(id: i64) -> R<Option<Report>> {
+        first(
+            r#"SELECT "files", "log" FROM "import_reports" WHERE "historyId" = $1"#,
+            &[int(id)],
+        )
+    }
+
+    /// Hands a refused import back to the poller restricted to `paths`; false when the row is
+    /// gone or no longer `import_failed`.
+    pub fn arm_manual(id: i64, paths: &[String]) -> R<bool> {
+        let armed = exec(
+            r#"UPDATE "download_history" SET "status" = 'grabbed', "statusMessage" = NULL, "retryLaterSince" = NULL, "updatedAt" = now() WHERE "id" = $1 AND "status" = 'import_failed'"#,
+            &[int(id)],
+        )? > 0;
+        if armed {
+            exec(
+                r#"INSERT INTO "import_reports" ("historyId", "only") VALUES ($1, $2)
+       ON CONFLICT ("historyId") DO UPDATE SET "only" = $2"#,
+                &[
+                    int(id),
+                    Param::Json(serde_json::to_string(paths).unwrap_or_default()),
+                ],
+            )?;
+        }
+        Ok(armed)
+    }
+
+    /// The paths a manual import restricts the next import to, cleared as they are read.
+    pub fn take_only(id: i64) -> R<Option<Vec<String>>> {
+        #[derive(Deserialize)]
+        struct Only {
+            only: Option<Vec<String>>,
+        }
+        let row: Option<Only> = first(
+            r#"UPDATE "import_reports" SET "only" = NULL WHERE "historyId" = $1 AND "only" IS NOT NULL RETURNING "only""#,
+            &[int(id)],
+        )?;
+        Ok(row.and_then(|r| r.only))
     }
 }
 

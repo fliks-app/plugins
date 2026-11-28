@@ -4,7 +4,7 @@ use crate::client::{self, Torrent, TorrentFile};
 use crate::config;
 use crate::db::{
     DownloadClientRow, HistoryRow, blocklist, clients, core_refs, history, indexer_stats, indexers,
-    release_refs, stalled,
+    release_refs, reports, stalled,
 };
 use crate::error::{Error, R};
 use crate::grab::{
@@ -998,7 +998,115 @@ fn intake(h: &HistoryRow, media: u32, files: &[TorrentFile], save: &str) -> R<Ve
     Ok(out)
 }
 
+const REPORT_LOG_LINES: usize = 50;
+const ARCHIVE_EXTS: [&str; 7] = [".rar", ".zip", ".7z", ".tar", ".gz", ".iso", ".par2"];
+
+static SAMPLE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?i)(^|[^a-z])sample([^a-z]|$)").unwrap());
+
+/// Why the plugin never offers a torrent file to the ingest: (code, reason).
+fn skip_reason(f: &TorrentFile) -> (&'static str, &'static str) {
+    let ext = ext_of(&f.name);
+    let archive = ARCHIVE_EXTS.contains(&ext.as_str())
+        || ext.len() == 4 && ext.starts_with(".r") && ext[2..].bytes().all(|b| b.is_ascii_digit());
+    if archive {
+        ("archive_not_extracted", "archive not extracted")
+    } else if SAMPLE.is_match(&f.name) {
+        ("sample", "sample")
+    } else if f.progress < 1.0 {
+        ("not_downloaded", "not downloaded yet")
+    } else if holds_media(std::slice::from_ref(f)) {
+        ("not_wished", "not a file this media wishes")
+    } else {
+        ("not_media", "not a media file")
+    }
+}
+
+/// Every torrent file as skipped, with its reason; the ingest then upgrades the ones it was given.
+fn scan(files: &[TorrentFile], save: &str) -> Report {
+    Report {
+        files: files
+            .iter()
+            .map(|f| {
+                let (code, reason) = skip_reason(f);
+                ReportFile {
+                    path: join_path(save, &f.name),
+                    size: f.size,
+                    verdict: "skipped".into(),
+                    code: code.into(),
+                    reason: reason.into(),
+                }
+            })
+            .collect(),
+        log: vec![],
+    }
+}
+
+impl Report {
+    fn note(&mut self, line: String) {
+        self.log.push(line);
+    }
+
+    fn mark(&mut self, path: &str, verdict: &str, code: &str, reason: &str) {
+        if let Some(f) = self.files.iter_mut().find(|f| f.path == path) {
+            f.verdict = verdict.into();
+            f.code = code.into();
+            f.reason = reason.into();
+        }
+    }
+
+    /// Records what the host decided on the `sent` paths of one ingest.
+    fn ingested(&mut self, sent: &[String], r: &IngestResult) {
+        let placed = !r.imported.is_empty() || !r.already_present.is_empty();
+        for p in sent {
+            let refusal = r.refused.iter().find(|f| &f.file == p);
+            match refusal {
+                Some(f) => self.mark(p, "refused", "host_refused", &f.reason),
+                None if r.already_present.contains(p) => {
+                    self.mark(p, "imported", "imported", "already in the library")
+                }
+                None if placed => self.mark(p, "imported", "imported", "placed in the library"),
+                None => self.mark(
+                    p,
+                    "skipped",
+                    "host_placed_nothing",
+                    "the host placed nothing",
+                ),
+            }
+        }
+    }
+}
+
+use reports::{File as ReportFile, Report};
+
+/// Runs one import and keeps its report for `importReport`, whatever way it ends.
 fn process_one(h: &HistoryRow, t: &Torrent, client: &DownloadClientRow) -> R<()> {
+    let only = reports::take_only(h.id)?;
+    let mut rep = Report::default();
+    let out = import(h, t, client, only.as_deref(), &mut rep);
+    match (&out, history::find(h.id)) {
+        (Err(e), _) => rep.note(format!("Import error: {e}")),
+        (_, Ok(Some(row))) => rep.note(match row.status_message {
+            Some(m) => format!("Outcome: {}, {m}", row.status),
+            None => format!("Outcome: {}", row.status),
+        }),
+        _ => {}
+    }
+    let skip = rep.log.len().saturating_sub(REPORT_LOG_LINES);
+    rep.log.drain(..skip);
+    if let Err(e) = reports::save(h.id, &rep) {
+        warn!("Import[{}]: report not saved: {e}", h.source_title);
+    }
+    out
+}
+
+fn import(
+    h: &HistoryRow,
+    t: &Torrent,
+    client: &DownloadClientRow,
+    only: Option<&[String]>,
+    rep: &mut Report,
+) -> R<()> {
     let Some(files) = client::files(client, &t.hash) else {
         let message = format!("could not list files for \"{}\"", t.name);
         warn!("Import[{}]: {message}; will retry", h.source_title);
@@ -1012,7 +1120,26 @@ fn process_one(h: &HistoryRow, t: &Torrent, client: &DownloadClientRow) -> R<()>
         );
     };
     let save = t.save_path.clone().unwrap_or_default();
-    let plan = intake(h, media as u32, &files, &save)?;
+    *rep = scan(&files, &save);
+    let mut plan = intake(h, media as u32, &files, &save)?;
+    if let Some(only) = only {
+        for it in &mut plan {
+            it.paths.retain(|p| only.contains(p));
+        }
+        plan.retain(|it| !it.paths.is_empty());
+        rep.note(format!("Manual import of {} chosen file(s)", only.len()));
+        if plan.is_empty() {
+            let msg = "Import failed: none of the chosen files can be imported";
+            history::finish_import(h.id, "import_failed", Some(msg))?;
+            publish_failed(h, msg);
+            return Ok(());
+        }
+    }
+    rep.note(format!(
+        "Scanned {} file(s), {} offered to the ingest",
+        files.len(),
+        plan.iter().map(|i| i.paths.len()).sum::<usize>()
+    ));
     let what = h.family.as_deref().unwrap_or("media");
     if plan.is_empty() {
         if holds_media(&files) {
@@ -1049,6 +1176,7 @@ fn process_one(h: &HistoryRow, t: &Torrent, client: &DownloadClientRow) -> R<()>
     let (mut files_placed, mut own_placed, mut partial) = (0, false, None);
     for it in plan {
         let family = it.family;
+        let sent = it.paths.clone();
         let result = match host::library_ingest(&IngestRequest {
             media_id: media as u32,
             family,
@@ -1069,9 +1197,23 @@ fn process_one(h: &HistoryRow, t: &Torrent, client: &DownloadClientRow) -> R<()>
             }
             Err(e) => return Err(e.into()),
         };
+        rep.ingested(&sent, &result);
+        rep.note(format!(
+            "{} ingest: {} imported, {} already present, {} refused",
+            family_str(family),
+            result.imported.len(),
+            result.already_present.len(),
+            result.refused.len()
+        ));
         let ingested = classify(&result);
         let own = family == base;
         match &ingested {
+            Ingested::Refused(m) if own && only.is_some() => {
+                let msg = format!("Import refused: {m}");
+                history::finish_import(h.id, "import_failed", Some(&msg))?;
+                publish_failed(h, &msg);
+                return Ok(());
+            }
             Ingested::Refused(m) if own => {
                 let msg = format!("Import refused: {m}");
                 error!("Import[{}]: {msg}", h.source_title);
@@ -1437,6 +1579,58 @@ mod tests {
         }
         assert!(at(1.0, "uploading") && at(1.0, "checkingUP"));
         assert!(at(0.5, "seeding") && !at(0.5, "downloading"));
+    }
+
+    #[test]
+    fn a_report_says_why_each_file_was_or_was_not_imported() {
+        let f = |name: &str, progress: f64| TorrentFile {
+            name: name.into(),
+            progress,
+            size: 10,
+        };
+        let files = [
+            f("a/Movie.mkv", 1.0),
+            f("a/Sample/movie-sample.mkv", 1.0),
+            f("a/movie.r01", 1.0),
+            f("a/movie.nfo", 1.0),
+            f("a/Late.mkv", 0.5),
+            f("a/Song.flac", 1.0),
+        ];
+        let mut rep = scan(&files, "/dl");
+        let codes: Vec<&str> = rep.files.iter().map(|f| f.code.as_str()).collect();
+        assert_eq!(
+            codes,
+            [
+                "not_wished",
+                "sample",
+                "archive_not_extracted",
+                "not_media",
+                "not_downloaded",
+                "not_wished"
+            ]
+        );
+        let sent = vec!["/dl/a/Movie.mkv".to_owned(), "/dl/a/Late.mkv".to_owned()];
+        let result = IngestResult {
+            imported: vec![],
+            already_present: vec![],
+            refused: vec![Refusal {
+                file: "/dl/a/Movie.mkv".into(),
+                class: RefusalClass::Release,
+                reason: "below the minimum size".into(),
+            }],
+            unit: None,
+        };
+        rep.ingested(&sent, &result);
+        let of = |p: &str| rep.files.iter().find(|f| f.path == p).unwrap();
+        assert_eq!(
+            (
+                of("/dl/a/Movie.mkv").verdict.as_str(),
+                of("/dl/a/Movie.mkv").reason.as_str()
+            ),
+            ("refused", "below the minimum size")
+        );
+        assert_eq!(of("/dl/a/Late.mkv").verdict, "skipped");
+        assert_eq!(of("/dl/a/movie.r01").verdict, "skipped");
     }
 
     #[test]
