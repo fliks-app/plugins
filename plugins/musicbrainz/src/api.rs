@@ -22,6 +22,8 @@ const EDITION_INC: &str = "recordings+release-groups+artist-credits+media+labels
 pub trait Http {
     /// A GET of the web service (`/ws/2` is the transport's), the answer as JSON.
     fn mb(&self, path: &str, query: &[(&str, String)]) -> R<Value>;
+    /// A GET of the Cover Art Archive's JSON index, the answer as JSON.
+    fn caa(&self, path: &str) -> R<Value>;
     /// A POST of ListenBrainz; none when it refuses, is unreachable or answers nothing usable.
     fn lb(&self, path: &str, body: &Value) -> Option<Value>;
     /// A GET of ListenBrainz, under the same rules as `lb`.

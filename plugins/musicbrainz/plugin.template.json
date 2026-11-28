@@ -39,7 +39,8 @@
         "artistSearch",
         "recordingSearch",
         "recordingReleases",
-        "lists"
+        "lists",
+        "images"
       ]
     },
     "findBy": [
