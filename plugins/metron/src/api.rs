@@ -1,5 +1,5 @@
 //! The Metron lookups over an injected transport, so recorded bodies can stand in for the network.
-use fliks_plugin_sdk_provider::ProviderError;
+use fliks_plugin_sdk_provider::{ImageCandidate, ImageScope, ProviderError};
 use provider_common::comic::{RawIssue, Volume, date, https, issues, volume};
 use provider_common::http::{json_reply, upstream};
 use serde_json::Value;
@@ -113,6 +113,33 @@ pub fn work(h: &impl Http, id: &str) -> R<Value> {
     v.cover = list(&first).iter().find_map(cover_of);
     v.url = Some(format!("https://metron.cloud/series/{id}/"));
     Ok(volume(&v))
+}
+
+/// The covers of the first issues stand for the series, which has no image of its own.
+const MAX_COVERS: usize = 10;
+
+pub fn candidates(first_page: &Value) -> Vec<ImageCandidate> {
+    list(first_page)
+        .iter()
+        .filter_map(cover_of)
+        .take(MAX_COVERS)
+        .map(|url| ImageCandidate {
+            url,
+            slot: "cover".into(),
+            ..Default::default()
+        })
+        .collect()
+}
+
+/// The covers of a series; every other scope is unsupported.
+pub fn images(h: &impl Http, id: &str, scope: &ImageScope) -> R<Vec<ImageCandidate>> {
+    if !matches!(scope, ImageScope::Work) {
+        return Err(ProviderError::Unsupported);
+    }
+    let id = series_id(id)?;
+    Ok(candidates(
+        &h.get("/issue/", &[("series_id", id.to_owned())])?,
+    ))
 }
 
 fn is_annual(series: &Value) -> bool {

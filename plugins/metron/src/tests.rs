@@ -170,3 +170,24 @@ fn status_mapping() {
     ));
     assert!(reply(200, None, b"{}").is_ok());
 }
+
+#[test]
+fn images_are_the_covers_of_the_first_issues_over_https() {
+    let page = json!({"results": [
+        {"id": 1, "image": "http://static.metron.cloud/media/issue/a.jpg"},
+        {"id": 2},
+        {"id": 3, "image": "https://static.metron.cloud/media/issue/b.jpg"}
+    ]});
+    let c = candidates(&page);
+    assert_eq!(c.len(), 2);
+    assert_eq!(c[0].url, "https://static.metron.cloud/media/issue/a.jpg");
+    assert!(c.iter().all(|i| i.slot == "cover"));
+    assert!(matches!(
+        images(
+            &fake("series.json"),
+            "1",
+            &fliks_plugin_sdk_provider::ImageScope::Edition
+        ),
+        Err(ProviderError::Unsupported)
+    ));
+}
