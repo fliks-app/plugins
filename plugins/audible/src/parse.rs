@@ -1,4 +1,5 @@
 //! Audible catalog (unofficial `api.audible.<tld>/1.0/catalog/products`): URL builders and parsers.
+use fliks_plugin_sdk_provider::ImageCandidate;
 use provider_common::book::region::Region;
 use provider_common::book::util::*;
 use provider_common::book::{
@@ -188,4 +189,52 @@ pub fn parse_product(body: &str) -> Result<BookRecord, ParseError> {
     v.get("product")
         .and_then(product)
         .ok_or(ParseError::NotFound)
+}
+
+/// The square cover renditions of a product, the largest first; the key is the side in pixels.
+pub fn parse_images(body: &str) -> Result<Vec<ImageCandidate>, ParseError> {
+    let v = json(body)?;
+    check_error(&v)?;
+    let images = v
+        .pointer("/product/product_images")
+        .and_then(Value::as_object)
+        .ok_or(ParseError::NotFound)?;
+    let mut sized: Vec<(u32, &str)> = images
+        .iter()
+        .filter_map(|(k, v)| Some((k.parse().ok()?, v.as_str()?)))
+        .collect();
+    sized.sort_by_key(|a| std::cmp::Reverse(a.0));
+    Ok(sized
+        .into_iter()
+        .filter_map(|(side, u)| {
+            Some(ImageCandidate {
+                url: https(u)?,
+                slot: "cover".into(),
+                width: Some(side),
+                height: Some(side),
+                ..Default::default()
+            })
+        })
+        .collect())
+}
+
+#[cfg(test)]
+mod images_tests {
+    use super::*;
+
+    #[test]
+    fn images_are_square_covers_largest_first() {
+        let body = r#"{"product":{"product_images":{"500":"https://m.media-amazon.com/images/I/a._SL500_.jpg","1024":"https://m.media-amazon.com/images/I/a._SL1024_.jpg"}}}"#;
+        let c = parse_images(body).unwrap();
+        assert_eq!((c[0].width, c[0].height), (Some(1024), Some(1024)));
+        assert_eq!(
+            c[1].url,
+            "https://m.media-amazon.com/images/I/a._SL500_.jpg"
+        );
+        assert!(c.iter().all(|i| i.slot == "cover"));
+        assert!(matches!(
+            parse_images(r#"{"product":{}}"#),
+            Err(ParseError::NotFound)
+        ));
+    }
 }
