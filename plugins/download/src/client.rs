@@ -40,6 +40,7 @@ pub struct Torrent {
 pub struct TorrentFile {
     pub name: String,
     pub progress: f64,
+    pub size: i64,
 }
 
 static MAGNET_HEX: LazyLock<Regex> =

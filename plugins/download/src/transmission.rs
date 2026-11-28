@@ -232,6 +232,7 @@ pub fn files(c: &DownloadClientRow, hash: &str) -> Option<Vec<TorrentFile>> {
                     1.0
                 },
                 name: f.name,
+                size: f.length,
             })
             .collect(),
     )

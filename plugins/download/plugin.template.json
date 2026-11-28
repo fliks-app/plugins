@@ -2,7 +2,7 @@
   "id": "fliks.download",
   "pluginApi": 3,
   "name": "Torrent manager",
-  "fliks": ">=7.2.1 <8.0.0",
+  "fliks": ">=7.4.0 <8.0.0",
   "author": "Fliks",
   "description": "Torrent search on Torznab indexers, torrent client management and the acquisition grab pipeline for Fliks.",
   "license": "AGPL-3.0-or-later",
@@ -217,6 +217,16 @@
       "method": "POST",
       "path": "/queue/retry-import",
       "policy": "manage:plugin:fliks.download:queue-control"
+    },
+    {
+      "method": "POST",
+      "path": "/queue/import-report",
+      "policy": "manage:plugin:fliks.download:queue-control"
+    },
+    {
+      "method": "POST",
+      "path": "/queue/manual-import",
+      "policy": "manage:plugin:fliks.download:queue-control"
     }
   ],
   "scopes": [
@@ -271,7 +281,9 @@
       "pause": "/queue/pause",
       "resume": "/queue/resume",
       "remove": "/queue/remove",
-      "retryImport": "/queue/retry-import"
+      "retryImport": "/queue/retry-import",
+      "importReport": "/queue/import-report",
+      "manualImport": "/queue/manual-import"
     }
   },
   "ui": {
