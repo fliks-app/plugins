@@ -21,6 +21,13 @@ pub fn uuid(id: &str) -> Option<String> {
     ok.then_some(id)
 }
 
+/// A TMDB or TVDB id: a positive integer.
+pub fn number(id: &str) -> Option<String> {
+    let id = id.trim();
+    (!id.is_empty() && id.bytes().all(|b| b.is_ascii_digit()) && id.parse::<u64>().ok()? > 0)
+        .then(|| id.to_owned())
+}
+
 pub fn reply(status: u16, retry_after: Option<&str>, body: &[u8]) -> R<Value> {
     json_reply(status, retry_after, body)
 }

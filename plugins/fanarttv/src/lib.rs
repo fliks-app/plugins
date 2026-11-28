@@ -80,27 +80,30 @@ impl MetadataProvider for Provider {
         Ok(api::person(&Live, &id.value)?.to_string())
     }
 
-    fn fetch_images(_kind: String, id: ExternalId, scope: ImageScope, _lang: Lang) -> R<String> {
-        Ok(images_json(&images::images(&Live, &id.value, &scope)?))
+    fn fetch_images(kind: String, id: ExternalId, scope: ImageScope, _lang: Lang) -> R<String> {
+        Ok(images_json(&images::images(
+            &Live, &kind, &id.value, &scope,
+        )?))
     }
 
-    /// Fanart.tv is keyed by the MusicBrainz ids themselves.
+    /// Fanart.tv is keyed by MusicBrainz ids for music, TMDB ids for movies and TVDB ids for shows.
     fn find_by(
         source: ExternalId,
         _lang: Lang,
     ) -> Result<Option<(ExternalId, String)>, ProviderError> {
-        Ok((source.provider == "musicbrainz")
-            .then(|| api::uuid(&source.value))
-            .flatten()
-            .map(|value| {
-                (
-                    ExternalId {
-                        provider: "fanarttv".into(),
-                        value,
-                    },
-                    "album".into(),
-                )
-            }))
+        let (value, kind) = match source.provider.as_str() {
+            "musicbrainz" => (api::uuid(&source.value), "album"),
+            "tmdb" => (api::number(&source.value), "movie"),
+            "tvdb" => (api::number(&source.value), "series"),
+            _ => return Ok(None),
+        };
+        Ok(value.map(|value| {
+            let id = ExternalId {
+                provider: "fanarttv".into(),
+                value,
+            };
+            (id, kind.into())
+        }))
     }
 }
 
