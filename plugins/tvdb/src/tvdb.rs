@@ -48,7 +48,7 @@ pub fn code(language: &str) -> &'static str {
     }
 }
 
-fn missing(what: &str) -> ProviderError {
+pub(crate) fn missing(what: &str) -> ProviderError {
     upstream(
         None,
         format!("Cannot read properties of undefined (reading '{what}')"),
@@ -128,7 +128,7 @@ impl<H: Http> Tvdb<H> {
         }
     }
 
-    async fn data(&self, path: &str, query: &[(&str, String)]) -> Result<Value> {
+    pub(crate) async fn data(&self, path: &str, query: &[(&str, String)]) -> Result<Value> {
         Ok(nn(&self.get(path, query).await?, "data"))
     }
 
@@ -685,7 +685,7 @@ fn trailers(m: &Value) -> Vec<Value> {
 }
 
 /// The seasons of the aired order: TVDB lists every order's seasons (DVD, absolute...) side by side.
-fn aired_seasons(series: &Value) -> Vec<&Value> {
+pub(crate) fn aired_seasons(series: &Value) -> Vec<&Value> {
     arr(series, "seasons")
         .iter()
         .filter(|s| {
