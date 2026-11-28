@@ -37,6 +37,10 @@ impl Fake {
 }
 
 impl Http for Fake {
+    fn caa(&self, _path: &str) -> R<Value> {
+        Err(ProviderError::NotFound)
+    }
+
     fn mb(&self, path: &str, query: &[(&str, String)]) -> R<Value> {
         self.queries.borrow_mut().extend(
             query

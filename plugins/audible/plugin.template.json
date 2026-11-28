@@ -16,7 +16,7 @@
   "routes": [],
   "provider": {
     "namespaces": [{ "name": "audible" }],
-    "kinds": { "book": ["search", "edition"] },
+    "kinds": { "book": ["search", "edition", "images"] },
     "editionNamespaces": ["asin"],
     "limits": { "ratePerSec": 1, "burst": 1 },
     "snapshotTtlSecs": { "edition": 2592000 },

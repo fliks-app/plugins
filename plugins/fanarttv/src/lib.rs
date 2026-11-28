@@ -2,6 +2,7 @@
 //! (`docs/spec/music.md` rules 25 and 26).
 
 mod api;
+mod images;
 #[cfg(test)]
 mod tests;
 
@@ -10,7 +11,9 @@ use fliks_plugin_sdk::bindings::wasi::http::types::Method;
 use fliks_plugin_sdk::http::Request;
 use fliks_plugin_sdk::rt::Budget;
 use fliks_plugin_sdk::{ExternalId, Plugin, host};
-use fliks_plugin_sdk_provider::{Lang, MetadataProvider, ProviderError, export_provider};
+use fliks_plugin_sdk_provider::{
+    ImageScope, Lang, MetadataProvider, ProviderError, export_provider, images_json,
+};
 use provider_common::http::upstream;
 use serde_json::Value;
 use std::time::Duration;
@@ -77,23 +80,30 @@ impl MetadataProvider for Provider {
         Ok(api::person(&Live, &id.value)?.to_string())
     }
 
-    /// Fanart.tv is keyed by the MusicBrainz ids themselves.
+    fn fetch_images(kind: String, id: ExternalId, scope: ImageScope, _lang: Lang) -> R<String> {
+        Ok(images_json(&images::images(
+            &Live, &kind, &id.value, &scope,
+        )?))
+    }
+
+    /// Fanart.tv is keyed by MusicBrainz ids for music, TMDB ids for movies and TVDB ids for shows.
     fn find_by(
         source: ExternalId,
         _lang: Lang,
     ) -> Result<Option<(ExternalId, String)>, ProviderError> {
-        Ok((source.provider == "musicbrainz")
-            .then(|| api::uuid(&source.value))
-            .flatten()
-            .map(|value| {
-                (
-                    ExternalId {
-                        provider: "fanarttv".into(),
-                        value,
-                    },
-                    "album".into(),
-                )
-            }))
+        let (value, kind) = match source.provider.as_str() {
+            "musicbrainz" => (api::uuid(&source.value), "album"),
+            "tmdb" => (api::number(&source.value), "movie"),
+            "tvdb" => (api::number(&source.value), "series"),
+            _ => return Ok(None),
+        };
+        Ok(value.map(|value| {
+            let id = ExternalId {
+                provider: "fanarttv".into(),
+                value,
+            };
+            (id, kind.into())
+        }))
     }
 }
 

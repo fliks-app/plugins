@@ -10,7 +10,7 @@ use fliks_plugin_sdk::http::Request;
 use fliks_plugin_sdk::rt::Budget;
 use fliks_plugin_sdk::{ExternalId, Plugin, host};
 use fliks_plugin_sdk_provider::{
-    Lang, MetadataProvider, ProviderError, SearchQuery, export_provider,
+    ImageScope, Lang, MetadataProvider, ProviderError, SearchQuery, export_provider, images_json,
 };
 use provider_common::http::upstream;
 use serde_json::Value;
@@ -70,6 +70,10 @@ impl MetadataProvider for Provider {
 
     fn fetch_work(_kind: String, id: ExternalId, _lang: Lang) -> R<String> {
         json_of(api::work(&Live, &id.value)?)
+    }
+
+    fn fetch_images(_kind: String, id: ExternalId, scope: ImageScope, _lang: Lang) -> R<String> {
+        Ok(images_json(&api::images(&Live, &id.value, &scope)?))
     }
 
     fn fetch_children(

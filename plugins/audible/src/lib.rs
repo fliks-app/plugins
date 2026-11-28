@@ -11,7 +11,7 @@ use fliks_plugin_sdk::http::Request;
 use fliks_plugin_sdk::rt::Budget;
 use fliks_plugin_sdk::{ExternalId, Plugin};
 use fliks_plugin_sdk_provider::{
-    Lang, MetadataProvider, ProviderError, SearchQuery, export_provider,
+    ImageScope, Lang, MetadataProvider, ProviderError, SearchQuery, export_provider, images_json,
 };
 use provider_common::book::region::Region;
 use std::time::Duration;
@@ -49,6 +49,19 @@ impl Plugin for Audible {}
 impl MetadataProvider for Audible {
     fn search(q: SearchQuery, lang: Lang) -> Result<String, ProviderError> {
         api::search(&Live, &q, region(&lang))
+    }
+    fn fetch_images(
+        _kind: String,
+        id: ExternalId,
+        scope: ImageScope,
+        lang: Lang,
+    ) -> Result<String, ProviderError> {
+        Ok(images_json(&api::fetch_images(
+            &Live,
+            &id,
+            &scope,
+            region(&lang),
+        )?))
     }
     fn fetch_edition(edition: ExternalId, lang: Lang) -> Result<Option<String>, ProviderError> {
         api::fetch_edition(&Live, &edition, region(&lang))

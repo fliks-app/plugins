@@ -11,7 +11,7 @@ use fliks_plugin_sdk::http::Request;
 use fliks_plugin_sdk::rt::Budget;
 use fliks_plugin_sdk::{ExternalId, Plugin};
 use fliks_plugin_sdk_provider::{
-    Lang, MetadataProvider, ProviderError, SearchQuery, export_provider,
+    ImageScope, Lang, MetadataProvider, ProviderError, SearchQuery, export_provider, images_json,
 };
 use std::time::Duration;
 
@@ -65,6 +65,14 @@ impl MetadataProvider for OpenLibrary {
         _lang: Lang,
     ) -> Result<Option<(ExternalId, String)>, ProviderError> {
         api::find_by(&Live, &source)
+    }
+    fn fetch_images(
+        kind: String,
+        id: ExternalId,
+        scope: ImageScope,
+        _lang: Lang,
+    ) -> Result<String, ProviderError> {
+        Ok(images_json(&api::fetch_images(&Live, &kind, &id, &scope)?))
     }
     fn fetch_edition(edition: ExternalId, _lang: Lang) -> Result<Option<String>, ProviderError> {
         api::fetch_edition(&Live, &edition)

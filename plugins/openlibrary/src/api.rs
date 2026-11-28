@@ -1,7 +1,7 @@
 //! The OpenLibrary lookups over an injected transport, so recorded bodies can stand in for the network.
 use crate::parse::{self as ol, Search};
 use fliks_plugin_sdk::ExternalId;
-use fliks_plugin_sdk_provider::{ProviderError, SearchQuery};
+use fliks_plugin_sdk_provider::{ImageCandidate, ImageScope, ProviderError, SearchQuery};
 use provider_common::book::{BookRecord, ParseError, to_record};
 use provider_common::http::{status_error, upstream};
 use provider_common::lang::normalize_language_code;
@@ -191,6 +191,49 @@ pub fn fetch_edition(h: &impl Http, edition: &ExternalId) -> R<Option<String>> {
     };
     name_authors(h, &mut r);
     Ok(Some(to_record(&r).to_string()))
+}
+
+fn candidates(urls: Vec<String>, slot: &str) -> Vec<ImageCandidate> {
+    urls.into_iter()
+        .map(|url| ImageCandidate {
+            url,
+            slot: slot.into(),
+            ..Default::default()
+        })
+        .collect()
+}
+
+/// Work and edition covers, author photos; the ids are OpenLibrary's covers ids.
+pub fn fetch_images(
+    h: &impl Http,
+    kind: &str,
+    id: &ExternalId,
+    scope: &ImageScope,
+) -> R<Vec<ImageCandidate>> {
+    book(kind)?;
+    match scope {
+        ImageScope::Work => {
+            let url = ol::work_url(olid(id)?).ok_or(ProviderError::NotFound)?;
+            let r = load(h, url, ol::work_url, ol::parse_work)?;
+            Ok(candidates(r.covers, "cover"))
+        }
+        ImageScope::Edition => {
+            let url = match id.provider.as_str() {
+                "isbn" => ol::isbn_url(&id.value),
+                NS => ol::edition_url(&id.value),
+                _ => None,
+            }
+            .ok_or(ProviderError::NotFound)?;
+            let r = load(h, url, ol::edition_url, ol::parse_edition)?;
+            Ok(candidates(r.covers, "cover"))
+        }
+        ImageScope::Person => {
+            let url = ol::author_url(olid(id)?).ok_or(ProviderError::NotFound)?;
+            let p = load(h, url, ol::author_url, ol::parse_author)?;
+            Ok(candidates(p.photos, "photo"))
+        }
+        _ => Err(ProviderError::Unsupported),
+    }
 }
 
 #[cfg(test)]
@@ -439,5 +482,30 @@ mod tests {
         assert!(matches!(e, ProviderError::Unsupported));
         let e = fetch_work(&h, "book", &id("tmdb", "1")).unwrap_err();
         assert!(matches!(e, ProviderError::Unsupported));
+    }
+
+    #[test]
+    fn images_are_the_covers_of_a_work_and_the_photos_of_an_author() {
+        let work = json!({"key": "/works/OL1W", "title": "T", "covers": [11, -1, 12]}).to_string();
+        let author = json!({"key": "/authors/OL2A", "name": "N", "photos": [21]}).to_string();
+        let h = Fake::new(vec![
+            ("/works/OL1W.json", ok(&work)),
+            ("/authors/OL2A.json", ok(&author)),
+        ]);
+        let w = fetch_images(&h, "book", &id(NS, "OL1W"), &ImageScope::Work).unwrap();
+        let urls: Vec<_> = w
+            .iter()
+            .map(|c| (c.slot.as_str(), c.url.as_str()))
+            .collect();
+        assert_eq!(
+            urls,
+            [
+                ("cover", "https://covers.openlibrary.org/b/id/11-L.jpg"),
+                ("cover", "https://covers.openlibrary.org/b/id/12-L.jpg")
+            ]
+        );
+        let a = fetch_images(&h, "book", &id(NS, "OL2A"), &ImageScope::Person).unwrap();
+        assert_eq!(a[0].slot, "photo");
+        assert!(fetch_images(&h, "book", &id(NS, "OL1W"), &ImageScope::Season(1)).is_err());
     }
 }

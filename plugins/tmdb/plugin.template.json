@@ -17,8 +17,8 @@
   "provider": {
     "namespaces": [{ "name": "tmdb" }],
     "kinds": {
-      "movie": ["search", "work", "person", "credits", "findBy", "lists"],
-      "series": ["search", "work", "children", "childStubs", "person", "credits", "findBy", "lists"]
+      "movie": ["search", "work", "person", "credits", "findBy", "lists", "images"],
+      "series": ["search", "work", "children", "childStubs", "person", "credits", "findBy", "lists", "images"]
     },
     "findBy": ["imdb", "tvdb"],
     "limits": { "ratePerSec": 40, "burst": 40 },

@@ -1,5 +1,6 @@
 //! `fliks.tvdb`: the TheTVDB metadata provider for movies and series.
 
+mod images;
 mod map;
 #[cfg(test)]
 mod tests;
@@ -10,7 +11,7 @@ use fliks_plugin_sdk::http::{Error as HttpError, Request};
 use fliks_plugin_sdk::rt::{Budget, block_on};
 use fliks_plugin_sdk::{ExternalId, Plugin, host};
 use fliks_plugin_sdk_provider::{
-    Lang, MetadataProvider, ProviderError, SearchQuery, export_provider,
+    ImageScope, Lang, MetadataProvider, ProviderError, SearchQuery, export_provider, images_json,
 };
 use serde_json::{Value, json};
 use std::rc::Rc;
@@ -154,6 +155,11 @@ impl MetadataProvider for Provider {
         json_of(block_on(
             client().person(numeric(&id)?, code(&lang.language)),
         )?)
+    }
+
+    fn fetch_images(kind: String, id: ExternalId, scope: ImageScope, _lang: Lang) -> Res<String> {
+        let found = block_on(client().images(tv(&kind), numeric(&id)?, &scope))?;
+        Ok(images_json(&found))
     }
 
     fn person_credits(id: ExternalId, _lang: Lang) -> Res<String> {

@@ -26,7 +26,8 @@
     "kinds": {
       "book": [
         "search",
-        "edition"
+        "edition",
+        "images"
       ]
     },
     "editionNamespaces": [

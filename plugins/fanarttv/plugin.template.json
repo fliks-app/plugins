@@ -4,7 +4,7 @@
   "name": "Fanart.tv",
   "fliks": ">=7.0.0 <8.0.0",
   "author": "Fliks",
-  "description": "Artist images and album covers from Fanart.tv, keyed by MusicBrainz ids.",
+  "description": "Artist images and album covers from Fanart.tv by MusicBrainz id, movie and show artwork by TMDB and TVDB id.",
   "license": "AGPL-3.0-or-later",
   "homepage": "https://fanart.tv",
   "logo": "logo.svg",
@@ -28,11 +28,22 @@
       "album": [
         "work",
         "person",
-        "findBy"
+        "findBy",
+        "images"
+      ],
+      "movie": [
+        "findBy",
+        "images"
+      ],
+      "series": [
+        "findBy",
+        "images"
       ]
     },
     "findBy": [
-      "musicbrainz"
+      "musicbrainz",
+      "tmdb",
+      "tvdb"
     ],
     "limits": {
       "ratePerSec": 2,

@@ -30,7 +30,8 @@
       "comic": [
         "search",
         "work",
-        "children"
+        "children",
+        "images"
       ]
     },
     "limits": {

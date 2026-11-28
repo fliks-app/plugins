@@ -1,7 +1,7 @@
 //! The Audible catalog lookups over an injected transport, so recorded bodies can stand in for the network.
 use crate::parse::{self as audible, Search};
 use fliks_plugin_sdk::ExternalId;
-use fliks_plugin_sdk_provider::{ProviderError, SearchQuery};
+use fliks_plugin_sdk_provider::{ImageCandidate, ImageScope, ProviderError, SearchQuery};
 use provider_common::book::region::Region;
 use provider_common::book::{ParseError, to_record};
 use provider_common::http::{status_error, upstream};
@@ -81,6 +81,23 @@ pub fn fetch_edition(h: &impl Http, edition: &ExternalId, region: Region) -> R<O
         Err(ProviderError::NotFound) => Ok(None),
         Err(e) => Err(e),
     }
+}
+
+/// The cover renditions of an edition; every other scope is unsupported.
+pub fn fetch_images(
+    h: &impl Http,
+    id: &ExternalId,
+    scope: &ImageScope,
+    region: Region,
+) -> R<Vec<ImageCandidate>> {
+    if !matches!(scope, ImageScope::Edition) {
+        return Err(ProviderError::Unsupported);
+    }
+    let url = (id.provider == NS)
+        .then(|| audible::product_url(region, &id.value))
+        .flatten()
+        .ok_or(ProviderError::NotFound)?;
+    audible::parse_images(&get(h, &url)?).map_err(parse_err)
 }
 
 #[cfg(test)]
