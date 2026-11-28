@@ -28,7 +28,8 @@
       "album": [
         "work",
         "person",
-        "findBy"
+        "findBy",
+        "images"
       ]
     },
     "findBy": [

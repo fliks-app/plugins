@@ -2,6 +2,7 @@
 //! (`docs/spec/music.md` rules 25 and 26).
 
 mod api;
+mod images;
 #[cfg(test)]
 mod tests;
 
@@ -10,7 +11,9 @@ use fliks_plugin_sdk::bindings::wasi::http::types::Method;
 use fliks_plugin_sdk::http::Request;
 use fliks_plugin_sdk::rt::Budget;
 use fliks_plugin_sdk::{ExternalId, Plugin, host};
-use fliks_plugin_sdk_provider::{Lang, MetadataProvider, ProviderError, export_provider};
+use fliks_plugin_sdk_provider::{
+    ImageScope, Lang, MetadataProvider, ProviderError, export_provider, images_json,
+};
 use provider_common::http::upstream;
 use serde_json::Value;
 use std::time::Duration;
@@ -75,6 +78,10 @@ impl MetadataProvider for Provider {
 
     fn fetch_person(id: ExternalId, _lang: Lang) -> R<String> {
         Ok(api::person(&Live, &id.value)?.to_string())
+    }
+
+    fn fetch_images(_kind: String, id: ExternalId, scope: ImageScope, _lang: Lang) -> R<String> {
+        Ok(images_json(&images::images(&Live, &id.value, &scope)?))
     }
 
     /// Fanart.tv is keyed by the MusicBrainz ids themselves.
