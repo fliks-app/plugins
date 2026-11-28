@@ -11,7 +11,7 @@ use fliks_plugin_sdk::http::Request;
 use fliks_plugin_sdk::rt::Budget;
 use fliks_plugin_sdk::{ExternalId, Plugin, host};
 use fliks_plugin_sdk_provider::{
-    Lang, MetadataProvider, ProviderError, SearchQuery, export_provider,
+    ImageScope, Lang, MetadataProvider, ProviderError, SearchQuery, export_provider, images_json,
 };
 use provider_common::http::upstream;
 use std::time::Duration;
@@ -57,6 +57,14 @@ impl Plugin for GoogleBooks {}
 impl MetadataProvider for GoogleBooks {
     fn search(q: SearchQuery, _lang: Lang) -> Result<String, ProviderError> {
         api::search(&Live, &q)
+    }
+    fn fetch_images(
+        kind: String,
+        id: ExternalId,
+        scope: ImageScope,
+        _lang: Lang,
+    ) -> Result<String, ProviderError> {
+        Ok(images_json(&api::fetch_images(&Live, &kind, &id, &scope)?))
     }
     fn fetch_edition(edition: ExternalId, _lang: Lang) -> Result<Option<String>, ProviderError> {
         api::fetch_edition(&Live, &edition)

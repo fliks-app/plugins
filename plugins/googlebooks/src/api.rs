@@ -1,7 +1,7 @@
 //! The Google Books lookups over an injected transport, so recorded bodies can stand in for the network.
 use crate::parse::{self as gb, Search};
 use fliks_plugin_sdk::ExternalId;
-use fliks_plugin_sdk_provider::{ProviderError, SearchQuery};
+use fliks_plugin_sdk_provider::{ImageCandidate, ImageScope, ProviderError, SearchQuery};
 use provider_common::book::{BookRecord, ParseError, to_record};
 use provider_common::http::{status_error, upstream};
 use provider_common::lang::normalize_language_code;
@@ -141,6 +141,50 @@ pub fn fetch_edition(h: &impl Http, edition: &ExternalId) -> R<Option<String>> {
     Ok(record(h, url, by_isbn)?.map(|r| to_record(&r).to_string()))
 }
 
+/// The covers of an edition, largest first; every other scope is unsupported.
+pub fn fetch_images(
+    h: &impl Http,
+    kind: &str,
+    id: &ExternalId,
+    scope: &ImageScope,
+) -> R<Vec<ImageCandidate>> {
+    if kind != KIND || !matches!(scope, ImageScope::Edition) {
+        return Err(ProviderError::Unsupported);
+    }
+    let (url, by_isbn) = match id.provider.as_str() {
+        "isbn" => (
+            gb::search_url(&Search {
+                isbn: Some(&id.value),
+                max_results: Some(1),
+                ..Search::default()
+            }),
+            true,
+        ),
+        NS => (gb::volume_url(&id.value), false),
+        _ => (None, false),
+    };
+    let Some(url) = url else {
+        return Ok(Vec::new());
+    };
+    let covers = record(h, url, by_isbn)?
+        .map(|r| r.covers)
+        .unwrap_or_default();
+    let mut seen = Vec::new();
+    for c in covers {
+        if !seen.contains(&c) {
+            seen.push(c);
+        }
+    }
+    Ok(seen
+        .into_iter()
+        .map(|url| ImageCandidate {
+            url,
+            slot: "cover".into(),
+            ..Default::default()
+        })
+        .collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -258,6 +302,31 @@ mod tests {
         assert_eq!(v["externalId"], "zX3kLmN0pQsC");
         assert_eq!(v["isbn13"], json!(["9781999000028"]));
         assert!(h.asked()[0].ends_with("/volumes/zX3kLmN0pQsC"));
+    }
+
+    #[test]
+    fn images_are_the_edition_covers_over_https_without_duplicates() {
+        let volume = json!({"id": "zX3kLmN0pQsC", "volumeInfo": {"title": "T", "imageLinks": {
+            "large": "https://books.google.com/books/content?id=zX3kLmN0pQsC&zoom=3",
+            "thumbnail": "http://books.google.com/books/content?id=zX3kLmN0pQsC&zoom=1"}}})
+        .to_string();
+        let h = Fake::new(reply(200, &volume));
+        let c = fetch_images(
+            &h,
+            "book",
+            &id("googlebooks", "zX3kLmN0pQsC"),
+            &ImageScope::Edition,
+        )
+        .unwrap();
+        assert!(!c.is_empty());
+        assert!(
+            c.iter()
+                .all(|i| i.slot == "cover" && i.url.starts_with("https://"))
+        );
+        let mut urls: Vec<_> = c.iter().map(|i| &i.url).collect();
+        urls.dedup();
+        assert_eq!(urls.len(), c.len());
+        assert!(fetch_images(&h, "book", &id("googlebooks", "x"), &ImageScope::Work).is_err());
     }
 
     #[test]
